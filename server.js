@@ -40,13 +40,16 @@ app.get('/', function (req, res) {
     <html>
     <head>
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=5">
-      <title> Simple Todo </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title > Simple Todo </title>
       <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
+
+      <link href='http://fonts.googleapis.com/css?family=Oswald:400,300,700' rel='stylesheet' type='text/css'>
+
     </head>
-    <body class="mw-50">
-      <div class="container">
-        <h1 class="display-4 text-center py-1">The Todo App</h1>
+    <body class="text-monospace">
+      <div class="container" style="max-width: 500px">
+        <h1 class="display-4 text-center py-1">Simple Todo</h1>
         <div class="jumbotron p-3 shadow-sm">      
             <form id="create-form" action="/create-item" method="POST">
                 <div class="d-flex align-items-center">
@@ -56,9 +59,9 @@ app.get('/', function (req, res) {
             </form>
         </div>
         
-        <ul id="item-list" class="list-group pb-5">
+        <ol id="item-list" class="list-group pb-5">
         
-        </ul>
+        </ol>
         
       </div>
 
