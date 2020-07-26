@@ -15,7 +15,7 @@ app.use(express.static('public'))
 let connectionString = 'mongodb+srv://todoAppUser:passwd2020@cluster0.fxfcy.mongodb.net/todoApp?retryWrites=true&w=majority'
 mongodb.connect(connectionString, { useNewUrlParser: true, useUnifiedTopology: true }, function (err, client) {
     db = client.db()
-    app.listen(port)
+    app.listen(port, '0.0.0.0')
 })
 
 app.use(express.json())
