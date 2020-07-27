@@ -1,5 +1,5 @@
 function itemTemplate(item) {
-    return `<li class="list-group-item list-group-item-action d-flex align-items-center justify-content-between overflow-hidden">
+    return `<li  class="list-group-item list-group-item-action d-flex p-1 align-items-center justify-content-between">
     <span class="item-text"> ${item.text} </span>
     <div>
       <button data-id="${item._id}" class="edit-me btn btn-secondary btn-sm mr-1">Edit</button>

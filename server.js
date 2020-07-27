@@ -49,7 +49,7 @@ app.get('/', function (req, res) {
     </head>
     <body class="text-monospace">
       <div class="container" style="max-width: 500px">
-      <span style="font-size: 18; " >yet</span><span style="text-align: center" class="display-4 text-center py-1">ToDo</span>
+      <div><div style="font-size: 18; text-align: right; padding-right: 20px" >yet</div><div style="text-align: center; layout: flow" class="display-4 text-center py-1">ToDo</div></div>
         <div class="jumbotron p-3 shadow-sm">      
             <form id="create-form" action="/create-item" method="POST">
                 <div class="d-flex align-items-center">
