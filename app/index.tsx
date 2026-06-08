@@ -10,6 +10,7 @@ import {
   Platform,
   Modal,
 } from 'react-native';
+import { DraggableList } from '../components/DraggableList';
 import { StatusBar } from 'expo-status-bar';
 import type { Session } from '@supabase/supabase-js';
 import TodoItem from '../components/TodoItem';
@@ -24,6 +25,7 @@ type Todo = {
   due_date: string | null;
   note: string | null;
   created_at: string;
+  position: number | null;
 };
 
 type Team = {
@@ -38,6 +40,7 @@ type Member = {
 };
 
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
+type SortField = 'text' | 'priority' | 'due_date' | 'created_at';
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 
@@ -50,6 +53,14 @@ const priorityRank: Record<Priority, number> = {
 
 function sortTodos(items: Todo[]) {
   return [...items].sort((a, b) => {
+    // Urgent always floats above everything else
+    if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+    if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
+    // Within same urgency tier: respect manual drag position
+    if (a.position !== null && b.position !== null) return a.position - b.position;
+    if (a.position !== null) return -1;
+    if (b.position !== null) return 1;
+    // No positions yet: fall back to priority rank then recency
     const priorityDelta = priorityRank[a.priority] - priorityRank[b.priority];
     if (priorityDelta !== 0) return priorityDelta;
     return Date.parse(b.created_at) - Date.parse(a.created_at);
@@ -123,6 +134,11 @@ export default function HomeScreen() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState('');
   const [dueTodo, setDueTodo] = useState<Todo | null>(null);
+  const [editTodo, setEditTodo] = useState<Todo | null>(null);
+  const [editDraftText, setEditDraftText] = useState('');
+  const [editDraftNote, setEditDraftNote] = useState('');
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -130,8 +146,27 @@ export default function HomeScreen() {
 
   const isPersonal = selectedTeamId === null;
   const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null;
-  const active = todos.filter((todo) => !todo.done);
-  const done = todos.filter((todo) => todo.done);
+  const active = useMemo(() => {
+    const items = todos.filter((t) => !t.done);
+    if (!sortField) return items;
+    return [...items].sort((a, b) => {
+      if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+      if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
+      let delta = 0;
+      if (sortField === 'text') delta = a.text.localeCompare(b.text);
+      else if (sortField === 'priority') delta = priorityRank[a.priority] - priorityRank[b.priority];
+      else if (sortField === 'due_date') {
+        delta =
+          (a.due_date ? Date.parse(a.due_date) : Infinity) -
+          (b.due_date ? Date.parse(b.due_date) : Infinity);
+      } else {
+        delta = Date.parse(a.created_at) - Date.parse(b.created_at);
+      }
+      return sortDir === 'asc' ? delta : -delta;
+    });
+  }, [todos, sortField, sortDir]);
+
+  const done = useMemo(() => todos.filter((t) => t.done), [todos]);
   const memberById = useMemo(
     () => new Map(members.map((member) => [member.user_id, member])),
     [members]
@@ -233,7 +268,7 @@ export default function HomeScreen() {
     setLoading(true);
     let query = supabase
       .from('todos')
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position')
       .order('created_at', { ascending: false });
 
     query = selectedTeamId
@@ -390,6 +425,8 @@ export default function HomeScreen() {
     });
 
     if (memberError) {
+      // Roll back the team row so we don't leave an owner-less team.
+      await supabase.from('teams').delete().eq('id', team.id);
       setError(memberError.message);
       return;
     }
@@ -454,7 +491,7 @@ export default function HomeScreen() {
         assigned_to: selectedTeamId ? newTodoAssignee : null,
         priority: 'normal',
       })
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position')
       .single();
 
     if (insertError) {
@@ -567,6 +604,55 @@ export default function HomeScreen() {
     closeDueCalendar();
   }
 
+  async function editTodoText(id: string, text: string) {
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ text })
+      .eq('id', id);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setTodos((prev) => prev.map((item) => (item.id === id ? { ...item, text } : item)));
+    setError('');
+  }
+
+  function openEditModal(todo: Todo) {
+    setEditTodo(todo);
+    setEditDraftText(todo.text);
+    setEditDraftNote(todo.note ?? '');
+  }
+
+  function closeEditModal() {
+    setEditTodo(null);
+  }
+
+  async function saveEditModal() {
+    if (!editTodo) return;
+    const text = editDraftText.trim();
+    if (!text) return;
+
+    const note = editDraftNote.trim() || null;
+
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ text, note })
+      .eq('id', editTodo.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setTodos((prev) =>
+      prev.map((item) => (item.id === editTodo.id ? { ...item, text, note } : item))
+    );
+    closeEditModal();
+    setError('');
+  }
+
   async function remove(id: string) {
     const { error: deleteError } = await supabase.from('todos').delete().eq('id', id);
 
@@ -577,6 +663,40 @@ export default function HomeScreen() {
 
     setTodos((prev) => prev.filter((todo) => todo.id !== id));
     setError('');
+  }
+
+  async function handleDragEnd(reorderedActive: Todo[]) {
+    const positionMap = new Map(reorderedActive.map((todo, index) => [todo.id, index]));
+
+    setTodos((prev) =>
+      sortTodos(
+        prev.map((todo) =>
+          positionMap.has(todo.id) ? { ...todo, position: positionMap.get(todo.id)! } : todo
+        )
+      )
+    );
+
+    const results = await Promise.all(
+      reorderedActive.map((todo, index) =>
+        supabase.from('todos').update({ position: index }).eq('id', todo.id)
+      )
+    );
+
+    const failed = results.find((r) => r.error);
+    if (failed?.error) {
+      setError(failed.error.message);
+    }
+  }
+
+  function toggleSort(field: SortField) {
+    if (sortField !== field) {
+      setSortField(field);
+      setSortDir('asc');
+    } else if (sortDir === 'asc') {
+      setSortDir('desc');
+    } else {
+      setSortField(null);
+    }
   }
 
   function assigneeLabel(userId: string | null) {
@@ -828,19 +948,38 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-        {!!error && <Text style={styles.error}>{error}</Text>}
-        {!!message && <Text style={styles.message}>{message}</Text>}
+      <View style={styles.sortBar}>
+        {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
+        <View style={styles.sortCheckboxSpacer} />
+        {(
+          [
+            { field: 'text', label: 'Task', colStyle: styles.sortColTask },
+            { field: 'priority', label: 'Priority', colStyle: styles.sortColPriority },
+            { field: 'due_date', label: 'Due', colStyle: styles.sortColDue },
+            { field: 'created_at', label: 'Age', colStyle: styles.sortColAdded },
+          ] as { field: SortField; label: string; colStyle: object }[]
+        ).map(({ field, label, colStyle }) => {
+          const isActive = sortField === field;
+          const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
+          return (
+            <Pressable key={field} onPress={() => toggleSort(field)} style={[colStyle, styles.sortColInner]}>
+              <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
+              <Text style={[styles.sortColIndicator, isActive && styles.sortColLabelActive]}>{indicator}</Text>
+            </Pressable>
+          );
+        })}
+        <View style={styles.sortActionsSpacer} />
+      </View>
 
-        {loading && !error && <Text style={styles.empty}>Loading todos...</Text>}
-
-        {!loading && active.length === 0 && done.length === 0 && (
-          <Text style={styles.empty}>No todos yet. Add one above.</Text>
-        )}
-
-        {active.map((todo) => (
+      <DraggableList
+        data={active}
+        keyExtractor={(todo) => todo.id}
+        onDragEnd={handleDragEnd}
+        draggable={!sortField}
+        style={styles.list}
+        keyboardShouldPersistTaps="handled"
+        renderItem={({ item: todo, drag, isActive }) => (
           <TodoItem
-            key={todo.id}
             text={todo.text}
             done={todo.done}
             priority={todo.priority}
@@ -850,35 +989,56 @@ export default function HomeScreen() {
             assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
             onToggle={() => toggle(todo.id)}
             onDelete={() => remove(todo.id)}
+            onEdit={(text) => editTodoText(todo.id, text)}
+            onOpenEdit={() => openEditModal(todo)}
             onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
             onPriority={() => cyclePriority(todo)}
             onDueDate={() => openDueCalendar(todo)}
+            onDrag={drag}
+            isDragging={isActive ?? false}
           />
-        ))}
-
-        {done.length > 0 && (
-          <>
-            <Text style={styles.sectionLabel}>Completed</Text>
-            {done.map((todo) => (
-              <TodoItem
-                key={todo.id}
-                text={todo.text}
-                done={todo.done}
-                priority={todo.priority}
-                dueDate={todo.due_date}
-                note={todo.note}
-                createdAt={todo.created_at}
-                assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
-                onToggle={() => toggle(todo.id)}
-                onDelete={() => remove(todo.id)}
-                onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
-                onPriority={() => cyclePriority(todo)}
-                onDueDate={() => openDueCalendar(todo)}
-              />
-            ))}
-          </>
         )}
-      </ScrollView>
+        ListHeaderComponent={
+          <>
+            {!!error && <Text style={styles.error}>{error}</Text>}
+            {!!message && <Text style={styles.message}>{message}</Text>}
+            {loading && !error && <Text style={styles.empty}>Loading todos...</Text>}
+            {!loading && active.length === 0 && done.length === 0 && (
+              <Text style={styles.empty}>No todos yet. Add one above.</Text>
+            )}
+          </>
+        }
+        ListFooterComponent={
+          done.length > 0 ? (
+            <>
+              <View style={styles.sectionDivider}>
+                <View style={styles.sectionDividerLine} />
+                <Text style={styles.sectionLabel}>Completed</Text>
+                <View style={styles.sectionDividerLine} />
+              </View>
+              {done.map((todo) => (
+                <TodoItem
+                  key={todo.id}
+                  text={todo.text}
+                  done={todo.done}
+                  priority={todo.priority}
+                  dueDate={todo.due_date}
+                  note={todo.note}
+                  createdAt={todo.created_at}
+                  assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                  onToggle={() => toggle(todo.id)}
+                  onDelete={() => remove(todo.id)}
+                  onEdit={(text) => editTodoText(todo.id, text)}
+                  onOpenEdit={() => openEditModal(todo)}
+                  onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
+                  onPriority={() => cyclePriority(todo)}
+                  onDueDate={() => openDueCalendar(todo)}
+                />
+              ))}
+            </>
+          ) : null
+        }
+      />
 
       <Modal
         visible={!!dueTodo}
@@ -894,7 +1054,7 @@ export default function HomeScreen() {
               </Pressable>
               <Text style={styles.calendarTitle}>{monthLabel(calendarMonth)}</Text>
               <Pressable onPress={() => moveCalendarMonth(1)} style={styles.calendarNavBtn}>
-                <Text style={styles.calendarNavText}>{'>'}</Text>
+                <Text style={styles.calendarNavText}>›</Text>
               </Pressable>
             </View>
 
@@ -950,6 +1110,46 @@ export default function HomeScreen() {
               </Pressable>
               <Pressable onPress={closeDueCalendar}>
                 <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={!!editTodo}
+        transparent
+        animationType="fade"
+        onRequestClose={closeEditModal}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Edit Todo</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={editDraftText}
+              onChangeText={setEditDraftText}
+              placeholder="Task"
+              placeholderTextColor="#9ca3af"
+              returnKeyType="done"
+              autoFocus
+            />
+            <TextInput
+              style={[styles.editModalInput, styles.editModalNoteInput]}
+              value={editDraftNote}
+              onChangeText={setEditDraftNote}
+              placeholder="Add a note..."
+              placeholderTextColor="#9ca3af"
+              multiline
+            />
+            <View style={styles.editModalActions}>
+              <Pressable onPress={closeEditModal}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={saveEditModal}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Save</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -1063,25 +1263,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   workspaceOptionTextActive: {
-    color: '#4338ca',
-  },
-  teamPill: {
-    borderColor: '#d1d5db',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
-  },
-  teamPillActive: {
-    backgroundColor: '#eef2ff',
-    borderColor: '#6366f1',
-  },
-  teamPillText: {
-    color: '#374151',
-    fontWeight: '600',
-  },
-  teamPillTextActive: {
     color: '#4338ca',
   },
   memberPanel: {
@@ -1241,14 +1422,206 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontSize: 14,
   },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6b7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+  sectionDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 4,
+    gap: 10,
+  },
+  sectionDividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#d1d5db',
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    width: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  calendarNavBtn: {
+    padding: 8,
+  },
+  calendarNavText: {
+    fontSize: 22,
+    color: '#6366f1',
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  calendarTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  weekdayText: {
+    width: '14.2857%',
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9ca3af',
+    paddingVertical: 4,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: '14.2857%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  calendarDayBlank: {
+    opacity: 0,
+  },
+  calendarDayToday: {
+    borderWidth: 1.5,
+    borderColor: '#6366f1',
+  },
+  calendarDaySelected: {
+    backgroundColor: '#6366f1',
+  },
+  calendarDayText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  calendarDayTodayText: {
+    color: '#6366f1',
+    fontWeight: '700',
+  },
+  calendarDaySelectedText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  calendarActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e5e7eb',
+    paddingTop: 12,
+  },
+  calendarActionText: {
+    color: '#6366f1',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  calendarCancelText: {
+    color: '#9ca3af',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  editModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 14,
+  },
+  editModalInput: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
+    marginBottom: 10,
+  },
+  editModalNoteInput: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  editModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  sortBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e5e7eb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#d1d5db',
+    backgroundColor: '#f3f4f6',
+  },
+  sortHandleSpacer: {
+    width: 32,
+    flexShrink: 0,
+  },
+  sortCheckboxSpacer: {
+    width: 34,
+    flexShrink: 0,
+  },
+  sortColInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  sortColTask: {
+    flex: 1,
+  },
+  sortColPriority: {
+    width: 76,
+    marginLeft: 8,
+  },
+  sortColDue: {
+    width: 80,
+    marginLeft: 8,
+  },
+  sortColAdded: {
+    width: 56,
+    marginLeft: 8,
+  },
+  sortActionsSpacer: {
+    width: 56,
+    marginLeft: 8,
+    flexShrink: 0,
+  },
+  sortColLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    letterSpacing: 0.3,
+  },
+  sortColIndicator: {
+    fontSize: 10,
+    color: '#c4c9d4',
+  },
+  sortColLabelActive: {
+    color: '#4338ca',
   },
 });

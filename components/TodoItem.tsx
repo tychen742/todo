@@ -1,4 +1,5 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 
 type Props = {
   text: string;
@@ -10,9 +11,13 @@ type Props = {
   assignedLabel?: string;
   onToggle: () => void;
   onDelete: () => void;
+  onEdit?: (text: string) => void;
+  onOpenEdit?: () => void;
   onAssign?: () => void;
   onPriority?: () => void;
   onDueDate?: () => void;
+  onDrag?: () => void;
+  isDragging?: boolean;
 };
 
 const priorityLabels = {
@@ -66,14 +71,14 @@ function dueDateLabel(value?: string | null) {
     (dueMidnight.getTime() - todayMidnight.getTime()) / (24 * 60 * 60 * 1000)
   );
 
-  if (dayDelta === 0) return 'Due today';
-  if (dayDelta === 1) return 'Due tomorrow';
-  if (dayDelta === -1) return 'Due yesterday';
+  if (dayDelta === 0) return 'Today';
+  if (dayDelta === 1) return 'Tomorrow';
+  if (dayDelta === -1) return 'Yesterday';
 
-  return `Due ${dueDate.toLocaleDateString(undefined, {
+  return dueDate.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
-  })}`;
+  });
 }
 
 export default function TodoItem({
@@ -86,22 +91,67 @@ export default function TodoItem({
   assignedLabel,
   onToggle,
   onDelete,
+  onEdit,
+  onOpenEdit,
   onAssign,
   onPriority,
   onDueDate,
+  onDrag,
+  isDragging = false,
 }: Props) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+
+  function startEdit() {
+    setDraft(text);
+    setIsEditing(true);
+  }
+
+  function commitEdit() {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== text) {
+      onEdit?.(trimmed);
+    }
+    setIsEditing(false);
+  }
+
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, isDragging && styles.rowDragging]}>
+      {!!onDrag && (
+        <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
+          <Text style={styles.dragHandleText}>⠿</Text>
+        </Pressable>
+      )}
       <Pressable onPress={onToggle} style={styles.checkbox}>
         <View style={[styles.box, done && styles.boxChecked]}>
           {done && <Text style={styles.checkmark}>✓</Text>}
         </View>
       </Pressable>
-      <Pressable onPress={onToggle} style={styles.textWrap}>
-        <Text style={[styles.text, done && styles.textDone]} numberOfLines={1}>
-          {text}
-        </Text>
-      </Pressable>
+
+      {isEditing ? (
+        <TextInput
+          style={[styles.text, styles.textEditing]}
+          value={draft}
+          onChangeText={setDraft}
+          onBlur={commitEdit}
+          onSubmitEditing={commitEdit}
+          returnKeyType="done"
+          autoFocus
+          selectTextOnFocus
+        />
+      ) : (
+        <Pressable onPress={startEdit} style={styles.textWrap}>
+          <Text style={[styles.text, done && styles.textDone]} numberOfLines={1}>
+            {text}
+          </Text>
+          {!!note && (
+            <Text style={styles.notePreview} numberOfLines={1}>
+              {note}
+            </Text>
+          )}
+        </Pressable>
+      )}
+
       <Pressable onPress={onPriority} disabled={!onPriority} style={styles.inlineControl}>
         <Text style={[styles.priority, styles[`priority_${priority}`]]}>
           {priorityLabels[priority]}
@@ -116,13 +166,18 @@ export default function TodoItem({
       )}
       <Pressable onPress={onDueDate} disabled={!onDueDate} style={styles.inlineControl}>
         <Text style={[styles.dueDate, !dueDate && styles.dueDateEmpty]} numberOfLines={1}>
-          {dueDate ? dueDateLabel(dueDate) : 'Due'}
+          {dueDate ? dueDateLabel(dueDate) : '—'}
         </Text>
       </Pressable>
       {!!createdAt && (
         <Text style={styles.timestamp} numberOfLines={1}>
           {relativeTime(createdAt)}
         </Text>
+      )}
+      {!!onOpenEdit && (
+        <Pressable onPress={onOpenEdit} style={styles.editBtn} hitSlop={8}>
+          <Text style={styles.editText}>✏</Text>
+        </Pressable>
       )}
       <Pressable onPress={onDelete} style={styles.deleteBtn} hitSlop={8}>
         <Text style={styles.deleteText}>✕</Text>
@@ -173,6 +228,21 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: '#9ca3af',
   },
+  notePreview: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 1,
+  },
+  textEditing: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    color: '#111827',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#6366f1',
+    paddingVertical: 2,
+    marginRight: 4,
+  },
   assignee: {
     color: '#6b7280',
     fontSize: 12,
@@ -182,11 +252,13 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 12,
     marginLeft: 8,
+    minWidth: 56,
   },
   dueDate: {
     color: '#4338ca',
     fontSize: 12,
     fontWeight: '700',
+    minWidth: 80,
   },
   dueDateEmpty: {
     color: '#6b7280',
@@ -199,6 +271,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     fontSize: 11,
     fontWeight: '700',
+    minWidth: 70,
   },
   priority_low: {
     color: '#4b5563',
@@ -216,14 +289,41 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
     backgroundColor: '#fee2e2',
   },
-  deleteBtn: {
-    paddingLeft: 12,
+  editBtn: {
+    paddingLeft: 8,
+    width: 28,
+    alignItems: 'center',
   },
-  inlineControl: {
-    marginLeft: 8,
+  editText: {
+    fontSize: 13,
+    color: '#9ca3af',
+  },
+  rowDragging: {
+    backgroundColor: '#f5f3ff',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  dragHandle: {
+    paddingRight: 8,
+  },
+  dragHandleText: {
+    fontSize: 18,
+    color: '#d1d5db',
+    lineHeight: 22,
+  },
+  deleteBtn: {
+    paddingLeft: 8,
+    width: 28,
+    alignItems: 'center',
   },
   deleteText: {
     fontSize: 14,
     color: '#9ca3af',
+  },
+  inlineControl: {
+    marginLeft: 8,
   },
 });

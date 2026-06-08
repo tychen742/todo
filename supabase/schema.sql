@@ -32,14 +32,11 @@ create table if not exists todos (
   created_at timestamptz not null default now()
 );
 
+-- Columns added after initial schema; priority/due_date/note are already in CREATE TABLE above.
 alter table todos add column if not exists team_id uuid references teams(id) on delete cascade;
+alter table todos add column if not exists position integer;
 alter table todos add column if not exists created_by uuid references profiles(id) on delete cascade;
 alter table todos add column if not exists assigned_to uuid references profiles(id) on delete set null;
-alter table todos add column if not exists priority text not null default 'normal';
-alter table todos add column if not exists due_date date;
-alter table todos add column if not exists note text;
-alter table todos drop constraint if exists todos_priority_check;
-alter table todos add constraint todos_priority_check check (priority in ('low', 'normal', 'high', 'urgent'));
 
 delete from todos where created_by is null;
 alter table todos alter column team_id drop not null;
@@ -87,13 +84,24 @@ alter table team_members enable row level security;
 alter table todos enable row level security;
 
 drop policy if exists "Profiles are readable by signed-in users" on profiles;
+drop policy if exists "Users can read own and team profiles" on profiles;
 drop policy if exists "Users can insert their own profile" on profiles;
 drop policy if exists "Users can update their own profile" on profiles;
 
-create policy "Profiles are readable by signed-in users"
+-- Users can read their own profile and profiles of people in shared teams.
+create policy "Users can read own and team profiles"
   on profiles for select
   to authenticated
-  using (true);
+  using (
+    id = auth.uid()
+    or exists (
+      select 1
+      from team_members tm1
+      join team_members tm2 on tm1.team_id = tm2.team_id
+      where tm1.user_id = auth.uid()
+        and tm2.user_id = profiles.id
+    )
+  );
 
 create policy "Users can insert their own profile"
   on profiles for insert
