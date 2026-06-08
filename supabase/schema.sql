@@ -26,15 +26,23 @@ create table if not exists todos (
   id uuid primary key default gen_random_uuid(),
   text text not null,
   done boolean not null default false,
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high', 'urgent')),
+  due_date date,
+  note text,
   created_at timestamptz not null default now()
 );
 
 alter table todos add column if not exists team_id uuid references teams(id) on delete cascade;
 alter table todos add column if not exists created_by uuid references profiles(id) on delete cascade;
 alter table todos add column if not exists assigned_to uuid references profiles(id) on delete set null;
+alter table todos add column if not exists priority text not null default 'normal';
+alter table todos add column if not exists due_date date;
+alter table todos add column if not exists note text;
+alter table todos drop constraint if exists todos_priority_check;
+alter table todos add constraint todos_priority_check check (priority in ('low', 'normal', 'high', 'urgent'));
 
-delete from todos where team_id is null or created_by is null;
-alter table todos alter column team_id set not null;
+delete from todos where created_by is null;
+alter table todos alter column team_id drop not null;
 alter table todos alter column created_by set default auth.uid();
 alter table todos alter column created_by set not null;
 
@@ -104,7 +112,7 @@ drop policy if exists "Users can create teams" on teams;
 create policy "Team members can read teams"
   on teams for select
   to authenticated
-  using (public.is_team_member(id, auth.uid()));
+  using (created_by = auth.uid() or public.is_team_member(id, auth.uid()));
 
 create policy "Users can create teams"
   on teams for insert
@@ -149,30 +157,49 @@ drop policy if exists "Team members can delete team todos" on todos;
 create policy "Team members can read team todos"
   on todos for select
   to authenticated
-  using (public.is_team_member(team_id, auth.uid()));
+  using (
+    (team_id is null and created_by = auth.uid())
+    or public.is_team_member(team_id, auth.uid())
+  );
 
 create policy "Team members can add team todos"
   on todos for insert
   to authenticated
   with check (
-    public.is_team_member(team_id, auth.uid())
-    and created_by = auth.uid()
-    and (assigned_to is null or public.is_team_member(team_id, assigned_to))
+    created_by = auth.uid()
+    and (
+      (team_id is null and assigned_to is null)
+      or (
+        public.is_team_member(team_id, auth.uid())
+        and (assigned_to is null or public.is_team_member(team_id, assigned_to))
+      )
+    )
   );
 
 create policy "Team members can update team todos"
   on todos for update
   to authenticated
-  using (public.is_team_member(team_id, auth.uid()))
+  using (
+    (team_id is null and created_by = auth.uid())
+    or public.is_team_member(team_id, auth.uid())
+  )
   with check (
-    public.is_team_member(team_id, auth.uid())
-    and (assigned_to is null or public.is_team_member(team_id, assigned_to))
+    (
+      (team_id is null and created_by = auth.uid() and assigned_to is null)
+      or (
+        public.is_team_member(team_id, auth.uid())
+        and (assigned_to is null or public.is_team_member(team_id, assigned_to))
+      )
+    )
   );
 
 create policy "Team members can delete team todos"
   on todos for delete
   to authenticated
-  using (public.is_team_member(team_id, auth.uid()));
+  using (
+    (team_id is null and created_by = auth.uid())
+    or public.is_team_member(team_id, auth.uid())
+  );
 
 do $$
 begin

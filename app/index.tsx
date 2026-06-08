@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import type { Session } from '@supabase/supabase-js';
@@ -18,7 +19,93 @@ type Todo = {
   id: string;
   text: string;
   done: boolean;
+  assigned_to: string | null;
+  priority: Priority;
+  due_date: string | null;
+  note: string | null;
+  created_at: string;
 };
+
+type Team = {
+  id: string;
+  name: string;
+};
+
+type Member = {
+  user_id: string;
+  email: string;
+  role: string;
+};
+
+type Priority = 'low' | 'normal' | 'high' | 'urgent';
+
+const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
+
+const priorityRank: Record<Priority, number> = {
+  urgent: 0,
+  high: 1,
+  normal: 2,
+  low: 3,
+};
+
+function sortTodos(items: Todo[]) {
+  return [...items].sort((a, b) => {
+    const priorityDelta = priorityRank[a.priority] - priorityRank[b.priority];
+    if (priorityDelta !== 0) return priorityDelta;
+    return Date.parse(b.created_at) - Date.parse(a.created_at);
+  });
+}
+
+function formatDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateValue(value: string | null) {
+  if (!value) return null;
+
+  const [yearText, monthText, dayText] = value.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(year, month - 1, day);
+
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function monthLabel(date: Date) {
+  return date.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function buildCalendarDays(monthDate: Date) {
+  const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  const cells: Array<Date | null> = Array.from({ length: firstDay.getDay() }, () => null);
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push(null);
+  }
+
+  return cells;
+}
+
+function isSameDate(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
 
 export default function HomeScreen() {
   const [session, setSession] = useState<Session | null>(null);
@@ -26,43 +113,143 @@ export default function HomeScreen() {
   const [authMode, setAuthMode] = useState<'signIn' | 'signUp'>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [teamName, setTeamName] = useState('');
+  const [memberEmail, setMemberEmail] = useState('');
+  const [members, setMembers] = useState<Member[]>([]);
+  const [newTodoAssignee, setNewTodoAssignee] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState('');
+  const [dueTodo, setDueTodo] = useState<Todo | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const active = todos.filter((t) => !t.done);
-  const done = todos.filter((t) => t.done);
+  const isPersonal = selectedTeamId === null;
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null;
+  const active = todos.filter((todo) => !todo.done);
+  const done = todos.filter((todo) => todo.done);
+  const memberById = useMemo(
+    () => new Map(members.map((member) => [member.user_id, member])),
+    [members]
+  );
+  const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+
+  const ensureProfile = useCallback(async (currentSession: Session) => {
+    const profileEmail = currentSession.user.email?.toLowerCase();
+    if (!profileEmail) return;
+
+    const { error: profileError } = await supabase.from('profiles').upsert({
+      id: currentSession.user.id,
+      email: profileEmail,
+    });
+
+    if (profileError) {
+      setError(profileError.message);
+    }
+  }, []);
+
+  const loadTeams = useCallback(async () => {
+    if (!session) return;
+
+    const { data, error: teamsError } = await supabase
+      .from('teams')
+      .select('id, name')
+      .order('created_at', { ascending: true });
+
+    if (teamsError) {
+      setError(teamsError.message);
+      return;
+    }
+
+    const nextTeams = data ?? [];
+    setTeams(nextTeams);
+    setSelectedTeamId((current) => {
+      if (current && nextTeams.some((team) => team.id === current)) {
+        return current;
+      }
+      return null;
+    });
+    setError('');
+  }, [session]);
+
+  const loadMembers = useCallback(async () => {
+    if (!selectedTeamId) {
+      setMembers([]);
+      setNewTodoAssignee(null);
+      return;
+    }
+
+    const { data: membershipData, error: membershipError } = await supabase
+      .from('team_members')
+      .select('user_id, role')
+      .eq('team_id', selectedTeamId)
+      .order('created_at', { ascending: true });
+
+    if (membershipError) {
+      setError(membershipError.message);
+      return;
+    }
+
+    const memberships = membershipData ?? [];
+    const ids = memberships.map((member) => member.user_id);
+    if (ids.length === 0) {
+      setMembers([]);
+      setNewTodoAssignee(null);
+      return;
+    }
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .in('id', ids);
+
+    if (profileError) {
+      setError(profileError.message);
+      return;
+    }
+
+    const profilesById = new Map((profileData ?? []).map((profile) => [profile.id, profile.email]));
+    const nextMembers = memberships.map((member) => ({
+      user_id: member.user_id,
+      role: member.role,
+      email: profilesById.get(member.user_id) ?? 'Unknown user',
+    }));
+
+    setMembers(nextMembers);
+    setNewTodoAssignee((current) => {
+      if (current && nextMembers.some((member) => member.user_id === current)) {
+        return current;
+      }
+      return session?.user.id ?? nextMembers[0]?.user_id ?? null;
+    });
+    setError('');
+  }, [selectedTeamId, session]);
 
   const loadTodos = useCallback(async () => {
-    if (!isSupabaseConfigured) {
-      setLoading(false);
-      setError('Add Supabase env vars to sync todos.');
-      return;
-    }
-
-    if (!session) {
-      setTodos([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
-    const { data, error: loadError } = await supabase
+    let query = supabase
       .from('todos')
-      .select('id, text, done')
-      .eq('user_id', session.user.id)
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at')
       .order('created_at', { ascending: false });
+
+    query = selectedTeamId
+      ? query.eq('team_id', selectedTeamId)
+      : query.is('team_id', null);
+
+    const { data, error: loadError } = await query;
 
     if (loadError) {
       setError(loadError.message);
     } else {
-      setTodos(data ?? []);
+      setTodos(sortTodos((data ?? []) as Todo[]));
       setError('');
     }
     setLoading(false);
-  }, [session]);
+  }, [selectedTeamId]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -80,6 +267,9 @@ export default function HomeScreen() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession);
+      setTeams([]);
+      setSelectedTeamId(null);
+      setMembers([]);
       setTodos([]);
       setError('');
       setMessage('');
@@ -91,28 +281,57 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    if (!session) return;
+
+    ensureProfile(session).then(loadTeams);
+  }, [ensureProfile, loadTeams, session]);
+
+  useEffect(() => {
+    if (!session || !isSupabaseConfigured) return;
+
+    loadMembers();
     loadTodos();
 
-    if (!isSupabaseConfigured || !session) return;
+    const todoChannel = selectedTeamId ? `todos-sync-${selectedTeamId}` : `todos-sync-personal`;
 
-    const channel = supabase
-      .channel(`todos-sync-${session.user.id}`)
+    const todosChannel = supabase
+      .channel(todoChannel)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'todos',
-          filter: `user_id=eq.${session.user.id}`,
         },
         loadTodos
       )
       .subscribe();
 
+    if (!selectedTeamId) {
+      return () => {
+        supabase.removeChannel(todosChannel);
+      };
+    }
+
+    const membersChannel = supabase
+      .channel(`team-members-sync-${selectedTeamId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'team_members',
+          filter: `team_id=eq.${selectedTeamId}`,
+        },
+        loadMembers
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(todosChannel);
+      supabase.removeChannel(membersChannel);
     };
-  }, [loadTodos, session]);
+  }, [loadMembers, loadTodos, selectedTeamId, session]);
 
   async function submitAuth() {
     const normalizedEmail = email.trim().toLowerCase();
@@ -147,14 +366,95 @@ export default function HomeScreen() {
     setInput('');
   }
 
+  async function createTeam() {
+    if (!session) return;
+
+    const name = teamName.trim();
+    if (!name) return;
+
+    const { data: team, error: teamError } = await supabase
+      .from('teams')
+      .insert({ name, created_by: session.user.id })
+      .select('id, name')
+      .single();
+
+    if (teamError) {
+      setError(teamError.message);
+      return;
+    }
+
+    const { error: memberError } = await supabase.from('team_members').insert({
+      team_id: team.id,
+      user_id: session.user.id,
+      role: 'owner',
+    });
+
+    if (memberError) {
+      setError(memberError.message);
+      return;
+    }
+
+    setTeamName('');
+    setTeams((prev) => [...prev, team]);
+    setSelectedTeamId(team.id);
+    setWorkspaceMenuOpen(false);
+    setMessage(`Created ${team.name}.`);
+    setError('');
+  }
+
+  async function addMember() {
+    if (!selectedTeamId) return;
+
+    const normalizedEmail = memberEmail.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (profileError) {
+      setError(profileError.message);
+      return;
+    }
+
+    if (!profile) {
+      setError('That user must sign up before you can add them.');
+      return;
+    }
+
+    const { error: memberError } = await supabase.from('team_members').upsert({
+      team_id: selectedTeamId,
+      user_id: profile.id,
+      role: 'member',
+    });
+
+    if (memberError) {
+      setError(memberError.message);
+      return;
+    }
+
+    setMemberEmail('');
+    setMessage(`Added ${profile.email}.`);
+    setError('');
+    loadMembers();
+  }
+
   async function addTodo() {
     const text = input.trim();
     if (!text || !session) return;
 
     const { data, error: insertError } = await supabase
       .from('todos')
-      .insert({ text, user_id: session.user.id })
-      .select('id, text, done')
+      .insert({
+        text,
+        team_id: selectedTeamId,
+        created_by: session.user.id,
+        assigned_to: selectedTeamId ? newTodoAssignee : null,
+        priority: 'normal',
+      })
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at')
       .single();
 
     if (insertError) {
@@ -163,15 +463,14 @@ export default function HomeScreen() {
     }
 
     if (data) {
-      setTodos((prev) => [data, ...prev]);
+      setTodos((prev) => sortTodos([data as Todo, ...prev]));
     }
     setInput('');
     setError('');
   }
 
   async function toggle(id: string) {
-    if (!session) return;
-    const todo = todos.find((t) => t.id === id);
+    const todo = todos.find((item) => item.id === id);
     if (!todo) return;
 
     const { error: updateError } = await supabase
@@ -184,12 +483,91 @@ export default function HomeScreen() {
       return;
     }
 
-    setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+    setTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item)));
     setError('');
   }
 
+  async function cycleAssignee(todo: Todo) {
+    const options = [null, ...members.map((member) => member.user_id)];
+    const currentIndex = options.indexOf(todo.assigned_to);
+    const assigned_to = options[(currentIndex + 1) % options.length];
+
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ assigned_to })
+      .eq('id', todo.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setTodos((prev) =>
+      prev.map((item) => (item.id === todo.id ? { ...item, assigned_to } : item))
+    );
+    setError('');
+  }
+
+  async function cyclePriority(todo: Todo) {
+    const currentIndex = priorities.indexOf(todo.priority);
+    const priority = priorities[(currentIndex + 1) % priorities.length];
+
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ priority })
+      .eq('id', todo.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setTodos((prev) =>
+      sortTodos(prev.map((item) => (item.id === todo.id ? { ...item, priority } : item)))
+    );
+    setError('');
+  }
+
+  async function setDueDate(todo: Todo, due_date: string | null) {
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ due_date })
+      .eq('id', todo.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setTodos((prev) =>
+      prev.map((item) => (item.id === todo.id ? { ...item, due_date } : item))
+    );
+    setError('');
+  }
+
+  function openDueCalendar(todo: Todo) {
+    const dueDate = parseDateValue(todo.due_date) ?? new Date();
+    setDueTodo(todo);
+    setCalendarMonth(new Date(dueDate.getFullYear(), dueDate.getMonth(), 1));
+  }
+
+  function closeDueCalendar() {
+    setDueTodo(null);
+  }
+
+  function moveCalendarMonth(offset: number) {
+    setCalendarMonth(
+      (currentMonth) => new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1)
+    );
+  }
+
+  async function chooseDueDate(due_date: string | null) {
+    if (!dueTodo) return;
+    await setDueDate(dueTodo, due_date);
+    closeDueCalendar();
+  }
+
   async function remove(id: string) {
-    if (!session) return;
     const { error: deleteError } = await supabase.from('todos').delete().eq('id', id);
 
     if (deleteError) {
@@ -197,8 +575,17 @@ export default function HomeScreen() {
       return;
     }
 
-    setTodos((prev) => prev.filter((t) => t.id !== id));
+    setTodos((prev) => prev.filter((todo) => todo.id !== id));
     setError('');
+  }
+
+  function assigneeLabel(userId: string | null) {
+    if (isPersonal) return '';
+    if (!userId) return 'Unassigned';
+    const member = memberById.get(userId);
+    if (!member) return 'Assigned to unknown';
+    if (session?.user.id === userId) return 'Assigned to me';
+    return `Assigned to ${member.email}`;
   }
 
   if (!session) {
@@ -237,7 +624,7 @@ export default function HomeScreen() {
             disabled={authLoading}
             style={({ pressed }) => [
               styles.primaryBtn,
-              pressed && styles.addBtnPressed,
+              pressed && styles.btnPressed,
               authLoading && styles.disabledBtn,
             ]}
           >
@@ -276,23 +663,171 @@ export default function HomeScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </Pressable>
       </View>
+
+      <View style={styles.teamPanel}>
+        <Pressable
+          onPress={() => setWorkspaceMenuOpen((open) => !open)}
+          style={styles.workspaceButton}
+        >
+          <View>
+            <Text style={styles.workspaceLabel}>Workspace</Text>
+            <Text style={styles.workspaceName}>{selectedTeam?.name ?? 'Personal'}</Text>
+          </View>
+          <Text style={styles.workspaceArrow}>{workspaceMenuOpen ? 'Close' : 'Open'}</Text>
+        </Pressable>
+
+        {workspaceMenuOpen && (
+          <View style={styles.workspaceMenu}>
+            <Pressable
+              onPress={() => {
+                setSelectedTeamId(null);
+                setWorkspaceMenuOpen(false);
+              }}
+              style={[styles.workspaceOption, isPersonal && styles.workspaceOptionActive]}
+            >
+              <Text
+                style={[
+                  styles.workspaceOptionText,
+                  isPersonal && styles.workspaceOptionTextActive,
+                ]}
+              >
+                Personal
+              </Text>
+            </Pressable>
+
+            {teams.map((team) => (
+              <Pressable
+                key={team.id}
+                onPress={() => {
+                  setSelectedTeamId(team.id);
+                  setWorkspaceMenuOpen(false);
+                }}
+                style={[
+                  styles.workspaceOption,
+                  team.id === selectedTeamId && styles.workspaceOptionActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.workspaceOptionText,
+                    team.id === selectedTeamId && styles.workspaceOptionTextActive,
+                  ]}
+                >
+                  {team.name}
+                </Text>
+              </Pressable>
+            ))}
+
+            <View style={styles.compactForm}>
+              <TextInput
+                style={styles.compactInput}
+                value={teamName}
+                onChangeText={setTeamName}
+                placeholder="New team"
+                placeholderTextColor="#9ca3af"
+                onSubmitEditing={createTeam}
+              />
+              <Pressable
+                onPress={createTeam}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Create</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+      </View>
+
+      {selectedTeam && (
+        <View style={styles.memberPanel}>
+          <Text style={styles.panelTitle}>{selectedTeam.name}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.memberList}>
+            {members.map((member) => (
+              <Text key={member.user_id} style={styles.memberChip}>
+                {member.email}
+              </Text>
+            ))}
+          </ScrollView>
+          <View style={styles.compactForm}>
+            <TextInput
+              style={styles.compactInput}
+              value={memberEmail}
+              onChangeText={setMemberEmail}
+              placeholder="Add member by email"
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              onSubmitEditing={addMember}
+            />
+            <Pressable
+              onPress={addMember}
+              style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+            >
+              <Text style={styles.smallBtnText}>Add</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       <View style={styles.inputBar}>
-        <TextInput
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Add a todo..."
-          placeholderTextColor="#9ca3af"
-          onSubmitEditing={addTodo}
-          returnKeyType="done"
-        />
+        <View style={styles.todoInputWrap}>
+          <TextInput
+            style={styles.input}
+            value={input}
+            onChangeText={setInput}
+            placeholder="Add a todo..."
+            placeholderTextColor="#9ca3af"
+            onSubmitEditing={addTodo}
+            returnKeyType="done"
+          />
+          {selectedTeam && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <Pressable
+                onPress={() => setNewTodoAssignee(null)}
+                style={[
+                  styles.assigneePill,
+                  newTodoAssignee === null && styles.assigneePillActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.assigneePillText,
+                    newTodoAssignee === null && styles.assigneePillTextActive,
+                  ]}
+                >
+                  Unassigned
+                </Text>
+              </Pressable>
+              {members.map((member) => (
+                <Pressable
+                  key={member.user_id}
+                  onPress={() => setNewTodoAssignee(member.user_id)}
+                  style={[
+                    styles.assigneePill,
+                    newTodoAssignee === member.user_id && styles.assigneePillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.assigneePillText,
+                      newTodoAssignee === member.user_id && styles.assigneePillTextActive,
+                    ]}
+                  >
+                    {member.user_id === session.user.id ? 'Me' : member.email}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </View>
         <Pressable
           onPress={addTodo}
-          style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
+          style={({ pressed }) => [styles.addBtn, pressed && styles.btnPressed]}
         >
           <Text style={styles.addBtnText}>Add</Text>
         </Pressable>
       </View>
+
       <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
         {!!error && <Text style={styles.error}>{error}</Text>}
         {!!message && <Text style={styles.message}>{message}</Text>}
@@ -300,22 +835,126 @@ export default function HomeScreen() {
         {loading && !error && <Text style={styles.empty}>Loading todos...</Text>}
 
         {!loading && active.length === 0 && done.length === 0 && (
-          <Text style={styles.empty}>No todos yet — add one below</Text>
+          <Text style={styles.empty}>No todos yet. Add one above.</Text>
         )}
 
-        {active.map((t) => (
-          <TodoItem key={t.id} text={t.text} done={t.done} onToggle={() => toggle(t.id)} onDelete={() => remove(t.id)} />
+        {active.map((todo) => (
+          <TodoItem
+            key={todo.id}
+            text={todo.text}
+            done={todo.done}
+            priority={todo.priority}
+            dueDate={todo.due_date}
+            note={todo.note}
+            createdAt={todo.created_at}
+            assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+            onToggle={() => toggle(todo.id)}
+            onDelete={() => remove(todo.id)}
+            onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
+            onPriority={() => cyclePriority(todo)}
+            onDueDate={() => openDueCalendar(todo)}
+          />
         ))}
 
         {done.length > 0 && (
           <>
             <Text style={styles.sectionLabel}>Completed</Text>
-            {done.map((t) => (
-              <TodoItem key={t.id} text={t.text} done={t.done} onToggle={() => toggle(t.id)} onDelete={() => remove(t.id)} />
+            {done.map((todo) => (
+              <TodoItem
+                key={todo.id}
+                text={todo.text}
+                done={todo.done}
+                priority={todo.priority}
+                dueDate={todo.due_date}
+                note={todo.note}
+                createdAt={todo.created_at}
+                assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                onToggle={() => toggle(todo.id)}
+                onDelete={() => remove(todo.id)}
+                onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
+                onPriority={() => cyclePriority(todo)}
+                onDueDate={() => openDueCalendar(todo)}
+              />
             ))}
           </>
         )}
       </ScrollView>
+
+      <Modal
+        visible={!!dueTodo}
+        transparent
+        animationType="fade"
+        onRequestClose={closeDueCalendar}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={closeDueCalendar}>
+          <Pressable style={styles.calendarCard}>
+            <View style={styles.calendarHeader}>
+              <Pressable onPress={() => moveCalendarMonth(-1)} style={styles.calendarNavBtn}>
+                <Text style={styles.calendarNavText}>‹</Text>
+              </Pressable>
+              <Text style={styles.calendarTitle}>{monthLabel(calendarMonth)}</Text>
+              <Pressable onPress={() => moveCalendarMonth(1)} style={styles.calendarNavBtn}>
+                <Text style={styles.calendarNavText}>{'>'}</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.weekdayRow}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <Text key={day} style={styles.weekdayText}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {calendarDays.map((date, index) => {
+                const selectedDate = parseDateValue(dueTodo?.due_date ?? null);
+                const today = new Date();
+                const isSelected = !!date && !!selectedDate && isSameDate(date, selectedDate);
+                const isCurrentDay = !!date && isSameDate(date, today);
+
+                return (
+                  <Pressable
+                    key={date ? formatDateValue(date) : `blank-${index}`}
+                    disabled={!date}
+                    onPress={() => date && chooseDueDate(formatDateValue(date))}
+                    style={[
+                      styles.calendarDay,
+                      !date && styles.calendarDayBlank,
+                      isCurrentDay && styles.calendarDayToday,
+                      isSelected && styles.calendarDaySelected,
+                    ]}
+                  >
+                    {!!date && (
+                      <Text
+                        style={[
+                          styles.calendarDayText,
+                          isCurrentDay && styles.calendarDayTodayText,
+                          isSelected && styles.calendarDaySelectedText,
+                        ]}
+                      >
+                        {date.getDate()}
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.calendarActions}>
+              <Pressable onPress={() => chooseDueDate(formatDateValue(new Date()))}>
+                <Text style={styles.calendarActionText}>Today</Text>
+              </Pressable>
+              <Pressable onPress={() => chooseDueDate(null)}>
+                <Text style={styles.calendarActionText}>Clear</Text>
+              </Pressable>
+              <Pressable onPress={closeDueCalendar}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -369,6 +1008,217 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
+  teamPanel: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+  },
+  workspaceButton: {
+    minHeight: 48,
+    borderColor: '#d1d5db',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  workspaceLabel: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  workspaceName: {
+    color: '#111827',
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  workspaceArrow: {
+    color: '#6366f1',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  workspaceMenu: {
+    borderColor: '#e5e7eb',
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: 8,
+    padding: 8,
+  },
+  workspaceOption: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  workspaceOptionActive: {
+    backgroundColor: '#eef2ff',
+  },
+  workspaceOptionText: {
+    color: '#374151',
+    fontWeight: '600',
+  },
+  workspaceOptionTextActive: {
+    color: '#4338ca',
+  },
+  teamPill: {
+    borderColor: '#d1d5db',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  teamPillActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  teamPillText: {
+    color: '#374151',
+    fontWeight: '600',
+  },
+  teamPillTextActive: {
+    color: '#4338ca',
+  },
+  memberPanel: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+  },
+  panelTitle: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  memberList: {
+    marginBottom: 8,
+  },
+  memberChip: {
+    color: '#374151',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+    fontSize: 12,
+  },
+  compactForm: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  compactInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: '#111827',
+    marginRight: 8,
+  },
+  smallBtn: {
+    height: 40,
+    backgroundColor: '#6366f1',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  smallBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff',
+  },
+  todoInputWrap: {
+    flex: 1,
+    marginRight: 10,
+  },
+  input: {
+    height: 44,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: '#111827',
+    marginBottom: 8,
+  },
+  assigneePill: {
+    borderColor: '#d1d5db',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  assigneePillActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  assigneePillText: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  assigneePillTextActive: {
+    color: '#4338ca',
+  },
+  addBtn: {
+    backgroundColor: '#6366f1',
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  btnPressed: {
+    opacity: 0.8,
+  },
+  disabledBtn: {
+    opacity: 0.6,
+  },
+  primaryBtn: {
+    backgroundColor: '#6366f1',
+    borderRadius: 10,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  primaryBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  switchBtn: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  switchText: {
+    color: '#6366f1',
+    fontWeight: '600',
+    fontSize: 14,
+  },
   empty: {
     textAlign: 'center',
     color: '#9ca3af',
@@ -400,65 +1250,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 4,
-  },
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e5e7eb',
-    backgroundColor: '#fff',
-  },
-  input: {
-    flex: 1,
-    height: 44,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: '#111827',
-    marginRight: 10,
-  },
-  addBtn: {
-    backgroundColor: '#6366f1',
-    borderRadius: 10,
-    paddingHorizontal: 18,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addBtnPressed: {
-    opacity: 0.8,
-  },
-  disabledBtn: {
-    opacity: 0.6,
-  },
-  addBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  primaryBtn: {
-    backgroundColor: '#6366f1',
-    borderRadius: 10,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  switchBtn: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  switchText: {
-    color: '#6366f1',
-    fontWeight: '600',
-    fontSize: 14,
   },
 });
