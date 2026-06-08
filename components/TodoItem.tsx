@@ -3,11 +3,13 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 type Props = {
   text: string;
   done: boolean;
+  assignedLabel?: string;
   onToggle: () => void;
   onDelete: () => void;
+  onAssign?: () => void;
 };
 
-export default function TodoItem({ text, done, onToggle, onDelete }: Props) {
+export default function TodoItem({ text, done, assignedLabel, onToggle, onDelete, onAssign }: Props) {
   return (
     <View style={styles.row}>
       <Pressable onPress={onToggle} style={styles.checkbox}>
@@ -15,9 +17,16 @@ export default function TodoItem({ text, done, onToggle, onDelete }: Props) {
           {done && <Text style={styles.checkmark}>✓</Text>}
         </View>
       </Pressable>
-      <Pressable onPress={onToggle} style={styles.textWrap}>
+      <View style={styles.textWrap}>
+        <Pressable onPress={onToggle}>
         <Text style={[styles.text, done && styles.textDone]}>{text}</Text>
-      </Pressable>
+        </Pressable>
+        {!!assignedLabel && (
+          <Pressable onPress={onAssign} disabled={!onAssign}>
+            <Text style={styles.assignee}>{assignedLabel}</Text>
+          </Pressable>
+        )}
+      </View>
       <Pressable onPress={onDelete} style={styles.deleteBtn} hitSlop={8}>
         <Text style={styles.deleteText}>✕</Text>
       </Pressable>
@@ -65,6 +74,11 @@ const styles = StyleSheet.create({
   textDone: {
     textDecorationLine: 'line-through',
     color: '#9ca3af',
+  },
+  assignee: {
+    color: '#6b7280',
+    fontSize: 12,
+    marginTop: 4,
   },
   deleteBtn: {
     paddingLeft: 12,
