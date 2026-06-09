@@ -9,6 +9,8 @@ type Props = {
   note?: string | null;
   createdAt?: string;
   assignedLabel?: string;
+  phaseLabel?: string;
+  isMilestone?: boolean;
   onToggle: () => void;
   onDelete: () => void;
   onEdit?: (text: string) => void;
@@ -16,6 +18,7 @@ type Props = {
   onAssign?: () => void;
   onPriority?: () => void;
   onDueDate?: () => void;
+  onPhase?: () => void;
   onDrag?: () => void;
   reserveDragSpace?: boolean;
   isDragging?: boolean;
@@ -90,6 +93,8 @@ export default function TodoItem({
   note,
   createdAt,
   assignedLabel,
+  phaseLabel,
+  isMilestone = false,
   onToggle,
   onDelete,
   onEdit,
@@ -97,6 +102,7 @@ export default function TodoItem({
   onAssign,
   onPriority,
   onDueDate,
+  onPhase,
   onDrag,
   reserveDragSpace = false,
   isDragging = false,
@@ -118,7 +124,7 @@ export default function TodoItem({
   }
 
   return (
-    <View style={[styles.row, isDragging && styles.rowDragging]}>
+    <View style={[styles.row, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone]}>
       {!!onDrag && (
         <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
           <Text style={styles.dragHandleText}>⠿</Text>
@@ -144,9 +150,19 @@ export default function TodoItem({
         />
       ) : (
         <Pressable onPress={startEdit} style={styles.textWrap}>
-          <Text style={[styles.text, done && styles.textDone]} numberOfLines={1}>
-            {text}
-          </Text>
+          <View style={styles.textRow}>
+            {isMilestone && <Text style={styles.milestoneIcon}>◆</Text>}
+            <Text style={[styles.text, done && styles.textDone, isMilestone && !done && styles.textMilestone]} numberOfLines={1}>
+              {text}
+            </Text>
+          </View>
+          {!!onPhase && (
+            <Pressable onPress={onPhase} style={styles.phaseTagWrap}>
+              <Text style={phaseLabel ? styles.phaseTag : styles.phaseTagEmpty}>
+                {phaseLabel ?? 'Set phase'}
+              </Text>
+            </Pressable>
+          )}
           {!!note && (
             <Text style={styles.notePreview} numberOfLines={1}>
               {note}
@@ -168,7 +184,14 @@ export default function TodoItem({
         </Pressable>
       )}
       <Pressable onPress={onDueDate} disabled={!onDueDate} style={styles.inlineControl}>
-        <Text style={[styles.dueDate, !dueDate && styles.dueDateEmpty]} numberOfLines={1}>
+        <Text
+          style={[
+            styles.dueDate,
+            !dueDate && styles.dueDateEmpty,
+            (priority === 'urgent' || priority === 'high') && styles.dueDateBold,
+          ]}
+          numberOfLines={1}
+        >
           {dueDate ? dueDateLabel(dueDate) : '—'}
         </Text>
       </Pressable>
@@ -211,8 +234,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   boxChecked: {
-    backgroundColor: '#6366f1',
-    borderColor: '#6366f1',
+    backgroundColor: '#9ca3af',
+    borderColor: '#9ca3af',
   },
   checkmark: {
     color: '#fff',
@@ -235,6 +258,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9ca3af',
     marginTop: 1,
+  },
+  phaseTagWrap: {
+    marginTop: 2,
+    alignSelf: 'flex-start',
+  },
+  phaseTag: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4338ca',
+    backgroundColor: '#eef2ff',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
+  phaseTagEmpty: {
+    fontSize: 11,
+    color: '#d1d5db',
   },
   textEditing: {
     flex: 1,
@@ -260,12 +301,13 @@ const styles = StyleSheet.create({
   dueDate: {
     color: '#4338ca',
     fontSize: 12,
-    fontWeight: '700',
     width: 80,
+  },
+  dueDateBold: {
+    fontWeight: '700',
   },
   dueDateEmpty: {
     color: '#6b7280',
-    fontWeight: '600',
   },
   priority: {
     borderRadius: 6,
@@ -273,7 +315,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     fontSize: 11,
-    fontWeight: '700',
     width: 76,
   },
   priority_low: {
@@ -287,10 +328,12 @@ const styles = StyleSheet.create({
   priority_high: {
     color: '#92400e',
     backgroundColor: '#fef3c7',
+    fontWeight: '700',
   },
   priority_urgent: {
     color: '#b91c1c',
     backgroundColor: '#fee2e2',
+    fontWeight: '700',
   },
   editBtn: {
     paddingLeft: 8,
@@ -300,6 +343,22 @@ const styles = StyleSheet.create({
   editText: {
     fontSize: 13,
     color: '#9ca3af',
+  },
+  rowMilestone: {
+    backgroundColor: '#fefce8',
+  },
+  textRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  milestoneIcon: {
+    fontSize: 10,
+    color: '#d97706',
+  },
+  textMilestone: {
+    fontWeight: '600',
+    color: '#92400e',
   },
   rowDragging: {
     backgroundColor: '#f5f3ff',

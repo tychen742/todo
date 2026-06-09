@@ -23,6 +23,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Add schema-backed Organization creation from the account menu.
 - Add schema-backed Project creation from the workspace `+` menu.
 - Keep a default `Project 1` workspace tab visible as the first planned project surface until schema-backed projects exist.
+- Add Profile editing so users can set or change their display name.
 - Add due-date views for overdue, due soon, today, and unscheduled work.
 - Track `completed_at` and show completed date near the due date for completed todos.
 - Add team invitations when adding an email that does not yet belong to a user profile.
@@ -60,17 +61,31 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Keep annotations attached to exactly one todo item.
 - Do not use workspace Notes for task-specific annotation.
 
+## Assignment & Collaborators
+
+- Replace the cycle-tap assignee mechanic on kanban cards with a searchable picker modal.
+- Picker shows Team Members first (from the project's linked team), then any existing Collaborators on the project.
+- Search filters by name or email in real time; Tab moves between results; Enter confirms selection.
+- "Add by email" option at the bottom invites a new Collaborator without leaving the task.
+- Schema: add a `project_collaborators` table (project_id, user_id, invited_by, created_at) distinct from `team_members`. Collaborators get scoped RLS access — only the tasks assigned to them and their required project context.
+- Collaborators appear only on the tasks they are assigned; they do not appear in the team member panel.
+- Both Team Members and Collaborators receive assignment notifications; Collaborators may need email delivery since they may not have the app.
+
 ## Project Management
 
-- Add projects as bounded work that can end or close.
-- Add project-scoped todos.
+- Add projects as bounded work that can end or close. ✓ Done.
+- Add project-scoped todos. ✓ Done.
+- Add project phases for lifecycle planning. ✓ Done.
 - Use due dates for project planning, milestone tracking, and schedule visibility.
-- Add project phases for lifecycle planning.
-- Add milestones and task dependencies for critical path identification.
+- Add `is_milestone` flag to todos; milestone todos render distinctly (diamond icon, delivery-event completion, countdown when near due date).
+- Surface overdue milestone todos prominently on the project screen; show next-milestone countdown banner.
+- Critical path: highlight todos in the active phase with due dates before the nearest upcoming milestone todo.
+- Add a project health view: current phase, overdue items, next milestone countdown, blocked items — all in one screen.
+- Add project closure with a summary: phases completed, todos completed vs dropped, milestones hit or missed.
 - Add project schedule views after phases, milestones, dependencies, and due dates are modeled.
 - Track resource constraints and risk notes through todo annotations and project planning/annotation.
-- Add project lifecycle states such as active, paused, completed, and closed.
-- Show projects as workspace tabs when a user enters or pins a project.
+- Add project lifecycle states such as active, paused, completed, and closed. ✓ Done (schema).
+- Show projects as workspace tabs when a user enters or pins a project. ✓ Done.
 - Decide the project rename flow; prefer project planning/settings over double-click so it works on iPhone and can include phases, milestones, status, and schedule planning.
 
 ## Calendar Integration
@@ -89,6 +104,12 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Keep teams ongoing/perpetual.
 - Design team invitation acceptance and expiration.
 - Add roles and permissions beyond owner/admin/member only when needed.
+
+## Status & Presence
+
+- Phase 1 (done): Users set their own status text from the title bar; stored in `profiles.status`; visible only to themselves for now.
+- Phase 2: Team members who opt in to sharing see each other's statuses — surface on hover/tap of a member chip in the member panel, not in the title bar.
+- Future: Team leaders (owner/admin role) can push a broadcast message into the status bar area that all team members see and must acknowledge (read-receipt style). This replaces the "announcement" use-case without requiring a full chat feature. Treat acknowledgement as a lightweight team communication primitive before building full notifications.
 
 ## Communications
 

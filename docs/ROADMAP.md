@@ -38,6 +38,11 @@ The app should stay free for personal and small-team use. Paid value should come
 
 - Projects with lifecycle states: active, paused, completed, closed.
 - Project-scoped todos.
+- Phase-gating: completing a phase prompts moving open todos forward or closing them.
+- Milestones as todos: mark any todo as a milestone (`is_milestone` flag) to represent an external commitment; no separate table needed.
+- Critical path from due dates: todos due before the nearest upcoming milestone todo are the critical path — surfaces automatically from existing data.
+- Project health screen: current phase, overdue items, next milestone countdown, and blocked items in one view.
+- Project closure summary: phases completed, todos completed vs dropped, milestones hit or missed.
 - Due-date-based project planning and milestone tracking.
 - Project/team dashboards.
 - Dedicated Notes tab if workspace-level notes grow beyond the todo-list page.

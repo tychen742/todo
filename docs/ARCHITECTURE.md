@@ -78,18 +78,21 @@ Likely architecture:
 
 ## Future Project Architecture
 
-Projects should model bounded work with lifecycle and schedule planning, not just another todo list.
+Projects should model bounded work with lifecycle and schedule planning, not just another todo list. See `PRODUCT.md` — Project Management Philosophy for the full design intent.
 
 Likely architecture:
 
-- Store projects in a first-party `projects` table owned by a user or team.
+- Store projects in a first-party `projects` table owned by a user or team. ✓ Done.
 - Store editable project names on the project record and update them from a project planning/settings surface.
-- Store project phases in a `project_phases` table with ordering, planned dates, and status.
-- Store milestones as project-level date targets that can appear on personal, team, and project calendars.
-- Store task dependencies so the app can eventually identify critical path candidates.
-- Keep project-scoped todos in the existing todo workflow, linked to a project when project tables exist.
+- Store project phases in a `project_phases` table with ordering, planned dates, and status. ✓ Done.
+- Milestones are todos with `is_milestone = true` — no separate table. A milestone todo carries a due date representing an external commitment (demo, launch, hand-off). Completing a milestone is a delivery event, not just a checkbox.
+- Critical path emerges from due dates: todos in the same phase with due dates before the nearest upcoming milestone todo are the critical path. No dependency graph or Gantt engine needed.
+- An optional `blocks_id` reference on a todo can make explicit dependencies available later without changing the core model.
+- Surface overdue milestone todos prominently on the project screen; show a countdown to the next upcoming milestone.
+- Keep project-scoped todos in the existing todo workflow, linked to a project and optionally to a phase. ✓ Done.
+- Add a project health view: current phase, overdue items, next milestone countdown, and blocked items in one screen.
+- Add project closure: closing a project produces a lightweight summary — phases completed, todos completed vs dropped, milestones hit or missed.
 - Use todo annotations for task-level resource notes, risk notes, blockers, assumptions, and mitigation details.
-- Use project planning/annotation records for project-level resources, risks, assumptions, decisions, and schedule notes.
 - Avoid building heavy resource-management or risk-management modules until lightweight annotation workflows prove useful.
 
 ## Future Calendar Architecture

@@ -4,8 +4,10 @@ create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique not null,
   display_name text,
+  status text,
   created_at timestamptz not null default now()
 );
+alter table profiles add column if not exists status text;
 
 create table if not exists teams (
   id uuid primary key default gen_random_uuid(),
@@ -241,6 +243,175 @@ begin
     alter publication supabase_realtime add table todos;
   end if;
 end $$;
+
+-- Projects: bounded efforts with lifecycle planning.
+create table if not exists projects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  description text,
+  team_id uuid references teams(id) on delete cascade,
+  created_by uuid not null references profiles(id) on delete cascade default auth.uid(),
+  status text not null default 'active'
+    check (status in ('active', 'paused', 'completed', 'closed')),
+  created_at timestamptz not null default now(),
+  closed_at timestamptz
+);
+
+create table if not exists project_phases (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  name text not null,
+  order_index integer not null default 0,
+  status text not null default 'upcoming'
+    check (status in ('upcoming', 'active', 'completed')),
+  planned_start date,
+  planned_end date,
+  created_at timestamptz not null default now()
+);
+
+alter table todos add column if not exists project_id uuid references projects(id) on delete set null;
+alter table todos add column if not exists phase_id uuid references project_phases(id) on delete set null;
+alter table todos add column if not exists is_milestone boolean not null default false;
+
+create index if not exists todos_project_id_idx on todos (project_id);
+create index if not exists project_phases_project_id_idx on project_phases (project_id);
+
+-- Personal position index must exclude project-scoped todos to avoid conflicts.
+drop index if exists todos_position_personal_active_unique;
+create unique index if not exists todos_position_personal_active_unique
+  on todos (created_by, position)
+  where team_id is null and project_id is null and done = false and position is not null;
+
+create unique index if not exists todos_position_project_active_unique
+  on todos (project_id, position)
+  where project_id is not null and done = false and position is not null;
+
+alter table projects enable row level security;
+alter table project_phases enable row level security;
+
+drop policy if exists "Project members can read projects" on projects;
+drop policy if exists "Users can create projects" on projects;
+drop policy if exists "Project owners can update projects" on projects;
+drop policy if exists "Project owners can delete projects" on projects;
+
+create policy "Project members can read projects"
+  on projects for select to authenticated
+  using (
+    created_by = auth.uid()
+    or (team_id is not null and public.is_team_member(team_id, auth.uid()))
+  );
+
+create policy "Users can create projects"
+  on projects for insert to authenticated
+  with check (created_by = auth.uid());
+
+create policy "Project owners can update projects"
+  on projects for update to authenticated
+  using (
+    created_by = auth.uid()
+    or (team_id is not null and public.can_manage_team(team_id, auth.uid()))
+  );
+
+create policy "Project owners can delete projects"
+  on projects for delete to authenticated
+  using (
+    created_by = auth.uid()
+    or (team_id is not null and public.can_manage_team(team_id, auth.uid()))
+  );
+
+drop policy if exists "Project members can read phases" on project_phases;
+drop policy if exists "Project members can manage phases" on project_phases;
+
+create policy "Project members can read phases"
+  on project_phases for select to authenticated
+  using (
+    exists (
+      select 1 from projects p
+      where p.id = project_phases.project_id
+        and (
+          p.created_by = auth.uid()
+          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+        )
+    )
+  );
+
+create policy "Project members can manage phases"
+  on project_phases for all to authenticated
+  using (
+    exists (
+      select 1 from projects p
+      where p.id = project_phases.project_id
+        and (
+          p.created_by = auth.uid()
+          or (p.team_id is not null and public.can_manage_team(p.team_id, auth.uid()))
+        )
+    )
+  );
+
+-- Extend todos RLS to allow project-scoped access.
+-- Existing policies already cover team_id is null (personal) and team_id is not null (team).
+-- Project todos have project_id set; access mirrors the project's visibility.
+drop policy if exists "Project members can read project todos" on todos;
+drop policy if exists "Project members can add project todos" on todos;
+drop policy if exists "Project members can update project todos" on todos;
+drop policy if exists "Project members can delete project todos" on todos;
+
+create policy "Project members can read project todos"
+  on todos for select to authenticated
+  using (
+    project_id is not null
+    and exists (
+      select 1 from projects p
+      where p.id = todos.project_id
+        and (
+          p.created_by = auth.uid()
+          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+        )
+    )
+  );
+
+create policy "Project members can add project todos"
+  on todos for insert to authenticated
+  with check (
+    project_id is not null
+    and created_by = auth.uid()
+    and exists (
+      select 1 from projects p
+      where p.id = project_id
+        and (
+          p.created_by = auth.uid()
+          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+        )
+    )
+  );
+
+create policy "Project members can update project todos"
+  on todos for update to authenticated
+  using (
+    project_id is not null
+    and exists (
+      select 1 from projects p
+      where p.id = todos.project_id
+        and (
+          p.created_by = auth.uid()
+          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+        )
+    )
+  );
+
+create policy "Project members can delete project todos"
+  on todos for delete to authenticated
+  using (
+    project_id is not null
+    and exists (
+      select 1 from projects p
+      where p.id = todos.project_id
+        and (
+          p.created_by = auth.uid()
+          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+        )
+    )
+  );
 
 -- Batch-update todo positions in a single round trip after a drag reorder.
 -- Accepts a JSON array of {id, position} objects and updates each row,

@@ -16,7 +16,7 @@ The initial target markets are:
 - **Personal users**: individuals who need a clean personal todo system that can grow into light collaboration.
 - **SMEs**: small and medium-sized organizations that need practical task, team, and project coordination without paying for or managing a complex platform.
 
-The product should compete through simplicity, useful calendar/time-management workflows, lightweight team coordination, and low setup cost rather than by matching every feature in larger project-management suites.
+The product should compete through simplicity and genuine usefulness — a tool that is immediately helpful on day one without training, setup cost, or configuration overhead. It should stay simple enough to adopt in minutes and useful enough to keep using as work grows. It wins by being easier to understand and more directly helpful than ClickUp, Asana, or Todoist for focused personal, team, and project workflows, not by matching their feature count.
 
 ## Product Areas
 
@@ -30,6 +30,23 @@ The product should compete through simplicity, useful calendar/time-management w
 - **Communications**: personal messages, team chat, todo/project discussion, assignment notifications, acknowledgements, and external messages.
 - **Customization**: user, team, and company branding such as logos, colors, and workspace appearance.
 - **Business Model**: free personal and small-team use, with paid upgrades for advanced features.
+
+## People Model: Members vs Collaborators
+
+There are two distinct participation types in this product:
+
+**Team Member** — someone who belongs to the team. They are involved in ongoing work, can see team todos and projects, and show up in team rosters. Membership is persistent and managed from Team settings.
+
+**Collaborator** — someone who needs to perform specific tasks but does not need to be part of the team. Examples: HR processing an onboarding form, accounting approving an expense, a vendor delivering one asset, a reviewer signing off on a document. A Collaborator is added per-task or per-project, not per-team. They see only what they are assigned; they do not see the full team workspace.
+
+This distinction matters for:
+
+- **Assignment UX**: the assignee picker shows Team Members first, then Collaborators. Supports search: type to filter names, Tab to move between results, Enter to confirm. Offer "Add by email" at the bottom to invite a new Collaborator inline without leaving the task.
+- **Visibility and permissions**: Collaborators have scoped access (the assigned task and its project context only); Team Members have full team access.
+- **Notifications**: both get assignment notifications, but Collaborators may need email delivery since they may not use the app regularly.
+- **Roster**: Team Members appear on the team member panel; Collaborators appear only on the tasks they are assigned to.
+
+This model keeps teams clean (no bloat from one-off contributors) while supporting the real-world pattern of pulling in outside people for specific work.
 
 ## Domain Concepts
 
@@ -50,6 +67,7 @@ Team invitations belong primarily to Team Management, but depend on User Managem
 
 - Personal todos should work without creating a team.
 - Account navigation should expose user-level and administrative concepts such as Profile, Settings, Organizations, Teams, and Log Out.
+- User-facing labels should prefer display names; full email addresses belong in Profile/account details and invitation flows.
 - Workspace navigation should use tabs for active work surfaces: `Personal` and eventually each active or pinned `Project_Name`.
 - The initial workspace shape should show `Personal`, a default `Project 1` placeholder, and a `+` action for new projects.
 - Organizations and Teams are containers for people, permissions, billing, and ownership; they should be managed from the account/admin menu rather than treated as primary workspace tabs.
@@ -82,6 +100,36 @@ Team invitations belong primarily to Team Management, but depend on User Managem
 - UI customization should let users, teams, and companies adjust branding without breaking app consistency or accessibility.
 - Users should be able to choose different todo row spacing or density modes without changing task content or behavior.
 - The app should remain free for personal and small-team use; monetization should come from advanced features rather than blocking basic task management.
+
+## Project Management Philosophy
+
+The goal is not to replicate ClickUp. ClickUp's core model is lists of tasks in folders in spaces — a todo hierarchy. This app makes the **project itself the primary object**: not a container for tasks, but a living plan with a lifecycle, gates, and real delivery signals.
+
+Five principles distinguish this PM model from a task list with a project label:
+
+**1. Phase-gating**
+When a phase is active, its todos are the priority. Marking a phase complete prompts the user to move open todos forward or close them. The project knows its own state; phases are not just labels.
+
+**2. Milestones with real weight**
+A milestone is just a todo marked as a delivery commitment — a demo, a launch, a hand-off. It carries a due date and an `is_milestone` flag; no separate table or concept is needed. Milestone todos render prominently, show a countdown when near their due date, and surface at the project level when overdue. Completing a milestone feels like a delivery event, not just checking a box.
+
+**3. Critical path visibility**
+Because milestones are todos, critical path emerges naturally from due dates. Todos in the same phase with due dates before the nearest upcoming milestone are the critical path. No dependency graph or Gantt engine is needed — overdue or undone todos upstream of a milestone todo are the blockers. An optional `blocks_id` reference on a todo can make explicit dependencies available later without changing the core model.
+
+**4. Project health at a glance**
+A single project screen should answer: what phase are we in, what is overdue, what is the next milestone, and who or what is blocked. No digging through nested lists.
+
+**5. Closure with a record**
+Projects can close; task lists never end. Closing a project produces a lightweight summary — phases completed, todos completed versus dropped, milestones hit or missed. This makes projects feel like real bounded efforts rather than perpetual backlogs.
+
+The full model stays intentionally flat:
+
+- **Project** — planning container with a name and lifecycle state.
+- **Phase** — organizes todos into lifecycle stages.
+- **Todo** — the unit of work; can be a regular task or a milestone (distinguished by an `is_milestone` flag, not a separate table).
+- **Due date** — what creates urgency and makes the critical path visible.
+
+No milestones table, no dependencies table, no Gantt engine. Milestones and critical path are properties of todos, not separate systems. This keeps the user mental model simple: everything is a task; some tasks are commitments.
 
 ## Due Date Semantics
 

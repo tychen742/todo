@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
 import type { Session } from '@supabase/supabase-js';
 import TodoItem from '../components/TodoItem';
+import PhaseStrip, { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 type Todo = {
@@ -27,11 +28,20 @@ type Todo = {
   note: string | null;
   created_at: string;
   position: number | null;
+  is_milestone: boolean;
+  project_id: string | null;
+  phase_id: string | null;
 };
 
 type Team = {
   id: string;
   name: string;
+};
+
+type Project = {
+  id: string;
+  name: string;
+  team_id: string | null;
 };
 
 type Member = {
@@ -45,6 +55,7 @@ type Profile = {
   id: string;
   email: string;
   display_name: string | null;
+  status: string | null;
 };
 
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
@@ -62,12 +73,14 @@ const priorityRank: Record<Priority, number> = {
 
 function sortTodos(items: Todo[]) {
   return [...items].sort((a, b) => {
-    // Manual drag positions win once a user has ordered the list.
+    // Urgent always floats above everything else.
+    if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+    if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
+    // Within same urgency tier, respect manual drag position.
     if (a.position !== null && b.position !== null) return a.position - b.position;
     if (a.position !== null) return -1;
     if (b.position !== null) return 1;
-
-    // Items without manual positions fall back to priority and recency.
+    // No positions yet: fall back to priority rank then recency.
     const priorityDelta = priorityRank[a.priority] - priorityRank[b.priority];
     if (priorityDelta !== 0) return priorityDelta;
     return Date.parse(b.created_at) - Date.parse(a.created_at);
@@ -134,6 +147,125 @@ function profileDisplayName(profile: Pick<Profile, 'email' | 'display_name'>) {
   return profile.display_name?.trim() || emailDisplayName(profile.email);
 }
 
+function kanbanDueLabel(value: string): string {
+  const [y, m, d] = value.split('-').map(Number);
+  const due = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const delta = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (delta === 0) return 'Today';
+  if (delta === 1) return 'Tomorrow';
+  if (delta === -1) return 'Yesterday';
+  if (delta < 0) return `${-delta}d overdue`;
+  if (delta <= 7) return `${delta}d`;
+  return due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatPhaseDateRange(start: string | null, end: string | null): string {
+  function fmt(d: string) {
+    const [y, m, day] = d.split('-').map(Number);
+    return new Date(y, m - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  if (start && end) return `${fmt(start)} – ${fmt(end)}`;
+  if (start) return `From ${fmt(start)}`;
+  if (end) return `Until ${fmt(end)}`;
+  return '';
+}
+
+type KanbanCardTodo = {
+  id: string; text: string; done: boolean; priority: Priority;
+  due_date: string | null; note: string | null; is_milestone: boolean;
+  assigned_to: string | null;
+};
+function KanbanCard({ todo, assigneeLabel, onToggle, onDelete, onEdit, onCycleAssignee }: {
+  todo: KanbanCardTodo;
+  assigneeLabel: string | null;
+  onToggle: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+  onCycleAssignee: () => void;
+}) {
+  const priorityStyle =
+    todo.priority === 'urgent' ? kcs.priority_urgent :
+    todo.priority === 'high'   ? kcs.priority_high :
+    todo.priority === 'low'    ? kcs.priority_low : undefined;
+  const dueLabel = todo.due_date ? kanbanDueLabel(todo.due_date) : null;
+  const overdue = dueLabel?.includes('overdue') ?? false;
+  const hasAssignee = !!todo.assigned_to;
+  return (
+    <View style={[kcs.card, todo.is_milestone && kcs.cardMilestone]}>
+      <Pressable onPress={onToggle} hitSlop={8} style={kcs.checkbox}>
+        <View style={[kcs.box, todo.done && kcs.boxDone]}>
+          {todo.done && <Text style={kcs.checkmark}>✓</Text>}
+        </View>
+      </Pressable>
+      <Pressable onPress={onEdit} style={kcs.body}>
+        <View style={kcs.titleRow}>
+          {todo.is_milestone && <Text style={kcs.milestoneIcon}>◆</Text>}
+          <Text style={[kcs.text, todo.done && kcs.textDone]} numberOfLines={2}>{todo.text}</Text>
+        </View>
+        <View style={kcs.meta}>
+          {priorityStyle && <Text style={[kcs.badge, priorityStyle]}>{todo.priority}</Text>}
+          {dueLabel && <Text style={[kcs.due, overdue && kcs.dueOverdue]}>{dueLabel}</Text>}
+          <Pressable
+            onPress={(e) => { e.stopPropagation?.(); onCycleAssignee(); }}
+            style={[kcs.assigneePill, hasAssignee && kcs.assigneePillAssigned]}
+            hitSlop={6}
+          >
+            <Text style={[kcs.assigneeText, hasAssignee && kcs.assigneeTextAssigned]} numberOfLines={1}>
+              {assigneeLabel ?? 'Assign'}
+            </Text>
+          </Pressable>
+        </View>
+      </Pressable>
+      <Pressable onPress={onDelete} hitSlop={8}><Text style={kcs.del}>✕</Text></Pressable>
+    </View>
+  );
+}
+const kcs = StyleSheet.create({
+  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', padding: 10, marginHorizontal: 8, marginBottom: 6, gap: 8 },
+  cardMilestone: { backgroundColor: '#fefce8', borderColor: '#fde68a' },
+  checkbox: { paddingTop: 1 },
+  box: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#6366f1', alignItems: 'center', justifyContent: 'center' },
+  boxDone: { backgroundColor: '#9ca3af', borderColor: '#9ca3af' },
+  checkmark: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  body: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+  milestoneIcon: { fontSize: 9, color: '#d97706', marginTop: 3, flexShrink: 0 },
+  text: { flex: 1, fontSize: 13, color: '#111827', lineHeight: 18 },
+  textDone: { textDecorationLine: 'line-through', color: '#9ca3af' },
+  meta: { flexDirection: 'row', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' },
+  badge: { fontSize: 10, borderRadius: 4, overflow: 'hidden', paddingHorizontal: 5, paddingVertical: 2, fontWeight: '600' },
+  priority_low: { color: '#4b5563', backgroundColor: '#f3f4f6' },
+  priority_high: { color: '#92400e', backgroundColor: '#fef3c7' },
+  priority_urgent: { color: '#b91c1c', backgroundColor: '#fee2e2' },
+  due: { fontSize: 10, color: '#4338ca', fontWeight: '600' },
+  dueOverdue: { color: '#b91c1c' },
+  del: { fontSize: 12, color: '#d1d5db', paddingLeft: 4 },
+  assigneePill: { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', maxWidth: 100 },
+  assigneePillAssigned: { backgroundColor: '#ede9fe', borderColor: '#c4b5fd' },
+  assigneeText: { fontSize: 10, color: '#9ca3af', fontWeight: '600' },
+  assigneeTextAssigned: { color: '#6d28d9' },
+});
+
+const AVATAR_COLORS = ['#e74c3c', '#e67e22', '#16a34a', '#2563eb', '#7c3aed', '#db2777', '#0891b2', '#d97706'];
+const AVATAR_ANIMALS = [
+  '🐶','🐱','🦊','🐻','🐼','🐨','🐯','🦁',
+  '🐸','🐵','🐧','🦆','🦉','🦋','🐢','🐬',
+  '🐙','🦈','🦝','🐺','🦦','🦥','🦔','🐿',
+  '🦄','🦜','🦩','🐉','🦋','🐡',
+];
+function pickAvatarColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) - h);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+function pickAvatarAnimal(seed: string): string {
+  let h = 5381;
+  for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) + h);
+  return AVATAR_ANIMALS[Math.abs(h) % AVATAR_ANIMALS.length];
+}
+
 export default function HomeScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -146,6 +278,21 @@ export default function HomeScreen() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [createTarget, setCreateTarget] = useState<CreateTarget | null>(null);
   const [teamName, setTeamName] = useState('');
+  const [projectName, setProjectName] = useState('');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [phasePickerTodo, setPhasePickerTodo] = useState<Todo | null>(null);
+  const [addingPhase, setAddingPhase] = useState(false);
+  const [newPhaseName, setNewPhaseName] = useState('');
+  const [editDraftPhaseId, setEditDraftPhaseId] = useState<string | null>(null);
+  const [columnInputs, setColumnInputs] = useState<Record<string, string>>({});
+  const [backlogInputVisible, setBacklogInputVisible] = useState(false);
+  const [aboutVisible, setAboutVisible] = useState(false);
+  const [animalPickerVisible, setAnimalPickerVisible] = useState(false);
+  const [customAnimal, setCustomAnimal] = useState<string | null>(null);
+  const [statusDraft, setStatusDraft] = useState('');
+  const [statusEditing, setStatusEditing] = useState(false);
   const [memberEmail, setMemberEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [newTodoAssignee, setNewTodoAssignee] = useState<string | null>(null);
@@ -155,6 +302,7 @@ export default function HomeScreen() {
   const [editTodo, setEditTodo] = useState<Todo | null>(null);
   const [editDraftText, setEditDraftText] = useState('');
   const [editDraftNote, setEditDraftNote] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
@@ -162,12 +310,16 @@ export default function HomeScreen() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const isPersonal = selectedTeamId === null;
-  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null;
+  const isProject = selectedProjectId !== null;
+  const isPersonal = selectedTeamId === null && !isProject;
+  const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+  const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
   const active = useMemo(() => {
     const items = todos.filter((t) => !t.done);
     if (!sortField) return items;
     return [...items].sort((a, b) => {
+      if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+      if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
       let delta = 0;
       if (sortField === 'text') delta = a.text.localeCompare(b.text);
       else if (sortField === 'priority') delta = priorityRank[a.priority] - priorityRank[b.priority];
@@ -187,6 +339,22 @@ export default function HomeScreen() {
     () => new Map(members.map((member) => [member.user_id, member])),
     [members]
   );
+  const phaseById = useMemo(() => new Map(phases.map((p) => [p.id, p])), [phases]);
+  const nextMilestone = useMemo(() => {
+    if (!isProject) return null;
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
+    const candidates = todos
+      .filter((t) => t.is_milestone && !t.done && t.due_date)
+      .map((t) => {
+        const [y, m, d] = t.due_date!.split('-').map(Number);
+        const dueDate = new Date(y, m - 1, d);
+        const daysLeft = Math.round((dueDate.getTime() - todayMidnight.getTime()) / 86400000);
+        return { ...t, daysLeft };
+      })
+      .sort((a, b) => a.daysLeft - b.daysLeft);
+    return candidates[0] ?? null;
+  }, [todos, isProject]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const accountDisplayName = profile
     ? profileDisplayName(profile)
@@ -202,7 +370,7 @@ export default function HomeScreen() {
         id: currentSession.user.id,
         email: profileEmail,
       })
-      .select('id, email, display_name')
+      .select('id, email, display_name, status')
       .single();
 
     if (profileError) {
@@ -211,6 +379,7 @@ export default function HomeScreen() {
     }
 
     setProfile(profileData);
+    setStatusDraft(profileData.status ?? '');
   }, []);
 
   const loadTeams = useCallback(async () => {
@@ -237,8 +406,36 @@ export default function HomeScreen() {
     setError('');
   }, [session]);
 
+  const loadProjects = useCallback(async () => {
+    if (!session) return;
+    const { data, error: err } = await supabase
+      .from('projects')
+      .select('id, name, team_id')
+      .order('created_at', { ascending: true });
+    if (!err) setProjects(data ?? []);
+  }, [session]);
+
+  const loadPhases = useCallback(async () => {
+    if (!selectedProjectId) {
+      setPhases([]);
+      return;
+    }
+    const { data, error: err } = await supabase
+      .from('project_phases')
+      .select('id, project_id, name, order_index, status, planned_start, planned_end')
+      .eq('project_id', selectedProjectId)
+      .order('order_index', { ascending: true });
+    if (!err) setPhases(data ?? []);
+  }, [selectedProjectId]);
+
   const loadMembers = useCallback(async () => {
-    if (!selectedTeamId) {
+    // Resolve the team to load members from: direct team selection or the project's linked team.
+    const teamId = selectedTeamId ?? (
+      selectedProjectId
+        ? (projects.find((p) => p.id === selectedProjectId)?.team_id ?? null)
+        : null
+    );
+    if (!teamId) {
       setMembers([]);
       setNewTodoAssignee(null);
       return;
@@ -247,7 +444,7 @@ export default function HomeScreen() {
     const { data: membershipData, error: membershipError } = await supabase
       .from('team_members')
       .select('user_id, role')
-      .eq('team_id', selectedTeamId)
+      .eq('team_id', teamId)
       .order('created_at', { ascending: true });
 
     if (membershipError) {
@@ -289,18 +486,23 @@ export default function HomeScreen() {
       return session?.user.id ?? nextMembers[0]?.user_id ?? null;
     });
     setError('');
-  }, [selectedTeamId, session]);
+  }, [selectedTeamId, selectedProjectId, projects, session]);
 
   const loadTodos = useCallback(async () => {
     setLoading(true);
     let query = supabase
       .from('todos')
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id')
       .order('created_at', { ascending: false });
 
-    query = selectedTeamId
-      ? query.eq('team_id', selectedTeamId)
-      : query.is('team_id', null);
+    if (selectedProjectId) {
+      query = query.eq('project_id', selectedProjectId);
+    } else {
+      query = selectedTeamId
+        ? query.eq('team_id', selectedTeamId)
+        : query.is('team_id', null);
+      query = query.is('project_id', null);
+    }
 
     const { data, error: loadError } = await query;
 
@@ -311,7 +513,7 @@ export default function HomeScreen() {
       setError('');
     }
     setLoading(false);
-  }, [selectedTeamId]);
+  }, [selectedTeamId, selectedProjectId]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -330,7 +532,10 @@ export default function HomeScreen() {
     } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setSession(currentSession);
       setTeams([]);
+      setProjects([]);
       setSelectedTeamId(null);
+      setSelectedProjectId(null);
+      setPhases([]);
       setMembers([]);
       setTodos([]);
       setError('');
@@ -345,8 +550,16 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!session) return;
 
-    ensureProfile(session).then(loadTeams);
-  }, [ensureProfile, loadTeams, session]);
+    ensureProfile(session).then(() => {
+      loadTeams();
+      loadProjects();
+    });
+  }, [ensureProfile, loadTeams, loadProjects, session]);
+
+  useEffect(() => {
+    if (!session) return;
+    loadPhases();
+  }, [loadPhases, session]);
 
   useEffect(() => {
     if (!session || !isSupabaseConfigured) return;
@@ -354,26 +567,25 @@ export default function HomeScreen() {
     loadMembers();
     loadTodos();
 
-    const todoChannel = selectedTeamId ? `todos-sync-${selectedTeamId}` : `todos-sync-personal`;
-    const todosFilter = selectedTeamId
-      ? `team_id=eq.${selectedTeamId}`
-      : `created_by=eq.${session.user.id}`;
+    const todoChannelKey = selectedProjectId
+      ? `todos-sync-project-${selectedProjectId}`
+      : selectedTeamId ? `todos-sync-${selectedTeamId}` : `todos-sync-personal`;
+    const todosFilter = selectedProjectId
+      ? `project_id=eq.${selectedProjectId}`
+      : selectedTeamId
+        ? `team_id=eq.${selectedTeamId}`
+        : `created_by=eq.${session.user.id}`;
 
     const todosChannel = supabase
-      .channel(todoChannel)
+      .channel(todoChannelKey)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'todos',
-          filter: todosFilter,
-        },
+        { event: '*', schema: 'public', table: 'todos', filter: todosFilter },
         loadTodos
       )
       .subscribe();
 
-    if (!selectedTeamId) {
+    if (!selectedTeamId || selectedProjectId) {
       return () => {
         supabase.removeChannel(todosChannel);
       };
@@ -383,12 +595,7 @@ export default function HomeScreen() {
       .channel(`team-members-sync-${selectedTeamId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'team_members',
-          filter: `team_id=eq.${selectedTeamId}`,
-        },
+        { event: '*', schema: 'public', table: 'team_members', filter: `team_id=eq.${selectedTeamId}` },
         loadMembers
       )
       .subscribe();
@@ -397,7 +604,7 @@ export default function HomeScreen() {
       supabase.removeChannel(todosChannel);
       supabase.removeChannel(membersChannel);
     };
-  }, [loadMembers, loadTodos, selectedTeamId, session]);
+  }, [loadMembers, loadTodos, selectedTeamId, selectedProjectId, session]);
 
   async function submitAuth() {
     const normalizedEmail = email.trim().toLowerCase();
@@ -429,8 +636,17 @@ export default function HomeScreen() {
 
   async function signOut() {
     setAccountMenuOpen(false);
+    setProfile(null);
     await supabase.auth.signOut();
     setInput('');
+  }
+
+  async function saveStatus() {
+    setStatusEditing(false);
+    if (!session) return;
+    const status = statusDraft.trim() || null;
+    await supabase.from('profiles').update({ status }).eq('id', session.user.id);
+    setProfile((prev) => prev ? { ...prev, status } : prev);
   }
 
   function choosePlannedUserFeature(label: string) {
@@ -477,6 +693,43 @@ export default function HomeScreen() {
     setError('');
   }
 
+  async function createProject() {
+    if (!session) return;
+    const name = projectName.trim();
+    if (!name) return;
+
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .insert({ name, created_by: session.user.id })
+      .select('id, name, team_id')
+      .single();
+
+    if (projectError) {
+      setError(projectError.message);
+      return;
+    }
+
+    const defaultPhases = ['Planning', 'Execution', 'Review'];
+    await Promise.all(
+      defaultPhases.map((phaseName, i) =>
+        supabase.from('project_phases').insert({
+          project_id: project.id,
+          name: phaseName,
+          order_index: i,
+          status: i === 0 ? 'active' : 'upcoming',
+        })
+      )
+    );
+
+    setProjectName('');
+    setProjects((prev) => [...prev, project]);
+    setSelectedProjectId(project.id);
+    setSelectedTeamId(null);
+    setCreateTarget(null);
+    setMessage('');
+    setError('');
+  }
+
   function openCreateTarget(target: CreateTarget) {
     setAccountMenuOpen(false);
 
@@ -485,11 +738,12 @@ export default function HomeScreen() {
       return;
     }
 
-    setMessage(
-      target === 'organization'
-        ? 'Organization creation needs organization tables next.'
-        : 'Project creation needs project tables next.'
-    );
+    if (target === 'project') {
+      setCreateTarget('project');
+      return;
+    }
+
+    setMessage('Organization creation needs organization tables next.');
     setError('');
   }
 
@@ -545,12 +799,13 @@ export default function HomeScreen() {
       .from('todos')
       .insert({
         text,
-        team_id: selectedTeamId,
+        team_id: isProject ? null : selectedTeamId,
+        project_id: selectedProjectId,
         created_by: session.user.id,
-        assigned_to: selectedTeamId ? newTodoAssignee : null,
+        assigned_to: selectedTeamId && !isProject ? newTodoAssignee : null,
         priority: 'normal',
       })
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id')
       .single();
 
     if (insertError) {
@@ -562,6 +817,29 @@ export default function HomeScreen() {
       setTodos((prev) => sortTodos([data as Todo, ...prev]));
     }
     setInput('');
+    setError('');
+  }
+
+  async function addTodoToPhase(phaseId: string | null) {
+    const key = phaseId ?? 'backlog';
+    const text = (columnInputs[key] ?? '').trim();
+    if (!text || !session || !selectedProjectId) return;
+
+    const { data, error: insertError } = await supabase
+      .from('todos')
+      .insert({
+        text,
+        project_id: selectedProjectId,
+        phase_id: phaseId,
+        created_by: session.user.id,
+        priority: 'normal',
+      })
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id')
+      .single();
+
+    if (insertError) { setError(insertError.message); return; }
+    if (data) setTodos((prev) => [data as Todo, ...prev]);
+    setColumnInputs((prev) => ({ ...prev, [key]: '' }));
     setError('');
   }
 
@@ -682,6 +960,7 @@ export default function HomeScreen() {
     setEditTodo(todo);
     setEditDraftText(todo.text);
     setEditDraftNote(todo.note ?? '');
+    setEditDraftPhaseId(todo.phase_id ?? null);
   }
 
   function closeEditModal() {
@@ -694,10 +973,11 @@ export default function HomeScreen() {
     if (!text) return;
 
     const note = editDraftNote.trim() || null;
+    const phase_id = isProject ? editDraftPhaseId : editTodo.phase_id;
 
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ text, note })
+      .update({ text, note, phase_id })
       .eq('id', editTodo.id);
 
     if (updateError) {
@@ -706,7 +986,9 @@ export default function HomeScreen() {
     }
 
     setTodos((prev) =>
-      prev.map((item) => (item.id === editTodo.id ? { ...item, text, note } : item))
+      prev.map((item) =>
+        item.id === editTodo.id ? { ...item, text, note, phase_id: phase_id ?? null } : item
+      )
     );
     closeEditModal();
     setError('');
@@ -745,6 +1027,52 @@ export default function HomeScreen() {
     }
   }
 
+  async function toggleMilestone(todo: Todo) {
+    const is_milestone = !todo.is_milestone;
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ is_milestone })
+      .eq('id', todo.id);
+    if (updateError) { setError(updateError.message); return; }
+    setTodos((prev) => prev.map((item) => (item.id === todo.id ? { ...item, is_milestone } : item)));
+  }
+
+  async function cyclePhaseStatus(phase: Phase) {
+    const order: Phase['status'][] = ['upcoming', 'active', 'completed'];
+    const next = order[(order.indexOf(phase.status) + 1) % order.length];
+    const { error: updateError } = await supabase
+      .from('project_phases')
+      .update({ status: next })
+      .eq('id', phase.id);
+    if (updateError) { setError(updateError.message); return; }
+    setPhases((prev) => prev.map((p) => (p.id === phase.id ? { ...p, status: next } : p)));
+  }
+
+  async function addPhase() {
+    if (!selectedProjectId) return;
+    const name = newPhaseName.trim();
+    if (!name) return;
+    const { data, error: err } = await supabase
+      .from('project_phases')
+      .insert({ project_id: selectedProjectId, name, order_index: phases.length, status: 'upcoming' })
+      .select('id, project_id, name, order_index, status, planned_start, planned_end')
+      .single();
+    if (err) { setError(err.message); return; }
+    if (data) setPhases((prev) => [...prev, data as Phase]);
+    setNewPhaseName('');
+    setAddingPhase(false);
+  }
+
+  async function setTodoPhase(todo: Todo, phase_id: string | null) {
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ phase_id })
+      .eq('id', todo.id);
+    if (updateError) { setError(updateError.message); return; }
+    setTodos((prev) => prev.map((item) => (item.id === todo.id ? { ...item, phase_id } : item)));
+    setPhasePickerTodo(null);
+  }
+
   function toggleSort(field: SortField) {
     if (sortField !== field) {
       setSortField(field);
@@ -762,66 +1090,130 @@ export default function HomeScreen() {
     const member = memberById.get(userId);
     if (!member) return 'Assigned to unknown';
     if (session?.user.id === userId) return 'Assigned to me';
-    return `Assigned to ${member.email}`;
+    return `Assigned to ${profileDisplayName(member)}`;
   }
 
   if (!session) {
+    const isSignIn = authMode === 'signIn';
     return (
       <KeyboardAvoidingView
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        <Stack.Screen options={{ headerShown: false }} />
         <StatusBar style="dark" />
-        <View style={styles.authPanel}>
-          <Text style={styles.authTitle}>Todos</Text>
-          <TextInput
-            style={styles.authInput}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="Email"
-            placeholderTextColor="#9ca3af"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            textContentType="emailAddress"
-          />
-          <TextInput
-            style={styles.authInput}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Password"
-            placeholderTextColor="#9ca3af"
-            secureTextEntry
-            textContentType={authMode === 'signIn' ? 'password' : 'newPassword'}
-            onSubmitEditing={submitAuth}
-          />
-          {!!error && <Text style={styles.error}>{error}</Text>}
-          {!!message && <Text style={styles.message}>{message}</Text>}
-          <Pressable
-            onPress={submitAuth}
-            disabled={authLoading}
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              pressed && styles.btnPressed,
-              authLoading && styles.disabledBtn,
-            ]}
-          >
-            <Text style={styles.primaryBtnText}>
-              {authLoading ? 'Please wait...' : authMode === 'signIn' ? 'Sign In' : 'Sign Up'}
+        <ScrollView
+          contentContainerStyle={styles.authScroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.authPanel}>
+            <Text style={styles.authTitle}>
+              {isSignIn ? 'Welcome back!' : 'Create your account'}
             </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              setAuthMode((prev) => (prev === 'signIn' ? 'signUp' : 'signIn'));
-              setError('');
-              setMessage('');
-            }}
-            style={styles.switchBtn}
-          >
-            <Text style={styles.switchText}>
-              {authMode === 'signIn' ? 'Create an account' : 'Use an existing account'}
-            </Text>
-          </Pressable>
-        </View>
+            <View style={styles.authSubtitleRow}>
+              <Text style={styles.authSubtitleText}>
+                {isSignIn ? "Don't have an account? " : 'Already have an account? '}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setAuthMode(isSignIn ? 'signUp' : 'signIn');
+                  setError('');
+                  setMessage('');
+                }}
+              >
+                <Text style={styles.authSubtitleLink}>
+                  {isSignIn ? 'Sign up' : 'Sign in'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={styles.socialBtn}
+              onPress={() => setMessage('Google sign-in is coming soon.')}
+            >
+              <Text style={styles.googleG}>G</Text>
+              <Text style={styles.socialBtnText}>Continue with Google</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.socialBtn}
+              onPress={() => setMessage('SSO is coming soon.')}
+            >
+              <Text style={styles.ssoIcon}>☁</Text>
+              <Text style={styles.socialBtnText}>Continue with SSO</Text>
+            </Pressable>
+
+            <View style={styles.authDivider}>
+              <View style={styles.authDividerLine} />
+              <Text style={styles.authDividerText}>or</Text>
+              <View style={styles.authDividerLine} />
+            </View>
+
+            <TextInput
+              style={[styles.authInput, !!error && styles.authInputError]}
+              value={email}
+              onChangeText={(v) => { setEmail(v); if (error) setError(''); }}
+              placeholder="Work email"
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              textContentType="emailAddress"
+            />
+            {!!error && (
+              <Text style={styles.authFieldError}>{error}</Text>
+            )}
+
+            <View style={styles.authPasswordWrap}>
+              <TextInput
+                style={styles.authPasswordInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                placeholderTextColor="#9ca3af"
+                secureTextEntry={!showPassword}
+                textContentType={isSignIn ? 'password' : 'newPassword'}
+                onSubmitEditing={submitAuth}
+              />
+              <Pressable
+                onPress={() => setShowPassword((p) => !p)}
+                hitSlop={8}
+              >
+                <Text style={styles.passwordToggleText}>{showPassword ? '◉' : '◎'}</Text>
+              </Pressable>
+            </View>
+
+            {!!message ? (
+              <Text style={styles.authConfirmMessage}>{message}</Text>
+            ) : (
+              <Pressable
+                onPress={submitAuth}
+                disabled={authLoading}
+                style={({ pressed }) => [
+                  styles.authSubmitBtn,
+                  (!email.trim() || !password) && styles.authSubmitBtnMuted,
+                  pressed && styles.btnPressed,
+                ]}
+              >
+                <Text style={styles.authSubmitBtnText}>
+                  {authLoading ? 'Please wait…' : isSignIn ? 'Log In' : 'Sign Up'}
+                </Text>
+              </Pressable>
+            )}
+
+            {isSignIn && (
+              <Pressable
+                onPress={() => setMessage('Password reset is coming soon.')}
+                style={styles.forgotBtn}
+              >
+                <Text style={styles.forgotBtnText}>Forgot Password?</Text>
+              </Pressable>
+            )}
+          </View>
+
+          <View style={styles.authFooter}>
+            <Text style={styles.authFooterText}>Need help?</Text>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     );
   }
@@ -831,34 +1223,89 @@ export default function HomeScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <Stack.Screen
-        options={{
-          headerRight: () => (
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar style="dark" />
+
+      {/* Title bar */}
+      {(() => {
+        const seed = profile?.email ?? session.user.email ?? '';
+        const avatarColor = pickAvatarColor(seed);
+        const animal = customAnimal ?? pickAvatarAnimal(seed);
+        const initials = accountDisplayName
+          .split(/[\s._-]+/)
+          .slice(0, 2)
+          .map((w) => w[0]?.toUpperCase() ?? '')
+          .join('');
+        return (
+          <View style={styles.titleBar}>
+            <View style={styles.titleBarLeft}>
+              <Pressable
+                onPress={() => setAnimalPickerVisible(true)}
+                accessibilityLabel="Change avatar"
+              >
+                <View style={[styles.userAvatarBig, { backgroundColor: avatarColor }]}>
+                  <Text style={styles.userAvatarBigAnimal}>{animal}</Text>
+                </View>
+              </Pressable>
+              <View style={styles.userMeta}>
+                <Text style={styles.userMetaName} numberOfLines={1}>{accountDisplayName}</Text>
+                <View style={styles.userMetaStatusRow}>
+                  <View style={styles.onlineDot} />
+                  {statusEditing ? (
+                    <TextInput
+                      style={styles.statusInput}
+                      value={statusDraft}
+                      onChangeText={setStatusDraft}
+                      onBlur={saveStatus}
+                      onSubmitEditing={saveStatus}
+                      placeholder="What are you up to?"
+                      placeholderTextColor="#d1d5db"
+                      autoFocus
+                      maxLength={80}
+                      returnKeyType="done"
+                    />
+                  ) : (
+                    <Pressable onPress={() => setStatusEditing(true)} style={styles.statusPressable}>
+                      <Text style={statusDraft ? styles.statusText : styles.statusPlaceholder} numberOfLines={1}>
+                        {statusDraft || 'What are you up to?'}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.titleBarCenter}>
+              <View style={styles.searchBar}>
+                <Text style={styles.searchIcon}>⌕</Text>
+                <Text style={styles.searchPlaceholder}>Search</Text>
+                <Text style={styles.searchShortcut}>⌘K</Text>
+              </View>
+            </View>
+
             <Pressable
               onPress={() => setAccountMenuOpen(true)}
-              style={styles.accountMenuButton}
+              style={styles.titleBarRight}
               accessibilityRole="button"
               accessibilityLabel="Open account menu"
             >
-              <Text style={styles.accountMenuButtonText} numberOfLines={1}>
-                {session.user.email}
-              </Text>
-              <Text style={styles.accountMenuCaret}>v</Text>
+              <View style={[styles.avatarBadge, { backgroundColor: avatarColor }]}>
+                <Text style={styles.avatarText}>{initials || (accountDisplayName[0] ?? '?').toUpperCase()}</Text>
+              </View>
+              <Text style={styles.titleBarCaretDown}>⌄</Text>
             </Pressable>
-          ),
-        }}
-      />
-      <StatusBar style="dark" />
+          </View>
+        );
+      })()}
 
       <View style={styles.teamPanel}>
-        <Text style={styles.workspaceLabel}>Workspace</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.workspaceTabs}
         >
           <Pressable
-            onPress={() => setSelectedTeamId(null)}
+            onPress={() => { setSelectedTeamId(null); setSelectedProjectId(null); }}
             style={[styles.workspaceTab, isPersonal && styles.workspaceTabActive]}
           >
             <Text style={[styles.workspaceTabText, isPersonal && styles.workspaceTabTextActive]}>
@@ -866,14 +1313,27 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
 
-          <Pressable
-            onPress={() => choosePlannedUserFeature('Project 1 planning')}
-            style={styles.workspaceTab}
-            accessibilityRole="button"
-            accessibilityLabel="Open Project 1 planning"
-          >
-            <Text style={styles.workspaceTabText}>Project 1</Text>
-          </Pressable>
+          {projects.map((project) => (
+            <Pressable
+              key={project.id}
+              onPress={() => { setSelectedProjectId(project.id); setSelectedTeamId(null); }}
+              style={[styles.workspaceTab, selectedProjectId === project.id && styles.workspaceTabActive]}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${project.name}`}
+            >
+              <Text style={[styles.workspaceTabText, selectedProjectId === project.id && styles.workspaceTabTextActive]} numberOfLines={1}>{project.name}</Text>
+            </Pressable>
+          ))}
+          {projects.length === 0 && (
+            <Pressable
+              onPress={() => openCreateTarget('project')}
+              style={styles.workspaceTab}
+              accessibilityRole="button"
+              accessibilityLabel="Create first project"
+            >
+              <Text style={[styles.workspaceTabText, { color: '#9ca3af' }]}>Project 1</Text>
+            </Pressable>
+          )}
 
           <Pressable
             onPress={() => openCreateTarget('project')}
@@ -892,7 +1352,7 @@ export default function HomeScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.memberList}>
             {members.map((member) => (
               <Text key={member.user_id} style={styles.memberChip}>
-                {member.email}
+                {profileDisplayName(member)}
               </Text>
             ))}
           </ScrollView>
@@ -917,157 +1377,277 @@ export default function HomeScreen() {
         </View>
       )}
 
-      <View style={styles.inputBar}>
-        <View style={styles.todoInputWrap}>
-          <TextInput
-            style={styles.input}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Add a todo..."
-            placeholderTextColor="#9ca3af"
-            onSubmitEditing={addTodo}
-            returnKeyType="done"
-          />
-          {selectedTeam && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <Pressable
-                onPress={() => setNewTodoAssignee(null)}
-                style={[
-                  styles.assigneePill,
-                  newTodoAssignee === null && styles.assigneePillActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.assigneePillText,
-                    newTodoAssignee === null && styles.assigneePillTextActive,
-                  ]}
-                >
-                  Unassigned
-                </Text>
-              </Pressable>
-              {members.map((member) => (
-                <Pressable
-                  key={member.user_id}
-                  onPress={() => setNewTodoAssignee(member.user_id)}
-                  style={[
-                    styles.assigneePill,
-                    newTodoAssignee === member.user_id && styles.assigneePillActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.assigneePillText,
-                      newTodoAssignee === member.user_id && styles.assigneePillTextActive,
-                    ]}
-                  >
-                    {member.user_id === session.user.id ? 'Me' : member.email}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          )}
+      {isProject && nextMilestone && (
+        <View style={[styles.milestoneBanner, nextMilestone.daysLeft < 0 && styles.milestoneBannerOverdue]}>
+          <Text style={styles.milestoneBannerText}>
+            ◆ {nextMilestone.text}
+            {nextMilestone.daysLeft === 0
+              ? ' — due today'
+              : nextMilestone.daysLeft > 0
+                ? ` — ${nextMilestone.daysLeft}d away`
+                : ` — ${-nextMilestone.daysLeft}d overdue`}
+          </Text>
         </View>
-        <Pressable
-          onPress={addTodo}
-          style={({ pressed }) => [styles.addBtn, pressed && styles.btnPressed]}
-        >
-          <Text style={styles.addBtnText}>Add</Text>
-        </Pressable>
-      </View>
+      )}
 
-      <View style={styles.sortBar}>
-        {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
-        <View style={styles.sortCheckboxSpacer} />
-        {(
-          [
-            { field: 'text', label: 'Task', colStyle: styles.sortColTask },
-            { field: 'priority', label: 'Priority', colStyle: styles.sortColPriority },
-            { field: 'due_date', label: 'Due', colStyle: styles.sortColDue },
-            { field: 'created_at', label: 'Age', colStyle: styles.sortColAdded },
-          ] as { field: SortField; label: string; colStyle: object }[]
-        ).map(({ field, label, colStyle }) => {
-          const isActive = sortField === field;
-          const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
-          return (
-            <Pressable key={field} onPress={() => toggleSort(field)} style={[colStyle, styles.sortColInner]}>
-              <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
-              <Text style={[styles.sortColIndicator, isActive && styles.sortColLabelActive]}>{indicator}</Text>
-            </Pressable>
-          );
-        })}
-        <View style={styles.sortActionsSpacer} />
-      </View>
-
-      <DraggableList
-        data={active}
-        keyExtractor={(todo) => todo.id}
-        onDragEnd={handleDragEnd}
-        draggable={!sortField}
-        style={styles.list}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({ item: todo, drag, isActive }) => (
-          <TodoItem
-            text={todo.text}
-            done={todo.done}
-            priority={todo.priority}
-            dueDate={todo.due_date}
-            note={todo.note}
-            createdAt={todo.created_at}
-            assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
-            onToggle={() => toggle(todo.id)}
-            onDelete={() => remove(todo.id)}
-            onEdit={(text) => editTodoText(todo.id, text)}
-            onOpenEdit={() => openEditModal(todo)}
-            onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
-            onPriority={() => cyclePriority(todo)}
-            onDueDate={() => openDueCalendar(todo)}
-            onDrag={drag}
-            isDragging={isActive ?? false}
-          />
-        )}
-        ListHeaderComponent={
-          <>
-            {!!error && <Text style={styles.error}>{error}</Text>}
-            {!!message && <Text style={styles.message}>{message}</Text>}
-            {loading && !error && <Text style={styles.empty}>Loading todos...</Text>}
-            {!loading && active.length === 0 && done.length === 0 && (
-              <Text style={styles.empty}>No todos yet. Add one above.</Text>
-            )}
-          </>
-        }
-        ListFooterComponent={
-          done.length > 0 ? (
-            <>
-              <View style={styles.sectionDivider}>
-                <View style={styles.sectionDividerLine} />
-                <Text style={styles.sectionLabel}>Completed</Text>
-                <View style={styles.sectionDividerLine} />
+      {isProject ? (
+        <>
+          {/* Backlog strip — one-line capture bar; tasks land here by default */}
+          {(() => {
+            const backlogTodos = todos.filter((t) => !t.phase_id);
+            const backlogActive = backlogTodos.filter((t) => !t.done);
+            return (
+              <View style={styles.backlogStrip}>
+                <Text style={styles.backlogLabel}>Backlog</Text>
+                {backlogActive.length > 0 && (
+                  <View style={styles.backlogCountBadge}>
+                    <Text style={styles.backlogCountText}>{backlogActive.length}</Text>
+                  </View>
+                )}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.backlogItemsScroll}
+                  contentContainerStyle={styles.backlogItemsContent}
+                >
+                  {backlogActive.map((todo) => (
+                    <Pressable
+                      key={todo.id}
+                      onPress={() => openEditModal(todo)}
+                      style={[styles.backlogChip, todo.is_milestone && styles.backlogChipMilestone]}
+                    >
+                      {todo.is_milestone && <Text style={styles.backlogMilestoneIcon}>◆</Text>}
+                      <Text style={styles.backlogChipText} numberOfLines={1}>{todo.text}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+                {backlogInputVisible ? (
+                  <View style={styles.backlogInputRow}>
+                    <TextInput
+                      style={styles.backlogInput}
+                      value={columnInputs['backlog'] ?? ''}
+                      onChangeText={(v) => setColumnInputs((prev) => ({ ...prev, backlog: v }))}
+                      placeholder="Task name..."
+                      placeholderTextColor="#9ca3af"
+                      autoFocus
+                      maxLength={200}
+                      returnKeyType="done"
+                      onSubmitEditing={() => { addTodoToPhase(null); setBacklogInputVisible(false); }}
+                    />
+                    <Pressable
+                      onPress={() => { addTodoToPhase(null); setBacklogInputVisible(false); }}
+                      style={styles.backlogConfirmBtn}
+                    >
+                      <Text style={styles.backlogConfirmText}>Add</Text>
+                    </Pressable>
+                    <Pressable onPress={() => setBacklogInputVisible(false)} hitSlop={8}>
+                      <Text style={styles.backlogCancelText}>✕</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable onPress={() => setBacklogInputVisible(true)} style={styles.backlogAddBtn}>
+                    <Text style={styles.backlogAddBtnText}>+</Text>
+                  </Pressable>
+                )}
               </View>
-              {done.map((todo) => (
-                <TodoItem
-                  key={todo.id}
-                  text={todo.text}
-                  done={todo.done}
-                  priority={todo.priority}
-                  dueDate={todo.due_date}
-                  note={todo.note}
-                  createdAt={todo.created_at}
-                  assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
-                  onToggle={() => toggle(todo.id)}
-                  onDelete={() => remove(todo.id)}
-                  onEdit={(text) => editTodoText(todo.id, text)}
-                  onOpenEdit={() => openEditModal(todo)}
-                  onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
-                  onPriority={() => cyclePriority(todo)}
-                  onDueDate={() => openDueCalendar(todo)}
-                  reserveDragSpace={Platform.OS === 'web'}
-                />
-              ))}
-            </>
-          ) : null
-        }
-      />
+            );
+          })()}
+
+          {/* Phase columns */}
+          <ScrollView
+            horizontal
+            style={styles.kanban}
+            contentContainerStyle={styles.kanbanContent}
+            showsHorizontalScrollIndicator={false}
+          >
+            {!!error && <Text style={[styles.error, { alignSelf: 'flex-start' }]}>{error}</Text>}
+            {phases.map((phase) => {
+              const colActive = todos.filter((t) => !t.done && t.phase_id === phase.id);
+              const colDone = todos.filter((t) => t.done && t.phase_id === phase.id);
+              const dotColor = phase.status === 'active' ? '#6366f1' : phase.status === 'completed' ? '#16a34a' : '#9ca3af';
+              const dateRange = formatPhaseDateRange(phase.planned_start, phase.planned_end);
+              return (
+                <View key={phase.id} style={styles.kanbanCol}>
+                  <View style={styles.kanbanColHeader}>
+                    <Pressable onPress={() => cyclePhaseStatus(phase)} hitSlop={8}>
+                      <View style={[styles.kanbanStatusDot, { backgroundColor: dotColor }]} />
+                    </Pressable>
+                    <View style={styles.kanbanColMeta}>
+                      <Text style={styles.kanbanColTitle}>{phase.name}</Text>
+                      {!!dateRange && <Text style={styles.kanbanColDateRange}>{dateRange}</Text>}
+                    </View>
+                    {colActive.length > 0 && (
+                      <View style={styles.kanbanCountBadge}>
+                        <Text style={styles.kanbanCountText}>{colActive.length}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.kanbanColInput}>
+                    <TextInput
+                      style={styles.kanbanInputField}
+                      value={columnInputs[phase.id] ?? ''}
+                      onChangeText={(v) => setColumnInputs((prev) => ({ ...prev, [phase.id]: v }))}
+                      placeholder="Add a task..."
+                      placeholderTextColor="#9ca3af"
+                      onSubmitEditing={() => addTodoToPhase(phase.id)}
+                      returnKeyType="done"
+                    />
+                    <Pressable onPress={() => addTodoToPhase(phase.id)} style={styles.kanbanAddBtn}>
+                      <Text style={styles.kanbanAddBtnText}>+</Text>
+                    </Pressable>
+                  </View>
+                  <ScrollView style={styles.kanbanColBody} showsVerticalScrollIndicator={false}>
+                    {colActive.map((todo) => (
+                      <KanbanCard key={todo.id} todo={todo}
+                        assigneeLabel={todo.assigned_to ? assigneeLabel(todo.assigned_to) : null}
+                        onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
+                        onEdit={() => openEditModal(todo)}
+                        onCycleAssignee={() => cycleAssignee(todo)} />
+                    ))}
+                    {colDone.length > 0 && <>
+                      <View style={styles.sectionDivider}>
+                        <View style={styles.sectionDividerLine} />
+                        <Text style={styles.sectionLabel}>Done</Text>
+                        <View style={styles.sectionDividerLine} />
+                      </View>
+                      {colDone.map((todo) => (
+                        <KanbanCard key={todo.id} todo={todo}
+                          assigneeLabel={todo.assigned_to ? assigneeLabel(todo.assigned_to) : null}
+                          onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
+                          onEdit={() => openEditModal(todo)}
+                          onCycleAssignee={() => cycleAssignee(todo)} />
+                      ))}
+                    </>}
+                  </ScrollView>
+                </View>
+              );
+            })}
+            <Pressable onPress={() => setAddingPhase(true)} style={styles.kanbanAddCol}>
+              <Text style={styles.kanbanAddColIcon}>+</Text>
+              <Text style={styles.kanbanAddColText}>Add Phase</Text>
+            </Pressable>
+          </ScrollView>
+        </>
+      ) : (
+        <>
+          <View style={styles.inputBar}>
+            <View style={styles.todoInputWrap}>
+              <TextInput
+                style={styles.input}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Add a todo..."
+                placeholderTextColor="#9ca3af"
+                onSubmitEditing={addTodo}
+                returnKeyType="done"
+              />
+              {selectedTeam && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                  <Pressable
+                    onPress={() => setNewTodoAssignee(null)}
+                    style={[styles.assigneePill, newTodoAssignee === null && styles.assigneePillActive]}
+                  >
+                    <Text style={[styles.assigneePillText, newTodoAssignee === null && styles.assigneePillTextActive]}>
+                      Unassigned
+                    </Text>
+                  </Pressable>
+                  {members.map((member) => (
+                    <Pressable
+                      key={member.user_id}
+                      onPress={() => setNewTodoAssignee(member.user_id)}
+                      style={[styles.assigneePill, newTodoAssignee === member.user_id && styles.assigneePillActive]}
+                    >
+                      <Text style={[styles.assigneePillText, newTodoAssignee === member.user_id && styles.assigneePillTextActive]}>
+                        {member.user_id === session.user.id ? 'Me' : profileDisplayName(member)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+            <Pressable onPress={addTodo} style={({ pressed }) => [styles.addBtn, pressed && styles.btnPressed]}>
+              <Text style={styles.addBtnText}>Add</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.sortBar}>
+            {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
+            <View style={styles.sortCheckboxSpacer} />
+            {(
+              [
+                { field: 'text', label: 'Task', colStyle: styles.sortColTask },
+                { field: 'priority', label: 'Priority', colStyle: styles.sortColPriority },
+                { field: 'due_date', label: 'Due', colStyle: styles.sortColDue },
+                { field: 'created_at', label: 'Age', colStyle: styles.sortColAdded },
+              ] as { field: SortField; label: string; colStyle: object }[]
+            ).map(({ field, label, colStyle }) => {
+              const isActive = sortField === field;
+              const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
+              return (
+                <Pressable key={field} onPress={() => toggleSort(field)} style={[colStyle, styles.sortColInner]}>
+                  <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
+                  <Text style={[styles.sortColIndicator, isActive && styles.sortColLabelActive]}>{indicator}</Text>
+                </Pressable>
+              );
+            })}
+            <View style={styles.sortActionsSpacer} />
+          </View>
+
+          <DraggableList
+            data={active}
+            keyExtractor={(todo) => todo.id}
+            onDragEnd={handleDragEnd}
+            draggable={!sortField}
+            style={styles.list}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item: todo, drag, isActive }) => (
+              <TodoItem
+                text={todo.text} done={todo.done} priority={todo.priority}
+                dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
+                assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
+                onEdit={(text) => editTodoText(todo.id, text)} onOpenEdit={() => openEditModal(todo)}
+                onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
+                onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                onDrag={drag} isDragging={isActive ?? false}
+              />
+            )}
+            ListHeaderComponent={
+              <>
+                {!!error && <Text style={styles.error}>{error}</Text>}
+                {!!message && <Text style={styles.message}>{message}</Text>}
+                {loading && !error && <Text style={styles.empty}>Loading todos...</Text>}
+                {!loading && active.length === 0 && done.length === 0 && (
+                  <Text style={styles.empty}>No todos yet. Add one above.</Text>
+                )}
+              </>
+            }
+            ListFooterComponent={
+              done.length > 0 ? (
+                <>
+                  <View style={styles.sectionDivider}>
+                    <View style={styles.sectionDividerLine} />
+                    <Text style={styles.sectionLabel}>Completed</Text>
+                    <View style={styles.sectionDividerLine} />
+                  </View>
+                  {done.map((todo) => (
+                    <TodoItem
+                      key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
+                      dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
+                      assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                      onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
+                      onEdit={(text) => editTodoText(todo.id, text)} onOpenEdit={() => openEditModal(todo)}
+                      onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
+                      onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                      reserveDragSpace={Platform.OS === 'web'}
+                    />
+                  ))}
+                </>
+              ) : null
+            }
+          />
+        </>
+      )}
 
       <Modal
         visible={!!dueTodo}
@@ -1152,8 +1732,11 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.accountMenuBackdrop} onPress={() => setAccountMenuOpen(false)}>
           <Pressable style={styles.accountMenuCard}>
+            <Text style={styles.accountMenuName} numberOfLines={1}>
+              {accountDisplayName}
+            </Text>
             <Text style={styles.accountMenuEmail} numberOfLines={1}>
-              {session.user.email}
+              {profile?.email ?? session.user.email}
             </Text>
             <Pressable
               onPress={() => choosePlannedUserFeature('Profile')}
@@ -1166,6 +1749,12 @@ export default function HomeScreen() {
               style={styles.accountMenuItem}
             >
               <Text style={styles.accountMenuItemText}>Settings</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => { setAccountMenuOpen(false); setAboutVisible(true); }}
+              style={styles.accountMenuItem}
+            >
+              <Text style={styles.accountMenuItemText}>About</Text>
             </Pressable>
             <View style={styles.accountMenuSection}>
               <View style={styles.accountMenuSectionHeader}>
@@ -1215,6 +1804,44 @@ export default function HomeScreen() {
             <Pressable onPress={signOut} style={styles.accountMenuItem}>
               <Text style={styles.accountMenuSignOutText}>Log Out</Text>
             </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={createTarget === 'project'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateTarget(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setCreateTarget(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>New Project</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={projectName}
+              onChangeText={setProjectName}
+              placeholder="Project name"
+              placeholderTextColor="#9ca3af"
+              returnKeyType="done"
+              autoFocus
+              onSubmitEditing={createProject}
+            />
+            <View style={styles.editModalActions}>
+              <Pressable
+                onPress={() => {
+                  setCreateTarget(null);
+                  setProjectName('');
+                }}
+              >
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={createProject}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Create</Text>
+              </Pressable>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1282,6 +1909,42 @@ export default function HomeScreen() {
               placeholderTextColor="#9ca3af"
               multiline
             />
+            {isProject && phases.length > 0 && (
+              <>
+                <Text style={styles.editModalSectionLabel}>Phase</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                  <Pressable
+                    onPress={() => setEditDraftPhaseId(null)}
+                    style={[styles.phasePill, !editDraftPhaseId && styles.phasePillActive]}
+                  >
+                    <Text style={[styles.phasePillText, !editDraftPhaseId && styles.phasePillTextActive]}>
+                      None
+                    </Text>
+                  </Pressable>
+                  {phases.map((phase) => (
+                    <Pressable
+                      key={phase.id}
+                      onPress={() => setEditDraftPhaseId(phase.id)}
+                      style={[styles.phasePill, editDraftPhaseId === phase.id && styles.phasePillActive]}
+                    >
+                      <Text style={[styles.phasePillText, editDraftPhaseId === phase.id && styles.phasePillTextActive]}>
+                        {phase.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+            {isProject && (
+              <Pressable
+                onPress={() => editTodo && toggleMilestone(editTodo).then(closeEditModal)}
+                style={[styles.milestoneToggle, editTodo?.is_milestone && styles.milestoneToggleActive]}
+              >
+                <Text style={[styles.milestoneToggleText, editTodo?.is_milestone && styles.milestoneToggleTextActive]}>
+                  {editTodo?.is_milestone ? '◆ Milestone' : '◇ Mark as milestone'}
+                </Text>
+              </Pressable>
+            )}
             <View style={styles.editModalActions}>
               <Pressable onPress={closeEditModal}>
                 <Text style={styles.calendarCancelText}>Cancel</Text>
@@ -1291,6 +1954,147 @@ export default function HomeScreen() {
                 style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
               >
                 <Text style={styles.smallBtnText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={!!phasePickerTodo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhasePickerTodo(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setPhasePickerTodo(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Assign Phase</Text>
+            <Pressable
+              onPress={() => phasePickerTodo && setTodoPhase(phasePickerTodo, null)}
+              style={[styles.phasePill, !phasePickerTodo?.phase_id && styles.phasePillActive]}
+            >
+              <Text style={[styles.phasePillText, !phasePickerTodo?.phase_id && styles.phasePillTextActive]}>
+                No phase
+              </Text>
+            </Pressable>
+            {phases.map((phase) => (
+              <Pressable
+                key={phase.id}
+                onPress={() => phasePickerTodo && setTodoPhase(phasePickerTodo, phase.id)}
+                style={[styles.phasePill, phasePickerTodo?.phase_id === phase.id && styles.phasePillActive]}
+              >
+                <Text style={[styles.phasePillText, phasePickerTodo?.phase_id === phase.id && styles.phasePillTextActive]}>
+                  {phase.name}
+                </Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={addingPhase}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddingPhase(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setAddingPhase(false)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>New Phase</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={newPhaseName}
+              onChangeText={setNewPhaseName}
+              placeholder="Phase name"
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              onSubmitEditing={addPhase}
+            />
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => { setAddingPhase(false); setNewPhaseName(''); }}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={addPhase}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Add</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={animalPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAnimalPickerVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setAnimalPickerVisible(false)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Choose your avatar</Text>
+            <View style={styles.animalGrid}>
+              {AVATAR_ANIMALS.map((emoji) => (
+                <Pressable
+                  key={emoji}
+                  onPress={() => { setCustomAnimal(emoji); setAnimalPickerVisible(false); }}
+                  style={[
+                    styles.animalCell,
+                    (customAnimal ?? pickAvatarAnimal(profile?.email ?? session?.user.email ?? '')) === emoji
+                      && styles.animalCellActive,
+                  ]}
+                >
+                  <Text style={styles.animalCellText}>{emoji}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => setAnimalPickerVisible(false)}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              {customAnimal && (
+                <Pressable
+                  onPress={() => { setCustomAnimal(null); setAnimalPickerVisible(false); }}
+                  style={({ pressed }) => [styles.smallBtn, { backgroundColor: '#6b7280' }, pressed && styles.btnPressed]}
+                >
+                  <Text style={styles.smallBtnText}>Reset</Text>
+                </Pressable>
+              )}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={aboutVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAboutVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setAboutVisible(false)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>About</Text>
+            <Text style={styles.aboutText}>
+              This app is built for simplicity. For example, a project has a maximum of 5 phases
+              because real work rarely needs more — and if it does, it probably needs a dedicated
+              project management tool, not this one.
+            </Text>
+            <Text style={styles.aboutText}>
+              The goal is to make you productive, not to make you plan. We want to help you capture
+              what matters, assign it, do it, track it, and deliver it.
+            </Text>
+            <Text style={[styles.aboutText, { marginBottom: 0 }]}>
+              If you need Gantt charts, dependency graphs, or resource leveling, products such as
+              ClickUp, Asana, Jira, and MS Project are waiting for you. This tool is for the other
+              95% of work.
+            </Text>
+            <View style={styles.editModalActions}>
+              <View />
+              <Pressable
+                onPress={() => setAboutVisible(false)}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Got it</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -1308,26 +2112,168 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
   },
+  authScroll: {
+    flexGrow: 1,
+  },
   authPanel: {
     flex: 1,
-    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
     paddingHorizontal: 24,
+    paddingTop: 64,
+    paddingBottom: 24,
   },
   authTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 8,
+  },
+  authSubtitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  authSubtitleText: {
+    color: '#6b7280',
+    fontSize: 15,
+  },
+  authSubtitleLink: {
+    color: '#6366f1',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+  },
+  googleG: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4285F4',
+    marginRight: 10,
+  },
+  ssoIcon: {
+    fontSize: 16,
+    color: '#6b7280',
+    marginRight: 10,
+  },
+  socialBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  authDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  authDividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#d1d5db',
+  },
+  authDividerText: {
+    color: '#6b7280',
+    fontSize: 14,
+    paddingHorizontal: 12,
+  },
+  authMessage: {
+    color: '#6b7280',
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  authConfirmMessage: {
+    color: '#dc2626',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingVertical: 14,
   },
   authInput: {
-    height: 48,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 16,
+    height: 52,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 16,
+    fontSize: 15,
     color: '#111827',
-    marginBottom: 12,
+    marginBottom: 4,
+  },
+  authInputError: {
+    borderColor: '#ef4444',
+    borderWidth: 1.5,
+  },
+  authFieldError: {
+    color: '#ef4444',
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  authPasswordWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 16,
+    marginTop: 12,
+  },
+  authPasswordInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#111827',
+  },
+  passwordToggleText: {
+    fontSize: 18,
+    color: '#9ca3af',
+    paddingLeft: 8,
+  },
+  authSubmitBtn: {
+    height: 52,
+    backgroundColor: '#6366f1',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  authSubmitBtnMuted: {
+    backgroundColor: '#9ca3af',
+  },
+  authSubmitBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  forgotBtn: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  forgotBtnText: {
+    color: '#6366f1',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  authFooter: {
+    paddingBottom: 36,
+    alignItems: 'center',
+  },
+  authFooterText: {
+    color: '#9ca3af',
+    fontSize: 14,
   },
   accountMenuButton: {
     flexDirection: 'row',
@@ -1363,11 +2309,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
+  accountMenuName: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '700',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
   accountMenuEmail: {
     color: '#6b7280',
     fontSize: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 2,
+    paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
   },
@@ -1545,7 +2500,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     fontSize: 16,
     color: '#111827',
-    marginBottom: 8,
   },
   assigneePill: {
     borderColor: '#d1d5db',
@@ -1582,31 +2536,6 @@ const styles = StyleSheet.create({
   },
   btnPressed: {
     opacity: 0.8,
-  },
-  disabledBtn: {
-    opacity: 0.6,
-  },
-  primaryBtn: {
-    backgroundColor: '#6366f1',
-    borderRadius: 10,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  primaryBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  switchBtn: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
-  switchText: {
-    color: '#6366f1',
-    fontWeight: '600',
-    fontSize: 14,
   },
   empty: {
     textAlign: 'center',
@@ -1831,5 +2760,478 @@ const styles = StyleSheet.create({
   },
   sortColLabelActive: {
     color: '#4338ca',
+  },
+  titleBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingTop: Platform.OS === 'ios' ? 52 : 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    gap: 10,
+  },
+  titleBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    flex: 1,
+    maxWidth: 260,
+  },
+  userAvatarBig: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  userAvatarBigText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  userAvatarBigAnimal: {
+    fontSize: 22,
+    lineHeight: 28,
+  },
+  userMeta: {
+    flexShrink: 1,
+  },
+  userMetaName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  userMetaStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+    flex: 1,
+  },
+  onlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#22c55e',
+    flexShrink: 0,
+  },
+  statusPressable: {
+    flex: 1,
+  },
+  statusText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontStyle: 'italic',
+  },
+  statusPlaceholder: {
+    fontSize: 12,
+    color: '#d1d5db',
+  },
+  statusInput: {
+    flex: 1,
+    fontSize: 12,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  titleBarCenter: {
+    flex: 2,
+    alignItems: 'center',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    gap: 6,
+    width: '100%',
+    maxWidth: 360,
+  },
+  searchIcon: {
+    fontSize: 16,
+    color: '#9ca3af',
+  },
+  searchPlaceholder: {
+    flex: 1,
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+  searchShortcut: {
+    fontSize: 11,
+    color: '#c4c9d4',
+    fontWeight: '600',
+  },
+  titleBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  titleBarCaretDown: {
+    color: '#9ca3af',
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  avatarBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  avatarAnimal: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
+  kanban: {
+    flex: 1,
+  },
+  kanbanContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  kanbanCol: {
+    width: 280,
+    flexShrink: 0,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  kanbanColHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    gap: 8,
+    backgroundColor: '#fff',
+  },
+  kanbanStatusDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    flexShrink: 0,
+  },
+  kanbanColMeta: {
+    flex: 1,
+  },
+  kanbanColTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  kanbanColDateRange: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 1,
+  },
+  kanbanCountBadge: {
+    backgroundColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    minWidth: 22,
+    alignItems: 'center',
+  },
+  kanbanCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6b7280',
+  },
+  kanbanColInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    gap: 6,
+    backgroundColor: '#fff',
+  },
+  kanbanInputField: {
+    flex: 1,
+    height: 34,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 13,
+    color: '#111827',
+  },
+  kanbanAddBtn: {
+    width: 34,
+    height: 34,
+    backgroundColor: '#6366f1',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kanbanAddBtnText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '300',
+    lineHeight: 26,
+  },
+  kanbanColBody: {
+    maxHeight: 520,
+  },
+  kanbanAddCol: {
+    width: 140,
+    height: 76,
+    flexShrink: 0,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  kanbanAddColIcon: {
+    fontSize: 22,
+    color: '#d1d5db',
+    fontWeight: '300',
+    lineHeight: 26,
+  },
+  kanbanAddColText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9ca3af',
+  },
+  backlogStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f9fafb',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    minHeight: 44,
+    gap: 8,
+  },
+  backlogLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6b7280',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    flexShrink: 0,
+  },
+  backlogCountBadge: {
+    backgroundColor: '#e5e7eb',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    flexShrink: 0,
+  },
+  backlogCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6b7280',
+  },
+  backlogItemsScroll: {
+    flex: 1,
+  },
+  backlogItemsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingRight: 4,
+  },
+  backlogChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 4,
+    maxWidth: 160,
+  },
+  backlogChipMilestone: {
+    borderColor: '#a78bfa',
+    backgroundColor: '#f5f3ff',
+  },
+  backlogMilestoneIcon: {
+    fontSize: 9,
+    color: '#7c3aed',
+  },
+  backlogChipText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  backlogInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  backlogInput: {
+    height: 32,
+    minWidth: 140,
+    maxWidth: 220,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#6366f1',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 13,
+    color: '#111827',
+  },
+  backlogConfirmBtn: {
+    height: 32,
+    paddingHorizontal: 12,
+    backgroundColor: '#6366f1',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backlogConfirmText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  backlogCancelText: {
+    fontSize: 16,
+    color: '#9ca3af',
+    lineHeight: 20,
+  },
+  backlogAddBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  backlogAddBtnText: {
+    fontSize: 18,
+    color: '#6b7280',
+    lineHeight: 22,
+    fontWeight: '300',
+  },
+  milestoneBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#fefce8',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#fde68a',
+  },
+  milestoneBannerOverdue: {
+    backgroundColor: '#fef2f2',
+    borderBottomColor: '#fecaca',
+  },
+  milestoneBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#92400e',
+  },
+  phasePill: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+    marginBottom: 2,
+  },
+  phasePillActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  phasePillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  phasePillTextActive: {
+    color: '#4338ca',
+  },
+  milestoneToggle: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  milestoneToggleActive: {
+    backgroundColor: '#fefce8',
+    borderColor: '#fde68a',
+  },
+  milestoneToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  milestoneToggleTextActive: {
+    color: '#92400e',
+  },
+  editModalSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  aboutText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  animalGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  animalCell: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  animalCellActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  animalCellText: {
+    fontSize: 26,
+    lineHeight: 32,
   },
 });
