@@ -71,6 +71,19 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Collaborators appear only on the tasks they are assigned; they do not appear in the team member panel.
 - Both Team Members and Collaborators receive assignment notifications; Collaborators may need email delivery since they may not have the app.
 
+## Project Kanban View
+
+- Backlog strip (one-line capture bar above phase columns). ✓ Done.
+- Phase columns with date ranges and per-column task input. ✓ Done.
+- KanbanCard component with priority badge, due date, and assignee pill. ✓ Done.
+- Drag and drop tasks between Backlog and phase columns (web: @dnd-kit; native: react-native-draggable-flatlist).
+- Drag and drop to reorder tasks within a column.
+- Done tasks collapsed/hidden by default per column, expandable on tap.
+- Card detail view: tap a card to open full task detail inline (note, checklist, attachments) without leaving kanban.
+- Column WIP indicator: optional soft limit on active tasks per phase — visual warning, not a hard block.
+- Phase completion gate: when marking a phase complete, prompt to move or close any remaining open tasks.
+- Enforce 5-phase maximum (About text already documents this; addPhase does not yet enforce it).
+
 ## Project Management
 
 - Add projects as bounded work that can end or close. ✓ Done.

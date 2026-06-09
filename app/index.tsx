@@ -36,6 +36,7 @@ type Todo = {
 type Team = {
   id: string;
   name: string;
+  member_count?: number;
 };
 
 type Project = {
@@ -289,6 +290,7 @@ export default function HomeScreen() {
   const [columnInputs, setColumnInputs] = useState<Record<string, string>>({});
   const [backlogInputVisible, setBacklogInputVisible] = useState(false);
   const [aboutVisible, setAboutVisible] = useState(false);
+  const [teamsViewOpen, setTeamsViewOpen] = useState(false);
   const [animalPickerVisible, setAnimalPickerVisible] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
@@ -387,7 +389,7 @@ export default function HomeScreen() {
 
     const { data, error: teamsError } = await supabase
       .from('teams')
-      .select('id, name')
+      .select('id, name, team_members(count)')
       .order('created_at', { ascending: true });
 
     if (teamsError) {
@@ -395,7 +397,11 @@ export default function HomeScreen() {
       return;
     }
 
-    const nextTeams = data ?? [];
+    const nextTeams = (data ?? []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      member_count: t.team_members?.[0]?.count ?? 0,
+    }));
     setTeams(nextTeams);
     setSelectedTeamId((current) => {
       if (current && nextTeams.some((team) => team.id === current)) {
@@ -1303,12 +1309,13 @@ export default function HomeScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.workspaceTabs}
+          style={styles.workspaceTabsScroll}
         >
           <Pressable
-            onPress={() => { setSelectedTeamId(null); setSelectedProjectId(null); }}
-            style={[styles.workspaceTab, isPersonal && styles.workspaceTabActive]}
+            onPress={() => { setSelectedTeamId(null); setSelectedProjectId(null); setTeamsViewOpen(false); }}
+            style={[styles.workspaceTab, isPersonal && !teamsViewOpen && styles.workspaceTabActive]}
           >
-            <Text style={[styles.workspaceTabText, isPersonal && styles.workspaceTabTextActive]}>
+            <Text style={[styles.workspaceTabText, isPersonal && !teamsViewOpen && styles.workspaceTabTextActive]}>
               Personal
             </Text>
           </Pressable>
@@ -1316,12 +1323,12 @@ export default function HomeScreen() {
           {projects.map((project) => (
             <Pressable
               key={project.id}
-              onPress={() => { setSelectedProjectId(project.id); setSelectedTeamId(null); }}
-              style={[styles.workspaceTab, selectedProjectId === project.id && styles.workspaceTabActive]}
+              onPress={() => { setSelectedProjectId(project.id); setSelectedTeamId(null); setTeamsViewOpen(false); }}
+              style={[styles.workspaceTab, selectedProjectId === project.id && !teamsViewOpen && styles.workspaceTabActive]}
               accessibilityRole="button"
               accessibilityLabel={`Open ${project.name}`}
             >
-              <Text style={[styles.workspaceTabText, selectedProjectId === project.id && styles.workspaceTabTextActive]} numberOfLines={1}>{project.name}</Text>
+              <Text style={[styles.workspaceTabText, selectedProjectId === project.id && !teamsViewOpen && styles.workspaceTabTextActive]} numberOfLines={1}>{project.name}</Text>
             </Pressable>
           ))}
           {projects.length === 0 && (
@@ -1344,7 +1351,53 @@ export default function HomeScreen() {
             <Text style={styles.workspaceAddText}>+</Text>
           </Pressable>
         </ScrollView>
+
+        {/* Teams button pinned to the right */}
+        <Pressable
+          onPress={() => setTeamsViewOpen((v) => !v)}
+          style={[styles.teamsBtn, teamsViewOpen && styles.teamsBtnActive]}
+        >
+          <Text style={[styles.teamsBtnText, teamsViewOpen && styles.teamsBtnTextActive]}>Teams</Text>
+        </Pressable>
       </View>
+
+      {/* Teams card grid */}
+      {teamsViewOpen && (
+        <ScrollView style={styles.teamsGrid} contentContainerStyle={styles.teamsGridContent}>
+          {teams.map((team) => {
+            const cardColor = pickAvatarColor(team.id);
+            const initial = (team.name[0] ?? 'T').toUpperCase();
+            return (
+              <Pressable
+                key={team.id}
+                style={styles.teamCard}
+                onPress={() => { setSelectedTeamId(team.id); setSelectedProjectId(null); setTeamsViewOpen(false); }}
+              >
+                <View style={[styles.teamCardBg, { backgroundColor: cardColor + '33' }]} />
+                <View style={[styles.teamCardAvatar, { backgroundColor: cardColor }]}>
+                  <Text style={styles.teamCardAvatarText}>{initial}</Text>
+                </View>
+                <Text style={styles.teamCardName} numberOfLines={1}>{team.name}</Text>
+                <Text style={styles.teamCardMeta}>{team.member_count ?? 0} member{(team.member_count ?? 0) !== 1 ? 's' : ''}</Text>
+                <Pressable
+                  onPress={(e) => { e.stopPropagation?.(); setSelectedTeamId(team.id); setSelectedProjectId(null); setTeamsViewOpen(false); }}
+                  style={styles.teamCardAddBtn}
+                  hitSlop={8}
+                >
+                  <Text style={styles.teamCardAddBtnText}>+</Text>
+                </Pressable>
+              </Pressable>
+            );
+          })}
+          <Pressable
+            onPress={() => { setTeamsViewOpen(false); openCreateTarget('team'); }}
+            style={styles.teamCardNew}
+          >
+            <Text style={styles.teamCardNewIcon}>+</Text>
+            <Text style={styles.teamCardNewText}>New Team</Text>
+          </Pressable>
+        </ScrollView>
+      )}
 
       {selectedTeam && (
         <View style={styles.memberPanel}>
@@ -2374,6 +2427,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   teamPanel: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 10,
@@ -2427,6 +2482,123 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     lineHeight: 22,
+  },
+  workspaceTabsScroll: {
+    flex: 1,
+  },
+  teamsBtn: {
+    flexShrink: 0,
+    height: 36,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  teamsBtnActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  teamsBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  teamsBtnTextActive: {
+    color: '#4338ca',
+  },
+  teamsGrid: {
+    flex: 1,
+  },
+  teamsGridContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 16,
+    gap: 12,
+  },
+  teamCard: {
+    width: 200,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+    overflow: 'hidden',
+  },
+  teamCardBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 72,
+    borderRadius: 14,
+  },
+  teamCardAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 36,
+    marginBottom: 8,
+  },
+  teamCardAvatarText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  teamCardName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  teamCardMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  teamCardAddBtn: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teamCardAddBtnText: {
+    fontSize: 18,
+    color: '#6b7280',
+    lineHeight: 22,
+    fontWeight: '300',
+  },
+  teamCardNew: {
+    width: 200,
+    height: 130,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  teamCardNewIcon: {
+    fontSize: 24,
+    color: '#d1d5db',
+    fontWeight: '300',
+    lineHeight: 28,
+  },
+  teamCardNewText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9ca3af',
   },
   memberPanel: {
     paddingHorizontal: 16,
