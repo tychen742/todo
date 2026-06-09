@@ -31,11 +31,19 @@ type Todo = {
   is_milestone: boolean;
   project_id: string | null;
   phase_id: string | null;
+  team_id: string | null;
+};
+
+type Organization = {
+  id: string;
+  name: string;
+  member_count?: number;
 };
 
 type Team = {
   id: string;
   name: string;
+  org_id: string | null;
   member_count?: number;
 };
 
@@ -146,6 +154,14 @@ function emailDisplayName(email: string | null | undefined) {
 
 function profileDisplayName(profile: Pick<Profile, 'email' | 'display_name'>) {
   return profile.display_name?.trim() || emailDisplayName(profile.email);
+}
+
+function authRedirectUrl() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return undefined;
+  }
+
+  return window.location.origin;
 }
 
 function kanbanDueLabel(value: string): string {
@@ -275,11 +291,17 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [createTarget, setCreateTarget] = useState<CreateTarget | null>(null);
+  const [orgName, setOrgName] = useState('');
   const [teamName, setTeamName] = useState('');
   const [projectName, setProjectName] = useState('');
+  const [newProjectTeamId, setNewProjectTeamId] = useState<string | null>(null);
+  const [linkingProjectTeam, setLinkingProjectTeam] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -288,6 +310,7 @@ export default function HomeScreen() {
   const [newPhaseName, setNewPhaseName] = useState('');
   const [editDraftPhaseId, setEditDraftPhaseId] = useState<string | null>(null);
   const [columnInputs, setColumnInputs] = useState<Record<string, string>>({});
+  const [columnAssignees, setColumnAssignees] = useState<Record<string, string | null>>({});
   const [backlogInputVisible, setBacklogInputVisible] = useState(false);
   const [aboutVisible, setAboutVisible] = useState(false);
   const [teamsViewOpen, setTeamsViewOpen] = useState(false);
@@ -295,6 +318,15 @@ export default function HomeScreen() {
   const [customAnimal, setCustomAnimal] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
   const [statusEditing, setStatusEditing] = useState(false);
+  const [orgModalId, setOrgModalId] = useState<string | null>(null);
+  const [orgModalMembers, setOrgModalMembers] = useState<Member[]>([]);
+  const [orgMemberEmail, setOrgMemberEmail] = useState('');
+  const [orgManageMember, setOrgManageMember] = useState<Member | null>(null);
+  const [assigneeTodo, setAssigneeTodo] = useState<Todo | null>(null);
+  const [assigneePickerUserId, setAssigneePickerUserId] = useState<string | null>(null);
+  const [assigneePickerDueDate, setAssigneePickerDueDate] = useState<string | null>(null);
+  const [assigneePickerMonth, setAssigneePickerMonth] = useState(() => new Date());
+  const [assignedToMe, setAssignedToMe] = useState<Todo[]>([]);
   const [memberEmail, setMemberEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [newTodoAssignee, setNewTodoAssignee] = useState<string | null>(null);
@@ -358,9 +390,13 @@ export default function HomeScreen() {
     return candidates[0] ?? null;
   }, [todos, isProject]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const assigneePickerCalendarDays = useMemo(() => buildCalendarDays(assigneePickerMonth), [assigneePickerMonth]);
   const accountDisplayName = profile
     ? profileDisplayName(profile)
     : emailDisplayName(session?.user.email);
+  const currentOrgRole = orgModalId
+    ? (orgModalMembers.find((m) => m.user_id === session?.user.id)?.role ?? null)
+    : null;
 
   const ensureProfile = useCallback(async (currentSession: Session) => {
     const profileEmail = currentSession.user.email?.toLowerCase();
@@ -389,7 +425,7 @@ export default function HomeScreen() {
 
     const { data, error: teamsError } = await supabase
       .from('teams')
-      .select('id, name, team_members(count)')
+      .select('id, name, org_id, team_members(count)')
       .order('created_at', { ascending: true });
 
     if (teamsError) {
@@ -400,6 +436,7 @@ export default function HomeScreen() {
     const nextTeams = (data ?? []).map((t: any) => ({
       id: t.id,
       name: t.name,
+      org_id: t.org_id ?? null,
       member_count: t.team_members?.[0]?.count ?? 0,
     }));
     setTeams(nextTeams);
@@ -410,6 +447,22 @@ export default function HomeScreen() {
       return null;
     });
     setError('');
+  }, [session]);
+
+  const loadOrganizations = useCallback(async () => {
+    if (!session) return;
+    const { data, error: err } = await supabase
+      .from('organizations')
+      .select('id, name, org_members(count)')
+      .order('created_at', { ascending: true });
+    if (err) { setError(err.message); return; }
+    setOrganizations(
+      (data ?? []).map((o: any) => ({
+        id: o.id,
+        name: o.name,
+        member_count: o.org_members?.[0]?.count ?? 0,
+      }))
+    );
   }, [session]);
 
   const loadProjects = useCallback(async () => {
@@ -498,7 +551,7 @@ export default function HomeScreen() {
     setLoading(true);
     let query = supabase
       .from('todos')
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id, team_id')
       .order('created_at', { ascending: false });
 
     if (selectedProjectId) {
@@ -521,6 +574,22 @@ export default function HomeScreen() {
     setLoading(false);
   }, [selectedTeamId, selectedProjectId]);
 
+  const loadAssignedToMe = useCallback(async () => {
+    if (!session) return;
+    const { data, error: err } = await supabase
+      .from('todos')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id, team_id')
+      .eq('assigned_to', session.user.id)
+      .eq('done', false)
+      .or('team_id.not.is.null,project_id.not.is.null')
+      .order('due_date', { ascending: true, nullsFirst: false });
+    if (!err) setAssignedToMe((data ?? []) as Todo[]);
+  }, [session]);
+
+  useEffect(() => {
+    loadAssignedToMe();
+  }, [loadAssignedToMe]);
+
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setAuthLoading(false);
@@ -535,8 +604,14 @@ export default function HomeScreen() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+    } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true);
+        setMessage('');
+        setError('');
+      }
       setSession(currentSession);
+      setOrganizations([]);
       setTeams([]);
       setProjects([]);
       setSelectedTeamId(null);
@@ -557,15 +632,21 @@ export default function HomeScreen() {
     if (!session) return;
 
     ensureProfile(session).then(() => {
+      loadOrganizations();
       loadTeams();
       loadProjects();
     });
-  }, [ensureProfile, loadTeams, loadProjects, session]);
+  }, [ensureProfile, loadOrganizations, loadTeams, loadProjects, session]);
 
   useEffect(() => {
     if (!session) return;
     loadPhases();
   }, [loadPhases, session]);
+
+  useEffect(() => {
+    setColumnInputs({});
+    setColumnAssignees({});
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (!session || !isSupabaseConfigured) return;
@@ -618,6 +699,10 @@ export default function HomeScreen() {
       setError('Enter an email and password.');
       return;
     }
+    if (!isSupabaseConfigured) {
+      setError('Add Supabase env vars to sync todos.');
+      return;
+    }
 
     setAuthLoading(true);
     setError('');
@@ -626,7 +711,13 @@ export default function HomeScreen() {
     const result =
       authMode === 'signIn'
         ? await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
-        : await supabase.auth.signUp({ email: normalizedEmail, password });
+        : await supabase.auth.signUp({
+            email: normalizedEmail,
+            password,
+            options: {
+              emailRedirectTo: authRedirectUrl(),
+            },
+          });
 
     setAuthLoading(false);
 
@@ -638,6 +729,60 @@ export default function HomeScreen() {
     if (authMode === 'signUp' && !result.data.session) {
       setMessage('Check your email to confirm the account, then sign in.');
     }
+  }
+
+  async function sendPasswordReset() {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError('Enter your email first.');
+      return;
+    }
+    if (!isSupabaseConfigured) {
+      setError('Add Supabase env vars to sync todos.');
+      return;
+    }
+
+    setAuthLoading(true);
+    setError('');
+    setMessage('');
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: authRedirectUrl(),
+    });
+
+    setAuthLoading(false);
+
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+
+    setMessage('Check your email for a password reset link.');
+  }
+
+  async function saveRecoveryPassword() {
+    const nextPassword = recoveryPassword.trim();
+    if (nextPassword.length < 6) {
+      setError('Enter a password with at least 6 characters.');
+      return;
+    }
+
+    setAuthLoading(true);
+    setError('');
+    setMessage('');
+
+    const { error: updateError } = await supabase.auth.updateUser({ password: nextPassword });
+
+    setAuthLoading(false);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setPasswordRecovery(false);
+    setRecoveryPassword('');
+    setMessage('Password updated.');
   }
 
   async function signOut() {
@@ -699,6 +844,38 @@ export default function HomeScreen() {
     setError('');
   }
 
+  async function createOrganization() {
+    if (!session) return;
+    const name = orgName.trim();
+    if (!name) return;
+
+    const { data: org, error: orgError } = await supabase
+      .from('organizations')
+      .insert({ name, created_by: session.user.id })
+      .select('id, name')
+      .single();
+
+    if (orgError) { setError(orgError.message); return; }
+
+    const { error: memberError } = await supabase.from('org_members').insert({
+      org_id: org.id,
+      user_id: session.user.id,
+      role: 'owner',
+    });
+
+    if (memberError) {
+      await supabase.from('organizations').delete().eq('id', org.id);
+      setError(memberError.message);
+      return;
+    }
+
+    setOrgName('');
+    setOrganizations((prev) => [...prev, { ...org, member_count: 1 }]);
+    setCreateTarget(null);
+    setMessage(`Created ${org.name}.`);
+    setError('');
+  }
+
   async function createProject() {
     if (!session) return;
     const name = projectName.trim();
@@ -706,7 +883,7 @@ export default function HomeScreen() {
 
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .insert({ name, created_by: session.user.id })
+      .insert({ name, created_by: session.user.id, team_id: newProjectTeamId })
       .select('id, name, team_id')
       .single();
 
@@ -728,12 +905,27 @@ export default function HomeScreen() {
     );
 
     setProjectName('');
+    setNewProjectTeamId(null);
     setProjects((prev) => [...prev, project]);
     setSelectedProjectId(project.id);
     setSelectedTeamId(null);
     setCreateTarget(null);
     setMessage('');
     setError('');
+  }
+
+  async function linkProjectTeam(teamId: string | null) {
+    if (!selectedProjectId) return;
+    const { error } = await supabase
+      .from('projects')
+      .update({ team_id: teamId })
+      .eq('id', selectedProjectId);
+    if (error) { setError(error.message); return; }
+    setProjects((prev) =>
+      prev.map((p) => p.id === selectedProjectId ? { ...p, team_id: teamId } : p)
+    );
+    setLinkingProjectTeam(false);
+    loadMembers();
   }
 
   function openCreateTarget(target: CreateTarget) {
@@ -749,8 +941,7 @@ export default function HomeScreen() {
       return;
     }
 
-    setMessage('Organization creation needs organization tables next.');
-    setError('');
+    setCreateTarget('organization');
   }
 
   function selectTeamFromAccountMenu(teamId: string) {
@@ -764,19 +955,17 @@ export default function HomeScreen() {
     const normalizedEmail = memberEmail.trim().toLowerCase();
     if (!normalizedEmail) return;
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, email')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
+    const { data: rows, error: profileError } = await supabase
+      .rpc('find_profile_by_email', { p_email: normalizedEmail });
 
     if (profileError) {
       setError(profileError.message);
       return;
     }
 
+    const profile = rows?.[0] ?? null;
     if (!profile) {
-      setError('That user must sign up before you can add them.');
+      setError('No account found for that email. They must sign in at least once before you can add them.');
       return;
     }
 
@@ -795,6 +984,121 @@ export default function HomeScreen() {
     setMessage(`Added ${profile.email}.`);
     setError('');
     loadMembers();
+  }
+
+  async function loadOrgMembers(orgId: string) {
+    const { data: membershipData, error: membershipError } = await supabase
+      .from('org_members')
+      .select('user_id, role')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: true });
+
+    if (membershipError) { setError(membershipError.message); return; }
+
+    const ids = (membershipData ?? []).map((m) => m.user_id);
+    if (ids.length === 0) { setOrgModalMembers([]); return; }
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, display_name')
+      .in('id', ids);
+
+    if (profileError) { setError(profileError.message); return; }
+
+    const profilesById = new Map((profileData ?? []).map((p) => [p.id, p]));
+    setOrgModalMembers(
+      (membershipData ?? []).map((m) => ({
+        user_id: m.user_id,
+        role: m.role,
+        email: profilesById.get(m.user_id)?.email ?? 'unknown@example.com',
+        display_name: profilesById.get(m.user_id)?.display_name ?? null,
+      }))
+    );
+  }
+
+  async function openOrgModal(orgId: string) {
+    setOrgModalId(orgId);
+    setAccountMenuOpen(false);
+    setOrgMemberEmail('');
+    setError('');
+    await loadOrgMembers(orgId);
+  }
+
+  async function addOrgMember() {
+    if (!orgModalId) return;
+    const normalizedEmail = orgMemberEmail.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    const { data: rows, error: profileError } = await supabase
+      .rpc('find_profile_by_email', { p_email: normalizedEmail });
+
+    if (profileError) { setError(profileError.message); return; }
+
+    const profile = rows?.[0] ?? null;
+    if (!profile) {
+      setError('No account found for that email. They must sign in at least once before you can add them.');
+      return;
+    }
+
+    const { error: memberError } = await supabase.from('org_members').upsert({
+      org_id: orgModalId,
+      user_id: profile.id,
+      role: 'member',
+    });
+
+    if (memberError) { setError(memberError.message); return; }
+
+    setOrgMemberEmail('');
+    setError('');
+    setOrganizations((prev) =>
+      prev.map((o) =>
+        o.id === orgModalId ? { ...o, member_count: (o.member_count ?? 0) + 1 } : o
+      )
+    );
+    loadOrgMembers(orgModalId);
+  }
+
+  async function transferOrgOwnership(memberId: string) {
+    if (!orgModalId) return;
+    const { error } = await supabase.rpc('transfer_org_ownership', {
+      p_org_id: orgModalId,
+      p_new_owner_id: memberId,
+    });
+    if (error) { setError(error.message); return; }
+    setOrgManageMember(null);
+    setError('');
+    loadOrgMembers(orgModalId);
+  }
+
+  async function updateOrgMemberRole(memberId: string, role: 'admin' | 'member') {
+    if (!orgModalId) return;
+    const { error } = await supabase
+      .from('org_members')
+      .update({ role })
+      .eq('org_id', orgModalId)
+      .eq('user_id', memberId);
+    if (error) { setError(error.message); return; }
+    setOrgManageMember(null);
+    setError('');
+    loadOrgMembers(orgModalId);
+  }
+
+  async function removeOrgMember(memberId: string) {
+    if (!orgModalId) return;
+    const { error } = await supabase
+      .from('org_members')
+      .delete()
+      .eq('org_id', orgModalId)
+      .eq('user_id', memberId);
+    if (error) { setError(error.message); return; }
+    setOrgManageMember(null);
+    setError('');
+    setOrganizations((prev) =>
+      prev.map((o) =>
+        o.id === orgModalId ? { ...o, member_count: Math.max(0, (o.member_count ?? 1) - 1) } : o
+      )
+    );
+    loadOrgMembers(orgModalId);
   }
 
   async function addTodo() {
@@ -831,6 +1135,8 @@ export default function HomeScreen() {
     const text = (columnInputs[key] ?? '').trim();
     if (!text || !session || !selectedProjectId) return;
 
+    const assigned_to = columnAssignees[key] ?? null;
+
     const { data, error: insertError } = await supabase
       .from('todos')
       .insert({
@@ -838,6 +1144,7 @@ export default function HomeScreen() {
         project_id: selectedProjectId,
         phase_id: phaseId,
         created_by: session.user.id,
+        assigned_to,
         priority: 'normal',
       })
       .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id')
@@ -846,6 +1153,7 @@ export default function HomeScreen() {
     if (insertError) { setError(insertError.message); return; }
     if (data) setTodos((prev) => [data as Todo, ...prev]);
     setColumnInputs((prev) => ({ ...prev, [key]: '' }));
+    setColumnAssignees((prev) => ({ ...prev, [key]: null }));
     setError('');
   }
 
@@ -867,24 +1175,53 @@ export default function HomeScreen() {
     setError('');
   }
 
-  async function cycleAssignee(todo: Todo) {
-    const options = [null, ...members.map((member) => member.user_id)];
-    const currentIndex = options.indexOf(todo.assigned_to);
-    const assigned_to = options[(currentIndex + 1) % options.length];
-
+  async function toggleAssigned(id: string) {
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ assigned_to })
+      .update({ done: true })
+      .eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
+    setAssignedToMe(prev => prev.filter(t => t.id !== id));
+    setError('');
+  }
+
+  async function setAssignee(todo: Todo, userId: string | null) {
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ assigned_to: userId })
       .eq('id', todo.id);
 
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
+    if (updateError) { setError(updateError.message); return; }
 
     setTodos((prev) =>
-      prev.map((item) => (item.id === todo.id ? { ...item, assigned_to } : item))
+      prev.map((item) => (item.id === todo.id ? { ...item, assigned_to: userId } : item))
     );
+    setAssigneeTodo(null);
+    setError('');
+  }
+
+  function openAssigneePicker(todo: Todo) {
+    const due = parseDateValue(todo.due_date);
+    setAssigneeTodo(todo);
+    setAssigneePickerUserId(todo.assigned_to);
+    setAssigneePickerDueDate(todo.due_date);
+    setAssigneePickerMonth(due ? new Date(due.getFullYear(), due.getMonth(), 1) : new Date());
+  }
+
+  function closeAssigneePicker() {
+    setAssigneeTodo(null);
+    setAssigneePickerUserId(null);
+    setAssigneePickerDueDate(null);
+  }
+
+  async function confirmAssignment() {
+    if (!assigneeTodo) return;
+    const updates = { assigned_to: assigneePickerUserId, due_date: assigneePickerDueDate };
+    const { error: updateError } = await supabase.from('todos').update(updates).eq('id', assigneeTodo.id);
+    if (updateError) { setError(updateError.message); return; }
+    setTodos(prev => prev.map(t => t.id === assigneeTodo!.id ? { ...t, ...updates } : t));
+    closeAssigneePicker();
+    loadAssignedToMe();
     setError('');
   }
 
@@ -1099,6 +1436,66 @@ export default function HomeScreen() {
     return `Assigned to ${profileDisplayName(member)}`;
   }
 
+  if (passwordRecovery) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="dark" />
+        <ScrollView
+          contentContainerStyle={styles.authScroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.authPanel}>
+            <Text style={styles.authTitle}>Set a new password</Text>
+            <Text style={styles.authSubtitleText}>
+              Enter a new password for your account.
+            </Text>
+
+            {!!error && (
+              <Text style={styles.authFieldError}>{error}</Text>
+            )}
+
+            <View style={styles.authPasswordWrap}>
+              <TextInput
+                style={styles.authPasswordInput}
+                value={recoveryPassword}
+                onChangeText={setRecoveryPassword}
+                placeholder="New password"
+                placeholderTextColor="#9ca3af"
+                secureTextEntry={!showPassword}
+                textContentType="newPassword"
+                onSubmitEditing={saveRecoveryPassword}
+              />
+              <Pressable
+                onPress={() => setShowPassword((p) => !p)}
+                hitSlop={8}
+              >
+                <Text style={styles.passwordToggleText}>{showPassword ? '◉' : '◎'}</Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={saveRecoveryPassword}
+              disabled={authLoading}
+              style={({ pressed }) => [
+                styles.authSubmitBtn,
+                (!recoveryPassword.trim() || authLoading) && styles.authSubmitBtnMuted,
+                pressed && styles.btnPressed,
+              ]}
+            >
+              <Text style={styles.authSubmitBtnText}>
+                {authLoading ? 'Please wait…' : 'Update Password'}
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
   if (!session) {
     const isSignIn = authMode === 'signIn';
     return (
@@ -1193,10 +1590,10 @@ export default function HomeScreen() {
             ) : (
               <Pressable
                 onPress={submitAuth}
-                disabled={authLoading}
+                disabled={authLoading || !isSupabaseConfigured || !email.trim() || !password}
                 style={({ pressed }) => [
                   styles.authSubmitBtn,
-                  (!email.trim() || !password) && styles.authSubmitBtnMuted,
+                  (authLoading || !isSupabaseConfigured || !email.trim() || !password) && styles.authSubmitBtnMuted,
                   pressed && styles.btnPressed,
                 ]}
               >
@@ -1208,7 +1605,8 @@ export default function HomeScreen() {
 
             {isSignIn && (
               <Pressable
-                onPress={() => setMessage('Password reset is coming soon.')}
+                onPress={sendPasswordReset}
+                disabled={authLoading}
                 style={styles.forgotBtn}
               >
                 <Text style={styles.forgotBtnText}>Forgot Password?</Text>
@@ -1443,6 +1841,23 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {isProject && (() => {
+        const linkedTeam = selectedProject?.team_id
+          ? teams.find((t) => t.id === selectedProject.team_id)
+          : null;
+        return (
+          <Pressable onPress={() => setLinkingProjectTeam(true)} style={styles.projectTeamBar}>
+            <Text style={styles.projectTeamBarLabel}>Team</Text>
+            {linkedTeam ? (
+              <Text style={styles.projectTeamBarValue}>{linkedTeam.name}</Text>
+            ) : (
+              <Text style={styles.projectTeamBarEmpty}>No team linked — tap to link</Text>
+            )}
+            <Text style={styles.projectTeamBarCaret}>›</Text>
+          </Pressable>
+        );
+      })()}
+
       {isProject ? (
         <>
           {/* Backlog strip — one-line capture bar; tasks land here by default */}
@@ -1475,27 +1890,57 @@ export default function HomeScreen() {
                   ))}
                 </ScrollView>
                 {backlogInputVisible ? (
-                  <View style={styles.backlogInputRow}>
-                    <TextInput
-                      style={styles.backlogInput}
-                      value={columnInputs['backlog'] ?? ''}
-                      onChangeText={(v) => setColumnInputs((prev) => ({ ...prev, backlog: v }))}
-                      placeholder="Task name..."
-                      placeholderTextColor="#9ca3af"
-                      autoFocus
-                      maxLength={200}
-                      returnKeyType="done"
-                      onSubmitEditing={() => { addTodoToPhase(null); setBacklogInputVisible(false); }}
-                    />
-                    <Pressable
-                      onPress={() => { addTodoToPhase(null); setBacklogInputVisible(false); }}
-                      style={styles.backlogConfirmBtn}
-                    >
-                      <Text style={styles.backlogConfirmText}>Add</Text>
-                    </Pressable>
-                    <Pressable onPress={() => setBacklogInputVisible(false)} hitSlop={8}>
-                      <Text style={styles.backlogCancelText}>✕</Text>
-                    </Pressable>
+                  <View>
+                    <View style={styles.backlogInputRow}>
+                      <TextInput
+                        style={styles.backlogInput}
+                        value={columnInputs['backlog'] ?? ''}
+                        onChangeText={(v) => setColumnInputs((prev) => ({ ...prev, backlog: v }))}
+                        placeholder="Task name..."
+                        placeholderTextColor="#9ca3af"
+                        autoFocus
+                        maxLength={200}
+                        returnKeyType="done"
+                        onSubmitEditing={() => { addTodoToPhase(null); setBacklogInputVisible(false); }}
+                      />
+                      <Pressable
+                        onPress={() => { addTodoToPhase(null); setBacklogInputVisible(false); }}
+                        style={styles.backlogConfirmBtn}
+                      >
+                        <Text style={styles.backlogConfirmText}>Add</Text>
+                      </Pressable>
+                      <Pressable onPress={() => setBacklogInputVisible(false)} hitSlop={8}>
+                        <Text style={styles.backlogCancelText}>✕</Text>
+                      </Pressable>
+                    </View>
+                    {members.length > 0 && (
+                      <View style={styles.colAssigneeRow}>
+                        {members.map((m) => {
+                          const selected = columnAssignees['backlog'] === m.user_id;
+                          const name = profileDisplayName(m);
+                          return (
+                            <Pressable
+                              key={m.user_id}
+                              onPress={() => setColumnAssignees((prev) => ({
+                                ...prev,
+                                backlog: selected ? null : m.user_id,
+                              }))}
+                              style={[styles.colAssigneeAvatar, { backgroundColor: pickAvatarColor(m.email) }, selected && styles.colAssigneeAvatarSelected]}
+                              hitSlop={4}
+                            >
+                              <Text style={styles.colAssigneeInitial}>
+                                {(name[0] ?? '?').toUpperCase()}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                        {columnAssignees['backlog'] && (
+                          <Text style={styles.colAssigneeName} numberOfLines={1}>
+                            {profileDisplayName(members.find((m) => m.user_id === columnAssignees['backlog'])!)}
+                          </Text>
+                        )}
+                      </View>
+                    )}
                   </View>
                 ) : (
                   <Pressable onPress={() => setBacklogInputVisible(true)} style={styles.backlogAddBtn}>
@@ -1549,13 +1994,41 @@ export default function HomeScreen() {
                       <Text style={styles.kanbanAddBtnText}>+</Text>
                     </Pressable>
                   </View>
+                  {members.length > 0 && (
+                    <View style={styles.colAssigneeRow}>
+                      {members.map((m) => {
+                        const selected = columnAssignees[phase.id] === m.user_id;
+                        const name = profileDisplayName(m);
+                        return (
+                          <Pressable
+                            key={m.user_id}
+                            onPress={() => setColumnAssignees((prev) => ({
+                              ...prev,
+                              [phase.id]: selected ? null : m.user_id,
+                            }))}
+                            style={[styles.colAssigneeAvatar, { backgroundColor: pickAvatarColor(m.email) }, selected && styles.colAssigneeAvatarSelected]}
+                            hitSlop={4}
+                          >
+                            <Text style={styles.colAssigneeInitial}>
+                              {(name[0] ?? '?').toUpperCase()}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                      {columnAssignees[phase.id] && (
+                        <Text style={styles.colAssigneeName} numberOfLines={1}>
+                          {profileDisplayName(members.find((m) => m.user_id === columnAssignees[phase.id])!)}
+                        </Text>
+                      )}
+                    </View>
+                  )}
                   <ScrollView style={styles.kanbanColBody} showsVerticalScrollIndicator={false}>
                     {colActive.map((todo) => (
                       <KanbanCard key={todo.id} todo={todo}
-                        assigneeLabel={todo.assigned_to ? assigneeLabel(todo.assigned_to) : null}
+                        assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
                         onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
                         onEdit={() => openEditModal(todo)}
-                        onCycleAssignee={() => cycleAssignee(todo)} />
+                        onCycleAssignee={() => openAssigneePicker(todo)} />
                     ))}
                     {colDone.length > 0 && <>
                       <View style={styles.sectionDivider}>
@@ -1565,10 +2038,10 @@ export default function HomeScreen() {
                       </View>
                       {colDone.map((todo) => (
                         <KanbanCard key={todo.id} todo={todo}
-                          assigneeLabel={todo.assigned_to ? assigneeLabel(todo.assigned_to) : null}
+                          assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
                           onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
                           onEdit={() => openEditModal(todo)}
-                          onCycleAssignee={() => cycleAssignee(todo)} />
+                          onCycleAssignee={() => openAssigneePicker(todo)} />
                       ))}
                     </>}
                   </ScrollView>
@@ -1660,7 +2133,7 @@ export default function HomeScreen() {
                 assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
                 onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
                 onEdit={(text) => editTodoText(todo.id, text)} onOpenEdit={() => openEditModal(todo)}
-                onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
+                onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                 onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
                 onDrag={drag} isDragging={isActive ?? false}
               />
@@ -1676,32 +2149,202 @@ export default function HomeScreen() {
               </>
             }
             ListFooterComponent={
-              done.length > 0 ? (
-                <>
-                  <View style={styles.sectionDivider}>
-                    <View style={styles.sectionDividerLine} />
-                    <Text style={styles.sectionLabel}>Completed</Text>
-                    <View style={styles.sectionDividerLine} />
-                  </View>
-                  {done.map((todo) => (
-                    <TodoItem
-                      key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
-                      dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
-                      assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
-                      onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
-                      onEdit={(text) => editTodoText(todo.id, text)} onOpenEdit={() => openEditModal(todo)}
-                      onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
-                      onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
-                      reserveDragSpace={Platform.OS === 'web'}
-                    />
-                  ))}
-                </>
-              ) : null
+              <>
+                {isPersonal && assignedToMe.length > 0 && (
+                  <>
+                    <View style={styles.sectionDivider}>
+                      <View style={styles.sectionDividerLine} />
+                      <Text style={styles.sectionLabel}>Assigned to me</Text>
+                      <View style={styles.sectionDividerLine} />
+                    </View>
+                    {assignedToMe.map((todo) => {
+                      const project = projects.find(p => p.id === todo.project_id);
+                      const contextLabel = project?.name ?? 'Team task';
+                      const due = parseDateValue(todo.due_date);
+                      const priorityColors: Record<Priority, string> = {
+                        low: '#d1fae5', normal: '#e0e7ff', high: '#fef3c7', urgent: '#fee2e2',
+                      };
+                      const priorityTextColors: Record<Priority, string> = {
+                        low: '#065f46', normal: '#3730a3', high: '#92400e', urgent: '#991b1b',
+                      };
+                      const today2 = new Date(); today2.setHours(0,0,0,0);
+                      const isOverdue = due ? due < today2 : false;
+                      return (
+                        <View key={todo.id} style={styles.assignedToMeRow}>
+                          <Pressable onPress={() => toggleAssigned(todo.id)} style={styles.assignedToMeCheck}>
+                            <View style={styles.assignedToMeCheckBox} />
+                          </Pressable>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.assignedToMeText} numberOfLines={2}>{todo.text}</Text>
+                            <View style={styles.assignedToMeMeta}>
+                              <Text style={styles.assignedToMeContext}>{contextLabel}</Text>
+                              {todo.due_date && (
+                                <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]}>
+                                  {isOverdue ? 'Overdue · ' : ''}{todo.due_date}
+                                </Text>
+                              )}
+                            </View>
+                          </View>
+                          <View style={[styles.assignedToMePriority, { backgroundColor: priorityColors[todo.priority] }]}>
+                            <Text style={[styles.assignedToMePriorityText, { color: priorityTextColors[todo.priority] }]}>
+                              {todo.priority[0].toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </>
+                )}
+                {done.length > 0 && (
+                  <>
+                    <View style={styles.sectionDivider}>
+                      <View style={styles.sectionDividerLine} />
+                      <Text style={styles.sectionLabel}>Completed</Text>
+                      <View style={styles.sectionDividerLine} />
+                    </View>
+                    {done.map((todo) => (
+                      <TodoItem
+                        key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
+                        dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
+                        assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                        onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
+                        onEdit={(text) => editTodoText(todo.id, text)} onOpenEdit={() => openEditModal(todo)}
+                        onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
+                        onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                        reserveDragSpace={Platform.OS === 'web'}
+                      />
+                    ))}
+                  </>
+                )}
+              </>
             }
           />
         </>
       )}
 
+      <Modal
+        visible={!!assigneeTodo}
+        transparent
+        animationType="fade"
+        onRequestClose={closeAssigneePicker}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={closeAssigneePicker}>
+          <Pressable style={[styles.calendarCard, { maxHeight: '85%' }]}>
+            <Text style={styles.editModalTitle}>Assign & Schedule</Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Pressable
+                onPress={() => setAssigneePickerUserId(null)}
+                style={styles.assigneePickerRow}
+              >
+                <View style={[styles.assigneePickerAvatar, { backgroundColor: '#e5e7eb' }]}>
+                  <Text style={styles.assigneePickerAvatarText}>—</Text>
+                </View>
+                <Text style={styles.assigneePickerName}>Unassigned</Text>
+                {!assigneePickerUserId && (
+                  <Text style={styles.assigneePickerCheck}>✓</Text>
+                )}
+              </Pressable>
+
+              {members.map((m) => {
+                const name = profileDisplayName(m);
+                const isMe = m.user_id === session?.user.id;
+                const isSelected = assigneePickerUserId === m.user_id;
+                return (
+                  <Pressable
+                    key={m.user_id}
+                    onPress={() => setAssigneePickerUserId(m.user_id)}
+                    style={styles.assigneePickerRow}
+                  >
+                    <View style={[styles.assigneePickerAvatar, { backgroundColor: pickAvatarColor(m.email) }]}>
+                      <Text style={styles.assigneePickerAvatarText}>
+                        {(name[0] ?? '?').toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={styles.assigneePickerName} numberOfLines={1}>
+                      {isMe ? `${name} (me)` : name}
+                    </Text>
+                    {isSelected && <Text style={styles.assigneePickerCheck}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>Due Date</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+
+              <View style={styles.calendarHeader}>
+                <Pressable
+                  onPress={() => setAssigneePickerMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+                  style={styles.calendarNavBtn}
+                >
+                  <Text style={styles.calendarNavText}>‹</Text>
+                </Pressable>
+                <Text style={styles.calendarTitle}>{monthLabel(assigneePickerMonth)}</Text>
+                <Pressable
+                  onPress={() => setAssigneePickerMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+                  style={styles.calendarNavBtn}
+                >
+                  <Text style={styles.calendarNavText}>›</Text>
+                </Pressable>
+              </View>
+              <View style={styles.weekdayRow}>
+                {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+                  <Text key={d} style={styles.weekdayText}>{d}</Text>
+                ))}
+              </View>
+              <View style={styles.calendarGrid}>
+                {assigneePickerCalendarDays.map((date, index) => {
+                  const selectedDate = parseDateValue(assigneePickerDueDate);
+                  const isSelected = !!date && !!selectedDate && isSameDate(date, selectedDate);
+                  const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+                  const isCurrentDay = !!date && isSameDate(date, todayDate);
+                  return (
+                    <Pressable
+                      key={date ? formatDateValue(date) : `blank-${index}`}
+                      onPress={() => date && setAssigneePickerDueDate(
+                        assigneePickerDueDate && isSameDate(date, parseDateValue(assigneePickerDueDate)!)
+                          ? null
+                          : formatDateValue(date)
+                      )}
+                      style={[
+                        styles.calendarDay,
+                        !date && styles.calendarDayBlank,
+                        isCurrentDay && styles.calendarDayToday,
+                        isSelected && styles.calendarDaySelected,
+                      ]}
+                    >
+                      <Text style={[
+                        styles.calendarDayText,
+                        isCurrentDay && styles.calendarDayTodayText,
+                        isSelected && styles.calendarDaySelectedText,
+                      ]}>
+                        {date?.getDate() ?? ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {assigneePickerDueDate && (
+                <Pressable onPress={() => setAssigneePickerDueDate(null)} style={{ alignItems: 'center', paddingVertical: 6 }}>
+                  <Text style={styles.calendarCancelText}>Clear date</Text>
+                </Pressable>
+              )}
+            </ScrollView>
+
+            <View style={[styles.editModalActions, { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb', paddingTop: 12 }]}>
+              <Pressable onPress={closeAssigneePicker}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={confirmAssignment} style={styles.pickerConfirmBtn}>
+                <Text style={styles.pickerConfirmText}>Assign</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <Modal
         visible={!!dueTodo}
         transparent
@@ -1816,12 +2459,18 @@ export default function HomeScreen() {
                   <Text style={styles.accountMenuSectionAction}>+</Text>
                 </Pressable>
               </View>
-              <Pressable
-                onPress={() => choosePlannedUserFeature('Organizations')}
-                style={styles.accountMenuItem}
-              >
-                <Text style={styles.accountMenuMutedText}>No organizations yet</Text>
-              </Pressable>
+              {organizations.length === 0 ? (
+                <Pressable onPress={() => openCreateTarget('organization')} style={styles.accountMenuItem}>
+                  <Text style={styles.accountMenuMutedText}>No organizations yet</Text>
+                </Pressable>
+              ) : (
+                organizations.map((org) => (
+                  <Pressable key={org.id} onPress={() => openOrgModal(org.id)} style={styles.accountMenuItem}>
+                    <Text style={styles.accountMenuItemText} numberOfLines={1}>{org.name}</Text>
+                    <Text style={styles.accountMenuMutedText}>{org.member_count ?? 0} member{(org.member_count ?? 0) !== 1 ? 's' : ''}</Text>
+                  </Pressable>
+                ))
+              )}
             </View>
             <View style={styles.accountMenuSection}>
               <View style={styles.accountMenuSectionHeader}>
@@ -1879,17 +2528,244 @@ export default function HomeScreen() {
               autoFocus
               onSubmitEditing={createProject}
             />
+            {teams.length > 0 && (
+              <>
+                <Text style={styles.editModalSectionLabel}>Team (optional)</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                  <Pressable
+                    onPress={() => setNewProjectTeamId(null)}
+                    style={[styles.phasePill, !newProjectTeamId && styles.phasePillActive]}
+                  >
+                    <Text style={[styles.phasePillText, !newProjectTeamId && styles.phasePillTextActive]}>
+                      None
+                    </Text>
+                  </Pressable>
+                  {teams.map((team) => (
+                    <Pressable
+                      key={team.id}
+                      onPress={() => setNewProjectTeamId(team.id)}
+                      style={[styles.phasePill, newProjectTeamId === team.id && styles.phasePillActive]}
+                    >
+                      <Text style={[styles.phasePillText, newProjectTeamId === team.id && styles.phasePillTextActive]}>
+                        {team.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </>
+            )}
             <View style={styles.editModalActions}>
               <Pressable
                 onPress={() => {
                   setCreateTarget(null);
                   setProjectName('');
+                  setNewProjectTeamId(null);
                 }}
               >
                 <Text style={styles.calendarCancelText}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={createProject}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Create</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={!!orgManageMember}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOrgManageMember(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setOrgManageMember(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle} numberOfLines={1}>
+              {orgManageMember?.display_name || orgManageMember?.email}
+            </Text>
+            <Text style={styles.orgMemberRole}>{orgManageMember?.email}</Text>
+
+            {!!error && <Text style={[styles.error, { marginTop: 8 }]}>{error}</Text>}
+
+            {orgManageMember?.role !== 'owner' && (
+              <Pressable
+                onPress={() => transferOrgOwnership(orgManageMember!.user_id)}
+                style={styles.manageMemberAction}
+              >
+                <Text style={styles.manageMemberActionText}>Transfer ownership to this person</Text>
+                <Text style={styles.manageMemberActionNote}>You become an admin</Text>
+              </Pressable>
+            )}
+            {orgManageMember?.role === 'member' && (
+              <Pressable
+                onPress={() => updateOrgMemberRole(orgManageMember!.user_id, 'admin')}
+                style={styles.manageMemberAction}
+              >
+                <Text style={styles.manageMemberActionText}>Promote to admin</Text>
+              </Pressable>
+            )}
+            {orgManageMember?.role === 'admin' && (
+              <Pressable
+                onPress={() => updateOrgMemberRole(orgManageMember!.user_id, 'member')}
+                style={styles.manageMemberAction}
+              >
+                <Text style={styles.manageMemberActionText}>Demote to member</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={() => removeOrgMember(orgManageMember!.user_id)}
+              style={styles.manageMemberAction}
+            >
+              <Text style={[styles.manageMemberActionText, styles.manageMemberActionDanger]}>
+                Remove from organization
+              </Text>
+            </Pressable>
+
+            <View style={[styles.editModalActions, { marginTop: 12 }]}>
+              <View />
+              <Pressable onPress={() => { setOrgManageMember(null); setError(''); }}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={!!orgModalId}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOrgModalId(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setOrgModalId(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>
+              {organizations.find((o) => o.id === orgModalId)?.name ?? 'Organization'}
+            </Text>
+
+            {orgModalMembers.length > 0 && (
+              <View style={styles.orgMemberList}>
+                {orgModalMembers.map((m) => {
+                  const canManage = currentOrgRole === 'owner' && m.user_id !== session?.user.id;
+                  return (
+                    <Pressable
+                      key={m.user_id}
+                      style={styles.orgMemberRow}
+                      onPress={() => canManage ? setOrgManageMember(m) : undefined}
+                    >
+                      <Text style={styles.orgMemberEmail} numberOfLines={1}>
+                        {m.display_name ? `${m.display_name} (${m.email})` : m.email}
+                      </Text>
+                      <View style={styles.orgMemberRowRight}>
+                        <Text style={styles.orgMemberRole}>{m.role}</Text>
+                        {canManage && <Text style={styles.orgMemberManageIcon}>›</Text>}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            {!!error && <Text style={[styles.error, { marginBottom: 8 }]}>{error}</Text>}
+
+            <View style={styles.compactForm}>
+              <TextInput
+                style={styles.compactInput}
+                value={orgMemberEmail}
+                onChangeText={(v) => { setOrgMemberEmail(v); if (error) setError(''); }}
+                placeholder="Add member by email"
+                placeholderTextColor="#9ca3af"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                onSubmitEditing={addOrgMember}
+              />
+              <Pressable
+                onPress={addOrgMember}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Add</Text>
+              </Pressable>
+            </View>
+
+            <View style={[styles.editModalActions, { marginTop: 12 }]}>
+              <View />
+              <Pressable onPress={() => setOrgModalId(null)}>
+                <Text style={styles.calendarCancelText}>Close</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={linkingProjectTeam}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLinkingProjectTeam(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setLinkingProjectTeam(false)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Link team to project</Text>
+            <Text style={styles.editModalSectionLabel}>
+              Members of the linked team can be assigned to tasks.
+            </Text>
+
+            <Pressable
+              onPress={() => linkProjectTeam(null)}
+              style={styles.teamLinkRow}
+            >
+              <Text style={styles.teamLinkRowText}>No team</Text>
+              {!selectedProject?.team_id && <Text style={styles.assigneePickerCheck}>✓</Text>}
+            </Pressable>
+            {teams.map((team) => (
+              <Pressable
+                key={team.id}
+                onPress={() => linkProjectTeam(team.id)}
+                style={styles.teamLinkRow}
+              >
+                <View style={[styles.teamLinkDot, { backgroundColor: pickAvatarColor(team.id) }]}>
+                  <Text style={styles.teamLinkDotText}>{(team.name[0] ?? 'T').toUpperCase()}</Text>
+                </View>
+                <Text style={styles.teamLinkRowText} numberOfLines={1}>{team.name}</Text>
+                <Text style={styles.teamLinkMeta}>{team.member_count ?? 0} member{(team.member_count ?? 0) !== 1 ? 's' : ''}</Text>
+                {selectedProject?.team_id === team.id && <Text style={styles.assigneePickerCheck}>✓</Text>}
+              </Pressable>
+            ))}
+
+            <View style={[styles.editModalActions, { marginTop: 8 }]}>
+              <View />
+              <Pressable onPress={() => setLinkingProjectTeam(false)}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={createTarget === 'organization'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateTarget(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setCreateTarget(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>New Organization</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={orgName}
+              onChangeText={setOrgName}
+              placeholder="Organization name"
+              placeholderTextColor="#9ca3af"
+              returnKeyType="done"
+              autoFocus
+              onSubmitEditing={createOrganization}
+            />
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => { setCreateTarget(null); setOrgName(''); }}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={createOrganization}
                 style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
               >
                 <Text style={styles.smallBtnText}>Create</Text>
@@ -3405,5 +4281,281 @@ const styles = StyleSheet.create({
   animalCellText: {
     fontSize: 26,
     lineHeight: 32,
+  },
+  projectTeamBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    gap: 6,
+  },
+  projectTeamBarLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    width: 36,
+  },
+  projectTeamBarValue: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4338ca',
+  },
+  projectTeamBarEmpty: {
+    flex: 1,
+    fontSize: 13,
+    color: '#9ca3af',
+  },
+  projectTeamBarCaret: {
+    fontSize: 16,
+    color: '#d1d5db',
+  },
+  teamLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#f3f4f6',
+    gap: 10,
+  },
+  teamLinkDot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  teamLinkDotText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  teamLinkRowText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  teamLinkMeta: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  colAssigneeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingBottom: 6,
+    gap: 6,
+  },
+  colAssigneeAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.55,
+  },
+  colAssigneeAvatarSelected: {
+    opacity: 1,
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#6366f1',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  colAssigneeInitial: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  colAssigneeName: {
+    fontSize: 11,
+    color: '#6366f1',
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  assigneePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#f3f4f6',
+    gap: 10,
+  },
+  assigneePickerAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  assigneePickerAvatarText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  assigneePickerName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  assigneePickerCheck: {
+    fontSize: 16,
+    color: '#6366f1',
+    fontWeight: '700',
+    flexShrink: 0,
+  },
+  orgMemberRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  orgMemberManageIcon: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+  manageMemberAction: {
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#f3f4f6',
+    marginTop: 4,
+  },
+  manageMemberActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  manageMemberActionNote: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  manageMemberActionDanger: {
+    color: '#dc2626',
+  },
+  orgMemberList: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  orgMemberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f3f4f6',
+  },
+  orgMemberEmail: {
+    flex: 1,
+    fontSize: 13,
+    color: '#111827',
+    marginRight: 8,
+  },
+  orgMemberRole: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+  },
+  pickerSectionDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 12,
+    gap: 8,
+  },
+  pickerSectionLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#e5e7eb',
+  },
+  pickerSectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  pickerConfirmBtn: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  pickerConfirmText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  assignedToMeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+  },
+  assignedToMeCheck: {
+    paddingTop: 2,
+    paddingRight: 2,
+  },
+  assignedToMeCheckBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+  },
+  assignedToMeText: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  assignedToMeMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 3,
+    flexWrap: 'wrap',
+  },
+  assignedToMeContext: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  assignedToMeDue: {
+    fontSize: 11,
+    color: '#6b7280',
+  },
+  assignedToMeDueOverdue: {
+    color: '#dc2626',
+    fontWeight: '600',
+  },
+  assignedToMePriority: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  assignedToMePriorityText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

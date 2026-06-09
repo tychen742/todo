@@ -435,6 +435,226 @@ create policy "Project members can delete project todos"
     )
   );
 
+-- Organizations: company or workspace containers that sit above teams.
+create table if not exists organizations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_by uuid not null references profiles(id) on delete cascade default auth.uid(),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists org_members (
+  org_id uuid not null references organizations(id) on delete cascade,
+  user_id uuid not null references profiles(id) on delete cascade,
+  role text not null default 'member' check (role in ('owner', 'admin', 'member')),
+  created_at timestamptz not null default now(),
+  primary key (org_id, user_id)
+);
+
+-- Teams can optionally belong to an organization.
+alter table teams add column if not exists org_id uuid references organizations(id) on delete set null;
+
+create index if not exists org_members_user_id_idx on org_members (user_id);
+create index if not exists teams_org_id_idx on teams (org_id);
+
+create or replace function public.is_org_member(p_org_id uuid, p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from org_members
+    where org_id = p_org_id
+      and user_id = p_user_id
+  );
+$$;
+
+create or replace function public.can_manage_org(p_org_id uuid, p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from org_members
+    where org_id = p_org_id
+      and user_id = p_user_id
+      and role in ('owner', 'admin')
+  )
+  or exists (
+    select 1
+    from organizations
+    where id = p_org_id
+      and created_by = p_user_id
+  );
+$$;
+
+alter table organizations enable row level security;
+alter table org_members enable row level security;
+
+drop policy if exists "Org members can read organizations" on organizations;
+drop policy if exists "Users can create organizations" on organizations;
+drop policy if exists "Org admins can update organizations" on organizations;
+drop policy if exists "Org owners can delete organizations" on organizations;
+
+create policy "Org members can read organizations"
+  on organizations for select to authenticated
+  using (created_by = auth.uid() or public.is_org_member(id, auth.uid()));
+
+create policy "Users can create organizations"
+  on organizations for insert to authenticated
+  with check (created_by = auth.uid());
+
+create policy "Org admins can update organizations"
+  on organizations for update to authenticated
+  using (public.can_manage_org(id, auth.uid()))
+  with check (public.can_manage_org(id, auth.uid()));
+
+create policy "Org owners can delete organizations"
+  on organizations for delete to authenticated
+  using (created_by = auth.uid());
+
+drop policy if exists "Org members can read org memberships" on org_members;
+drop policy if exists "Org admins can add org memberships" on org_members;
+drop policy if exists "Org admins can update org memberships" on org_members;
+drop policy if exists "Org admins can delete org memberships" on org_members;
+
+create policy "Org members can read org memberships"
+  on org_members for select to authenticated
+  using (public.is_org_member(org_id, auth.uid()));
+
+create policy "Org admins can add org memberships"
+  on org_members for insert to authenticated
+  with check (public.can_manage_org(org_id, auth.uid()));
+
+create policy "Org admins can update org memberships"
+  on org_members for update to authenticated
+  using (public.can_manage_org(org_id, auth.uid()))
+  with check (public.can_manage_org(org_id, auth.uid()));
+
+create policy "Org admins can delete org memberships"
+  on org_members for delete to authenticated
+  using (public.can_manage_org(org_id, auth.uid()));
+
+-- Org members can see all teams in their organization.
+drop policy if exists "Team members can read teams" on teams;
+create policy "Team members can read teams"
+  on teams for select to authenticated
+  using (
+    created_by = auth.uid()
+    or public.is_team_member(id, auth.uid())
+    or (org_id is not null and public.is_org_member(org_id, auth.uid()))
+  );
+
+-- Org co-members can see each other's profiles.
+drop policy if exists "Users can read own and team profiles" on profiles;
+create policy "Users can read own and team profiles"
+  on profiles for select to authenticated
+  using (
+    id = auth.uid()
+    or exists (
+      select 1
+      from team_members tm1
+      join team_members tm2 on tm1.team_id = tm2.team_id
+      where tm1.user_id = auth.uid()
+        and tm2.user_id = profiles.id
+    )
+    or exists (
+      select 1
+      from org_members om1
+      join org_members om2 on om1.org_id = om2.org_id
+      where om1.user_id = auth.uid()
+        and om2.user_id = profiles.id
+    )
+  );
+
+-- Free-tier enforcement: 3 orgs per user, 5 members per org.
+-- Both limits are checked on every insert into org_members, which covers
+-- org creation (creator is inserted as owner) and member additions.
+create or replace function public.check_org_membership_limits()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_org_count integer;
+  v_org_member_count integer;
+begin
+  select count(*) into v_user_org_count
+  from org_members
+  where user_id = NEW.user_id;
+
+  if v_user_org_count >= 3 then
+    raise exception 'Free accounts can belong to a maximum of 3 organizations. Upgrade to join more.';
+  end if;
+
+  select count(*) into v_org_member_count
+  from org_members
+  where org_id = NEW.org_id;
+
+  if v_org_member_count >= 5 then
+    raise exception 'Free organizations can have a maximum of 5 members. Upgrade to add more.';
+  end if;
+
+  return NEW;
+end;
+$$;
+
+drop trigger if exists enforce_org_membership_limits on org_members;
+create trigger enforce_org_membership_limits
+  before insert on org_members
+  for each row execute procedure public.check_org_membership_limits();
+
+-- Atomically transfer org ownership: promotes the new owner, demotes the caller to admin.
+-- security invoker so auth.uid() resolves to the caller, not the definer.
+create or replace function public.transfer_org_ownership(p_org_id uuid, p_new_owner_id uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from org_members
+    where org_id = p_org_id and user_id = auth.uid() and role = 'owner'
+  ) then
+    raise exception 'Only the current owner can transfer ownership';
+  end if;
+
+  if not exists (
+    select 1 from org_members
+    where org_id = p_org_id and user_id = p_new_owner_id
+  ) then
+    raise exception 'New owner must already be a member of the organization';
+  end if;
+
+  update org_members set role = 'owner'
+  where org_id = p_org_id and user_id = p_new_owner_id;
+
+  update org_members set role = 'admin'
+  where org_id = p_org_id and user_id = auth.uid();
+end;
+$$;
+
+-- Look up a profile by email for the "add member by email" flow.
+-- Security definer so the lookup works before the two users share a team/org.
+-- Returns only id and email — no other profile data is exposed.
+create or replace function public.find_profile_by_email(p_email text)
+returns table(id uuid, email text)
+language sql
+security definer
+set search_path = public
+as $$
+  select id, email
+  from profiles
+  where email = lower(p_email)
+  limit 1;
+$$;
+
 -- Batch-update todo positions in a single round trip after a drag reorder.
 -- Accepts a JSON array of {id, position} objects and updates each row,
 -- respecting the same access rules as the todos UPDATE policy.
@@ -471,3 +691,26 @@ begin
     and todos.done = false;
 end;
 $$;
+
+-- Allow reading todos assigned to the current user across all workspaces.
+-- This enables the "Assigned to me" section in the Personal workspace.
+drop policy if exists "Team members can read team todos" on todos;
+create policy "Team members can read team todos"
+  on todos for select
+  to authenticated
+  using (
+    (team_id is null and created_by = auth.uid())
+    or public.is_team_member(team_id, auth.uid())
+    or assigned_to = auth.uid()
+  );
+
+-- Allow assignees to mark their assigned todos done.
+drop policy if exists "Team members can update team todos" on todos;
+create policy "Team members can update team todos"
+  on todos for update
+  to authenticated
+  using (
+    (team_id is null and created_by = auth.uid())
+    or public.is_team_member(team_id, auth.uid())
+    or assigned_to = auth.uid()
+  );

@@ -44,6 +44,7 @@ type Todo = {
 };
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
+const MAX_PROJECT_PHASES = 5;
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0, high: 1, normal: 2, low: 3,
@@ -142,6 +143,7 @@ export default function ProjectScreen() {
 
   const done = useMemo(() => todos.filter((t) => t.done), [todos]);
   const phaseById = useMemo(() => new Map(phases.map((p) => [p.id, p])), [phases]);
+  const canAddPhase = phases.length < MAX_PROJECT_PHASES;
 
   const nextMilestone = useMemo(() => {
     const today = new Date();
@@ -329,6 +331,12 @@ export default function ProjectScreen() {
   async function addPhase() {
     const name = newPhaseName.trim();
     if (!name || !id) return;
+    if (!canAddPhase) {
+      setError(`Projects can have up to ${MAX_PROJECT_PHASES} phases.`);
+      setAddingPhase(false);
+      setNewPhaseName('');
+      return;
+    }
     const order_index = phases.length;
     const { data, error: err } = await supabase
       .from('project_phases')
@@ -372,7 +380,15 @@ export default function ProjectScreen() {
       <PhaseStrip
         phases={phases}
         onCycleStatus={cyclePhaseStatus}
-        onAdd={() => setAddingPhase(true)}
+        onAdd={() => {
+          if (!canAddPhase) {
+            setError(`Projects can have up to ${MAX_PROJECT_PHASES} phases.`);
+            return;
+          }
+          setAddingPhase(true);
+        }}
+        addDisabled={!canAddPhase}
+        addLabel={canAddPhase ? '+ Phase' : 'Max 5'}
       />
 
       {nextMilestone && (

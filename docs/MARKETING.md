@@ -20,6 +20,28 @@ This app is built on the opposite bet: **start with the simplest thing that is g
 - A milestone is just a todo that represents a real commitment — a demo, a launch, a hand-off.
 - Critical path is not a Gantt chart. It is: which todos are overdue before the next milestone?
 
+## The Consultant Opportunity
+
+Consultants and freelancers are a high-value acquisition channel. A single consultant working with three clients does not just represent one user — they represent a potential entry point into three separate organizations.
+
+The dynamics work in our favor:
+
+- A consultant joins, creates an org for each client engagement, and invites client contacts to collaborate on project todos and deliverables.
+- Each client contact experiences the product through the consultant's workflow.
+- When the engagement ends or the client wants to keep using the tool on their own, they already know it — the conversion cost is nearly zero.
+- A consultant who hits the 3-org free limit has a natural, non-punitive reason to upgrade. They are not blocked; they understand why paying makes sense.
+
+This is a consultant-led growth model: the consultant does the work of introducing the product to multiple organizations simultaneously.
+
+**Consultant pitch:** "Manage every client in one place. Personal todos for your own work. A separate organization for each client with their own team, projects, and phases. Switch between clients in seconds. Start free for up to three clients."
+
+**What to build to serve consultants well:**
+
+- Fast org switching from the account menu (already in place)
+- Clear visual separation between orgs and their teams
+- Project closure with a lightweight summary — consultants need proof of delivery
+- Org-scoped branding so each client's workspace can feel distinct
+
 ## Target Message by Audience
 
 **Personal users:** "Your todos, without the clutter."
@@ -29,6 +51,8 @@ This app is built on the opposite bet: **start with the simplest thing that is g
 **Academic / research groups:** "Deadlines, assignments, and project phases — built for how academic work actually flows, not how enterprise software imagines it does."
 
 **Small businesses:** "The project tool that does not require a project manager to set up."
+
+**Consultants and freelancers:** "Manage every client in one place. One app, separate orgs, no context switching chaos."
 
 ## What Not to Say
 

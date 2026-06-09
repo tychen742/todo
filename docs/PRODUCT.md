@@ -15,6 +15,7 @@ The initial target markets are:
 - **Higher education**: faculty, students, research groups, labs, committees, departments, and small academic project teams that need todos, assignments, project notes, recurring responsibilities, deadlines, and calendar integration without adopting a large enterprise system.
 - **Personal users**: individuals who need a clean personal todo system that can grow into light collaboration.
 - **SMEs**: small and medium-sized organizations that need practical task, team, and project coordination without paying for or managing a complex platform.
+- **Consultants and freelancers**: independent professionals managing multiple client engagements simultaneously. Each client lives in its own organization. A single consultant can introduce the product to several client companies at once, making consultants a high-leverage acquisition channel. The free 3-org limit covers most freelance workloads and creates a natural, non-punitive upgrade trigger for consultants with larger client rosters. See `docs/MARKETING.md` for the full consultant growth model.
 
 The product should compete through simplicity and genuine usefulness — a tool that is immediately helpful on day one without training, setup cost, or configuration overhead. It should stay simple enough to adopt in minutes and useful enough to keep using as work grows. It wins by being easier to understand and more directly helpful than ClickUp, Asana, or Todoist for focused personal, team, and project workflows, not by matching their feature count.
 

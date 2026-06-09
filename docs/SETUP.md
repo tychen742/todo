@@ -17,10 +17,10 @@ npm ci
 
 ## Environment
 
-Create a local `.env` file:
+Create a local `.env.local` or `.env` file:
 
 ```bash
-cp supabase.env.example .env
+cp supabase.env.example .env.local
 ```
 
 Fill in:
@@ -31,6 +31,17 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
 ```
 
 Use the base project URL, not the `/rest/v1/` URL.
+
+In Supabase Dashboard -> Authentication -> URL Configuration, set the local
+development redirect URLs to the Expo web ports you use, for example:
+
+```text
+http://localhost:8081
+http://localhost:8082
+```
+
+Magic links and password reset links will fail if Supabase redirects to a port
+where Expo is not running, such as `http://localhost:3000`.
 
 ## Database
 
@@ -52,7 +63,7 @@ Or apply the schema from Terminal:
 npm run db:apply
 ```
 
-This requires `psql` and local database connection details in `.env`.
+This requires `psql` and local database connection details in `.env.local` or `.env`.
 
 Recommended:
 
@@ -72,7 +83,7 @@ You can also use one database URL:
 SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<password>@aws-1-us-east-1.pooler.supabase.com:5432/postgres
 ```
 
-Get the URL from Supabase Dashboard -> Connect -> Shared Pooler or Session pooler. Keep this value local and never commit `.env`.
+Get the URL from Supabase Dashboard -> Connect -> Shared Pooler or Session pooler. Keep this value local and never commit local env files.
 
 Prefer the shared/session pooler URL over the direct `db.<project-ref>.supabase.co:5432` URL. The direct host may require IPv6 and can fail on some networks with `No route to host`.
 

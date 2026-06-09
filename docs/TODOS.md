@@ -82,7 +82,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Card detail view: tap a card to open full task detail inline (note, checklist, attachments) without leaving kanban.
 - Column WIP indicator: optional soft limit on active tasks per phase — visual warning, not a hard block.
 - Phase completion gate: when marking a phase complete, prompt to move or close any remaining open tasks.
-- Enforce 5-phase maximum (About text already documents this; addPhase does not yet enforce it).
+- Enforce 5-phase maximum. ✓ Done.
 
 ## Project Management
 

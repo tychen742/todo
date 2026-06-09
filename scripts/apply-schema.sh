@@ -3,14 +3,16 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEMA_FILE="$ROOT_DIR/supabase/schema.sql"
-ENV_FILE="$ROOT_DIR/.env"
+ENV_FILES=("$ROOT_DIR/.env" "$ROOT_DIR/.env.local")
 
 read_env_value() {
   local key="$1"
 
-  if [[ -f "$ENV_FILE" ]]; then
-    grep -E "^${key}=" "$ENV_FILE" | tail -n 1 | cut -d '=' -f 2-
-  fi
+  for env_file in "${ENV_FILES[@]}"; do
+    if [[ -f "$env_file" ]]; then
+      grep -E "^${key}=" "$env_file" | tail -n 1 | cut -d '=' -f 2-
+    fi
+  done | tail -n 1
 }
 
 strip_wrapping_quotes() {
@@ -50,7 +52,7 @@ if [[ -z "$DB_URL" ]]; then
   cat <<'MSG' >&2
 Missing SUPABASE_DB_URL.
 
-Add either this to your local .env file:
+Add either this to your local .env.local or .env file:
 
 SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<password>@aws-1-us-east-1.pooler.supabase.com:5432/postgres
 
@@ -63,7 +65,7 @@ SUPABASE_DB_USER=postgres.<project-ref>
 SUPABASE_DB_PASSWORD=<database-password>
 
 Get the values from Supabase Dashboard -> Connect -> Shared Pooler.
-Do not commit .env.
+Do not commit local env files.
 MSG
   exit 1
 fi

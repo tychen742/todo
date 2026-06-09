@@ -14,6 +14,8 @@ type Props = {
   phases: Phase[];
   onCycleStatus: (phase: Phase) => void;
   onAdd: () => void;
+  addDisabled?: boolean;
+  addLabel?: string;
 };
 
 function statusIcon(status: Phase['status']) {
@@ -37,7 +39,13 @@ function dateRange(phase: Phase) {
   return null;
 }
 
-export default function PhaseStrip({ phases, onCycleStatus, onAdd }: Props) {
+export default function PhaseStrip({
+  phases,
+  onCycleStatus,
+  onAdd,
+  addDisabled = false,
+  addLabel = '+ Phase',
+}: Props) {
   return (
     <ScrollView
       horizontal
@@ -65,8 +73,12 @@ export default function PhaseStrip({ phases, onCycleStatus, onAdd }: Props) {
           </Pressable>
         );
       })}
-      <Pressable onPress={onAdd} style={styles.addCard}>
-        <Text style={styles.addText}>+ Phase</Text>
+      <Pressable
+        onPress={onAdd}
+        disabled={addDisabled}
+        style={[styles.addCard, addDisabled && styles.addCardDisabled]}
+      >
+        <Text style={[styles.addText, addDisabled && styles.addTextDisabled]}>{addLabel}</Text>
       </Pressable>
     </ScrollView>
   );
@@ -140,9 +152,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  addCardDisabled: {
+    backgroundColor: '#f9fafb',
+    borderStyle: 'solid',
+  },
   addText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#9ca3af',
+  },
+  addTextDisabled: {
+    color: '#d1d5db',
   },
 });
