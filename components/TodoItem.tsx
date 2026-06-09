@@ -17,6 +17,7 @@ type Props = {
   onPriority?: () => void;
   onDueDate?: () => void;
   onDrag?: () => void;
+  reserveDragSpace?: boolean;
   isDragging?: boolean;
 };
 
@@ -97,6 +98,7 @@ export default function TodoItem({
   onPriority,
   onDueDate,
   onDrag,
+  reserveDragSpace = false,
   isDragging = false,
 }: Props) {
   const [isEditing, setIsEditing] = useState(false);
@@ -122,6 +124,7 @@ export default function TodoItem({
           <Text style={styles.dragHandleText}>⠿</Text>
         </Pressable>
       )}
+      {!onDrag && reserveDragSpace && <View style={styles.dragHandle} />}
       <Pressable onPress={onToggle} style={styles.checkbox}>
         <View style={[styles.box, done && styles.boxChecked]}>
           {done && <Text style={styles.checkmark}>✓</Text>}
@@ -191,7 +194,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingRight: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
   },
@@ -252,13 +255,13 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 12,
     marginLeft: 8,
-    minWidth: 56,
+    width: 56,
   },
   dueDate: {
     color: '#4338ca',
     fontSize: 12,
     fontWeight: '700',
-    minWidth: 80,
+    width: 80,
   },
   dueDateEmpty: {
     color: '#6b7280',
@@ -271,7 +274,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     fontSize: 11,
     fontWeight: '700',
-    minWidth: 70,
+    width: 76,
   },
   priority_low: {
     color: '#4b5563',
@@ -307,7 +310,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   dragHandle: {
-    paddingRight: 8,
+    width: 32,
+    alignItems: 'center',
   },
   dragHandleText: {
     fontSize: 18,

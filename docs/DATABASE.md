@@ -92,12 +92,26 @@ The schema adds `todos` to the `supabase_realtime` publication so web and iPhone
 
 Needed for inviting emails that do not yet have profiles.
 
-Expected fields:
+- `id` — uuid primary key
+- `team_id` — uuid, foreign key to `teams`
+- `email` — text, the invited address (lowercase)
+- `invited_by` — uuid, foreign key to `profiles`
+- `token` — uuid, unique random token for the invitation link
+- `status` — text, one of `pending`, `accepted`, `expired`, `revoked`
+- `expires_at` — timestamptz, when the invitation link stops being valid
+- `accepted_by` — uuid, nullable foreign key to `profiles`, set when a user accepts
+- `created_at` — timestamptz
 
-- `id`
-- `team_id`
-- `email`
-- `invited_by`
+Invitation acceptance flow:
+1. Owner/admin creates an invitation row for an email address.
+2. App emails the invite link containing `token`.
+3. When the invited user signs up or signs in, the app looks up `team_invitations` by `email` and `status = pending`.
+4. If a valid (non-expired, non-revoked) invitation exists, the app inserts a `team_members` row and updates the invitation `status` to `accepted`, setting `accepted_by`.
+
+RLS notes:
+- Only team owners/admins can insert invitations.
+- The invitation token lookup should be readable without authentication so the sign-up flow can resolve it.
+- Expired and revoked invitations should not be writable by the invited user.
 - `accepted_by`
 - `accepted_at`
 - `created_at`

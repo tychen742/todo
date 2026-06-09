@@ -76,6 +76,22 @@ Likely architecture:
 - Keep todo annotations separate from team pages: annotations describe one task; team pages describe shared team context.
 - Consider edit history and conflict handling before supporting simultaneous rich text editing.
 
+## Future Project Architecture
+
+Projects should model bounded work with lifecycle and schedule planning, not just another todo list.
+
+Likely architecture:
+
+- Store projects in a first-party `projects` table owned by a user or team.
+- Store editable project names on the project record and update them from a project planning/settings surface.
+- Store project phases in a `project_phases` table with ordering, planned dates, and status.
+- Store milestones as project-level date targets that can appear on personal, team, and project calendars.
+- Store task dependencies so the app can eventually identify critical path candidates.
+- Keep project-scoped todos in the existing todo workflow, linked to a project when project tables exist.
+- Use todo annotations for task-level resource notes, risk notes, blockers, assumptions, and mitigation details.
+- Use project planning/annotation records for project-level resources, risks, assumptions, decisions, and schedule notes.
+- Avoid building heavy resource-management or risk-management modules until lightweight annotation workflows prove useful.
+
 ## Future Calendar Architecture
 
 The app should model its own Personal Calendar and Team Calendar before integrating with Outlook Calendar or Google Calendar. External providers should be optional sync targets, not the source of truth for tasks.

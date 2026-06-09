@@ -2,6 +2,16 @@
 
 See `TODOS.md` for working-session TODOs that have not yet become stable roadmap commitments.
 
+## Planning Direction
+
+Use ClickUp, Asana, and Todoist as inspirations, not as products to copy feature-for-feature. The app should stay smaller and easier to adopt, with a practical path to revenue from focused segments:
+
+- Higher education users and groups: students, faculty, labs, research groups, committees, departments, and academic project teams.
+- Personal users who may later need light collaboration.
+- SMEs that need task, team, project, notes, and calendar coordination without a large project-management rollout.
+
+The app should stay free for personal and small-team use. Paid value should come from advanced collaboration, calendar integrations, project/team administration, customization, reporting, automation, and larger-team needs.
+
 ## Now
 
 - Keep personal todos working without team setup.
@@ -9,7 +19,8 @@ See `TODOS.md` for working-session TODOs that have not yet become stable roadmap
 - Run `supabase/schema.sql` after schema changes.
 - Stabilize priority and assignment UI on web and iPhone.
 - Keep due dates optional for personal and team todos.
-- Move workspace switching toward tabs for Personal, teams, and projects.
+- Keep account navigation responsible for Profile, Settings, Organizations, Teams, and Log Out.
+- Keep workspace switching tab-based for Personal now and Projects later.
 
 ## Next
 

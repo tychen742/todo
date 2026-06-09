@@ -14,21 +14,28 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Todo annotations are a future per-task detail feature.
 - `docs/` is the project documentation home.
 - Future Outlook Calendar and Google Calendar integration is documented.
+- Workspace switching uses tabs for Personal, with Projects planned.
+- Teams and Organizations live under the account/admin menu.
 
 ## Near-Term
 
-- Replace the workspace dropdown with tabs for `Personal`, each `Team_Name`, and later each `Project_Name`.
 - Keep add-todo quick capture limited to a single todo text input.
+- Add schema-backed Organization creation from the account menu.
+- Add schema-backed Project creation from the workspace `+` menu.
+- Keep a default `Project 1` workspace tab visible as the first planned project surface until schema-backed projects exist.
 - Add due-date views for overdue, due soon, today, and unscheduled work.
+- Track `completed_at` and show completed date near the due date for completed todos.
 - Add team invitations when adding an email that does not yet belong to a user profile.
 - Add a Notes area under the todo list as a separate concept from todo annotations.
 - Add a Team Page for shared notes, links, status, and lightweight widgets.
 - Add filters for urgent, assigned to me, created by me, active, and completed.
 - Add empty states for Personal and Team workspaces.
+- Add a Trash for deleted todos so items can be recovered before permanent deletion.
 - Define paid feature boundaries while keeping personal and small-team use free.
 - Add Communications as a future concept for personal messaging, team chat, and lightweight coordination.
 - Add default assignment notifications, plus read state and acknowledgement responses as a project-management communication workflow.
 - Add UI customization as a future business feature for personal themes, team branding, company logos, and color choices.
+- Add choices for todo list item spacing, such as compact, comfortable, and spacious density modes.
 
 ## Team Pages
 
@@ -58,8 +65,13 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Add projects as bounded work that can end or close.
 - Add project-scoped todos.
 - Use due dates for project planning, milestone tracking, and schedule visibility.
+- Add project phases for lifecycle planning.
+- Add milestones and task dependencies for critical path identification.
+- Add project schedule views after phases, milestones, dependencies, and due dates are modeled.
+- Track resource constraints and risk notes through todo annotations and project planning/annotation.
 - Add project lifecycle states such as active, paused, completed, and closed.
 - Show projects as workspace tabs when a user enters or pins a project.
+- Decide the project rename flow; prefer project planning/settings over double-click so it works on iPhone and can include phases, milestones, status, and schedule planning.
 
 ## Calendar Integration
 
@@ -93,3 +105,6 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Let users, teams, and companies customize logos, colors, and workspace appearance.
 - Keep customization constrained enough to preserve usability, accessibility, and recognizable app behavior.
 - Consider advanced branding as a paid feature for companies or larger teams.
+- Add built-in skins/themes (e.g. light, dark, high-contrast, color accents) for users to choose from without requiring custom branding.
+- Keep theme selection as a personal preference; team or company branding can override or extend it.
+- Let users choose todo list density or spacing preferences for tighter or roomier task rows.

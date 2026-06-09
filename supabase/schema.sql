@@ -38,10 +38,30 @@ alter table todos add column if not exists position integer;
 alter table todos add column if not exists created_by uuid references profiles(id) on delete cascade;
 alter table todos add column if not exists assigned_to uuid references profiles(id) on delete set null;
 
+-- One-time migration: remove orphaned rows that pre-date the created_by column.
+-- Safe to skip on a fresh database; idempotent because created_by is NOT NULL after this block.
 delete from todos where created_by is null;
 alter table todos alter column team_id drop not null;
 alter table todos alter column created_by set default auth.uid();
 alter table todos alter column created_by set not null;
+
+-- Indexes to support RLS helper functions and common query patterns.
+create index if not exists team_members_user_id_idx on team_members (user_id);
+create index if not exists todos_team_id_idx on todos (team_id);
+create index if not exists todos_created_by_idx on todos (created_by);
+create index if not exists todos_assigned_to_idx on todos (assigned_to);
+
+-- Partial unique indexes so active drag positions stay consistent per workspace.
+drop index if exists todos_position_personal_unique;
+drop index if exists todos_position_team_unique;
+
+create unique index if not exists todos_position_personal_active_unique
+  on todos (created_by, position)
+  where team_id is null and done = false and position is not null;
+
+create unique index if not exists todos_position_team_active_unique
+  on todos (team_id, position)
+  where team_id is not null and done = false and position is not null;
 
 create or replace function public.is_team_member(p_team_id uuid, p_user_id uuid)
 returns boolean
@@ -221,3 +241,40 @@ begin
     alter publication supabase_realtime add table todos;
   end if;
 end $$;
+
+-- Batch-update todo positions in a single round trip after a drag reorder.
+-- Accepts a JSON array of {id, position} objects and updates each row,
+-- respecting the same access rules as the todos UPDATE policy.
+create or replace function public.batch_update_todo_positions(updates jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  with incoming as (
+    select
+      (item->>'id')::uuid as id,
+      (item->>'position')::integer as position,
+      row_number() over () as ordinal
+    from jsonb_array_elements(updates) as item
+  )
+  update todos
+  set position = -1000000 + incoming.ordinal
+  from incoming
+  where todos.id = incoming.id
+    and todos.done = false;
+
+  with incoming as (
+    select
+      (item->>'id')::uuid as id,
+      (item->>'position')::integer as position
+    from jsonb_array_elements(updates) as item
+  )
+  update todos
+  set position = incoming.position
+  from incoming
+  where todos.id = incoming.id
+    and todos.done = false;
+end;
+$$;

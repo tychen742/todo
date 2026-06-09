@@ -88,6 +88,25 @@ For web, open:
 http://localhost:8081
 ```
 
+## TypeScript Database Types
+
+Generate authoritative TypeScript types from the live database schema:
+
+```bash
+npx supabase gen types typescript --project-id <your-project-ref> > lib/database.types.ts
+```
+
+Replace `<your-project-ref>` with the ID from your Supabase project URL (e.g. `abcdefghijklmnop`).
+
+The generated file gives you a `Database` type you can use to type Supabase queries:
+
+```ts
+import type { Database } from '../lib/database.types';
+const supabase = createClient<Database>(url, key);
+```
+
+Re-run the command after any schema change to keep types in sync. Do not edit `lib/database.types.ts` by hand.
+
 For iPhone, scan the Expo QR code or open the LAN `exp://...` URL in Expo Go.
 
 ## mba/mst Workflow

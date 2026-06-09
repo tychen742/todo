@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { DraggableList } from '../components/DraggableList';
 import { StatusBar } from 'expo-status-bar';
+import { Stack } from 'expo-router';
 import type { Session } from '@supabase/supabase-js';
 import TodoItem from '../components/TodoItem';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -36,11 +37,19 @@ type Team = {
 type Member = {
   user_id: string;
   email: string;
+  display_name: string | null;
   role: string;
+};
+
+type Profile = {
+  id: string;
+  email: string;
+  display_name: string | null;
 };
 
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
 type SortField = 'text' | 'priority' | 'due_date' | 'created_at';
+type CreateTarget = 'team' | 'organization' | 'project';
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 
@@ -53,14 +62,12 @@ const priorityRank: Record<Priority, number> = {
 
 function sortTodos(items: Todo[]) {
   return [...items].sort((a, b) => {
-    // Urgent always floats above everything else
-    if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
-    if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
-    // Within same urgency tier: respect manual drag position
+    // Manual drag positions win once a user has ordered the list.
     if (a.position !== null && b.position !== null) return a.position - b.position;
     if (a.position !== null) return -1;
     if (b.position !== null) return 1;
-    // No positions yet: fall back to priority rank then recency
+
+    // Items without manual positions fall back to priority and recency.
     const priorityDelta = priorityRank[a.priority] - priorityRank[b.priority];
     if (priorityDelta !== 0) return priorityDelta;
     return Date.parse(b.created_at) - Date.parse(a.created_at);
@@ -118,15 +125,26 @@ function isSameDate(left: Date, right: Date) {
   );
 }
 
+function emailDisplayName(email: string | null | undefined) {
+  if (!email) return 'User';
+  return email.split('@')[0] || email;
+}
+
+function profileDisplayName(profile: Pick<Profile, 'email' | 'display_name'>) {
+  return profile.display_name?.trim() || emailDisplayName(profile.email);
+}
+
 export default function HomeScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState<'signIn' | 'signUp'>('signIn');
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [createTarget, setCreateTarget] = useState<CreateTarget | null>(null);
   const [teamName, setTeamName] = useState('');
   const [memberEmail, setMemberEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
@@ -150,8 +168,6 @@ export default function HomeScreen() {
     const items = todos.filter((t) => !t.done);
     if (!sortField) return items;
     return [...items].sort((a, b) => {
-      if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
-      if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
       let delta = 0;
       if (sortField === 'text') delta = a.text.localeCompare(b.text);
       else if (sortField === 'priority') delta = priorityRank[a.priority] - priorityRank[b.priority];
@@ -172,19 +188,29 @@ export default function HomeScreen() {
     [members]
   );
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const accountDisplayName = profile
+    ? profileDisplayName(profile)
+    : emailDisplayName(session?.user.email);
 
   const ensureProfile = useCallback(async (currentSession: Session) => {
     const profileEmail = currentSession.user.email?.toLowerCase();
     if (!profileEmail) return;
 
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: currentSession.user.id,
-      email: profileEmail,
-    });
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .upsert({
+        id: currentSession.user.id,
+        email: profileEmail,
+      })
+      .select('id, email, display_name')
+      .single();
 
     if (profileError) {
       setError(profileError.message);
+      return;
     }
+
+    setProfile(profileData);
   }, []);
 
   const loadTeams = useCallback(async () => {
@@ -239,7 +265,7 @@ export default function HomeScreen() {
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, email')
+      .select('id, email, display_name')
       .in('id', ids);
 
     if (profileError) {
@@ -247,11 +273,12 @@ export default function HomeScreen() {
       return;
     }
 
-    const profilesById = new Map((profileData ?? []).map((profile) => [profile.id, profile.email]));
+    const profilesById = new Map((profileData ?? []).map((profile) => [profile.id, profile]));
     const nextMembers = memberships.map((member) => ({
       user_id: member.user_id,
       role: member.role,
-      email: profilesById.get(member.user_id) ?? 'Unknown user',
+      email: profilesById.get(member.user_id)?.email ?? 'unknown@example.com',
+      display_name: profilesById.get(member.user_id)?.display_name ?? null,
     }));
 
     setMembers(nextMembers);
@@ -328,6 +355,9 @@ export default function HomeScreen() {
     loadTodos();
 
     const todoChannel = selectedTeamId ? `todos-sync-${selectedTeamId}` : `todos-sync-personal`;
+    const todosFilter = selectedTeamId
+      ? `team_id=eq.${selectedTeamId}`
+      : `created_by=eq.${session.user.id}`;
 
     const todosChannel = supabase
       .channel(todoChannel)
@@ -337,6 +367,7 @@ export default function HomeScreen() {
           event: '*',
           schema: 'public',
           table: 'todos',
+          filter: todosFilter,
         },
         loadTodos
       )
@@ -397,8 +428,15 @@ export default function HomeScreen() {
   }
 
   async function signOut() {
+    setAccountMenuOpen(false);
     await supabase.auth.signOut();
     setInput('');
+  }
+
+  function choosePlannedUserFeature(label: string) {
+    setAccountMenuOpen(false);
+    setMessage(`${label} is planned.`);
+    setError('');
   }
 
   async function createTeam() {
@@ -434,9 +472,30 @@ export default function HomeScreen() {
     setTeamName('');
     setTeams((prev) => [...prev, team]);
     setSelectedTeamId(team.id);
-    setWorkspaceMenuOpen(false);
+    setCreateTarget(null);
     setMessage(`Created ${team.name}.`);
     setError('');
+  }
+
+  function openCreateTarget(target: CreateTarget) {
+    setAccountMenuOpen(false);
+
+    if (target === 'team') {
+      setCreateTarget('team');
+      return;
+    }
+
+    setMessage(
+      target === 'organization'
+        ? 'Organization creation needs organization tables next.'
+        : 'Project creation needs project tables next.'
+    );
+    setError('');
+  }
+
+  function selectTeamFromAccountMenu(teamId: string) {
+    setSelectedTeamId(teamId);
+    setAccountMenuOpen(false);
   }
 
   async function addMember() {
@@ -676,15 +735,13 @@ export default function HomeScreen() {
       )
     );
 
-    const results = await Promise.all(
-      reorderedActive.map((todo, index) =>
-        supabase.from('todos').update({ position: index }).eq('id', todo.id)
-      )
-    );
+    const updates = reorderedActive.map((todo, index) => ({ id: todo.id, position: index }));
+    const { error: batchError } = await supabase.rpc('batch_update_todo_positions', {
+      updates,
+    });
 
-    const failed = results.find((r) => r.error);
-    if (failed?.error) {
-      setError(failed.error.message);
+    if (batchError) {
+      setError(batchError.message);
     }
   }
 
@@ -774,88 +831,59 @@ export default function HomeScreen() {
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              onPress={() => setAccountMenuOpen(true)}
+              style={styles.accountMenuButton}
+              accessibilityRole="button"
+              accessibilityLabel="Open account menu"
+            >
+              <Text style={styles.accountMenuButtonText} numberOfLines={1}>
+                {session.user.email}
+              </Text>
+              <Text style={styles.accountMenuCaret}>v</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <StatusBar style="dark" />
-      <View style={styles.accountBar}>
-        <Text style={styles.accountText} numberOfLines={1}>
-          {session.user.email}
-        </Text>
-        <Pressable onPress={signOut} hitSlop={8}>
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </Pressable>
-      </View>
 
       <View style={styles.teamPanel}>
-        <Pressable
-          onPress={() => setWorkspaceMenuOpen((open) => !open)}
-          style={styles.workspaceButton}
+        <Text style={styles.workspaceLabel}>Workspace</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.workspaceTabs}
         >
-          <View>
-            <Text style={styles.workspaceLabel}>Workspace</Text>
-            <Text style={styles.workspaceName}>{selectedTeam?.name ?? 'Personal'}</Text>
-          </View>
-          <Text style={styles.workspaceArrow}>{workspaceMenuOpen ? 'Close' : 'Open'}</Text>
-        </Pressable>
+          <Pressable
+            onPress={() => setSelectedTeamId(null)}
+            style={[styles.workspaceTab, isPersonal && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabText, isPersonal && styles.workspaceTabTextActive]}>
+              Personal
+            </Text>
+          </Pressable>
 
-        {workspaceMenuOpen && (
-          <View style={styles.workspaceMenu}>
-            <Pressable
-              onPress={() => {
-                setSelectedTeamId(null);
-                setWorkspaceMenuOpen(false);
-              }}
-              style={[styles.workspaceOption, isPersonal && styles.workspaceOptionActive]}
-            >
-              <Text
-                style={[
-                  styles.workspaceOptionText,
-                  isPersonal && styles.workspaceOptionTextActive,
-                ]}
-              >
-                Personal
-              </Text>
-            </Pressable>
+          <Pressable
+            onPress={() => choosePlannedUserFeature('Project 1 planning')}
+            style={styles.workspaceTab}
+            accessibilityRole="button"
+            accessibilityLabel="Open Project 1 planning"
+          >
+            <Text style={styles.workspaceTabText}>Project 1</Text>
+          </Pressable>
 
-            {teams.map((team) => (
-              <Pressable
-                key={team.id}
-                onPress={() => {
-                  setSelectedTeamId(team.id);
-                  setWorkspaceMenuOpen(false);
-                }}
-                style={[
-                  styles.workspaceOption,
-                  team.id === selectedTeamId && styles.workspaceOptionActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.workspaceOptionText,
-                    team.id === selectedTeamId && styles.workspaceOptionTextActive,
-                  ]}
-                >
-                  {team.name}
-                </Text>
-              </Pressable>
-            ))}
-
-            <View style={styles.compactForm}>
-              <TextInput
-                style={styles.compactInput}
-                value={teamName}
-                onChangeText={setTeamName}
-                placeholder="New team"
-                placeholderTextColor="#9ca3af"
-                onSubmitEditing={createTeam}
-              />
-              <Pressable
-                onPress={createTeam}
-                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
-              >
-                <Text style={styles.smallBtnText}>Create</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
+          <Pressable
+            onPress={() => openCreateTarget('project')}
+            style={styles.workspaceAddTab}
+            accessibilityRole="button"
+            accessibilityLabel="Create project"
+          >
+            <Text style={styles.workspaceAddText}>+</Text>
+          </Pressable>
+        </ScrollView>
       </View>
 
       {selectedTeam && (
@@ -1033,6 +1061,7 @@ export default function HomeScreen() {
                   onAssign={isPersonal ? undefined : () => cycleAssignee(todo)}
                   onPriority={() => cyclePriority(todo)}
                   onDueDate={() => openDueCalendar(todo)}
+                  reserveDragSpace={Platform.OS === 'web'}
                 />
               ))}
             </>
@@ -1116,6 +1145,118 @@ export default function HomeScreen() {
         </Pressable>
       </Modal>
       <Modal
+        visible={accountMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAccountMenuOpen(false)}
+      >
+        <Pressable style={styles.accountMenuBackdrop} onPress={() => setAccountMenuOpen(false)}>
+          <Pressable style={styles.accountMenuCard}>
+            <Text style={styles.accountMenuEmail} numberOfLines={1}>
+              {session.user.email}
+            </Text>
+            <Pressable
+              onPress={() => choosePlannedUserFeature('Profile')}
+              style={styles.accountMenuItem}
+            >
+              <Text style={styles.accountMenuItemText}>Profile</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => choosePlannedUserFeature('Settings')}
+              style={styles.accountMenuItem}
+            >
+              <Text style={styles.accountMenuItemText}>Settings</Text>
+            </Pressable>
+            <View style={styles.accountMenuSection}>
+              <View style={styles.accountMenuSectionHeader}>
+                <Text style={styles.accountMenuSectionTitle}>Organizations</Text>
+                <Pressable onPress={() => openCreateTarget('organization')} hitSlop={8}>
+                  <Text style={styles.accountMenuSectionAction}>+</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={() => choosePlannedUserFeature('Organizations')}
+                style={styles.accountMenuItem}
+              >
+                <Text style={styles.accountMenuMutedText}>No organizations yet</Text>
+              </Pressable>
+            </View>
+            <View style={styles.accountMenuSection}>
+              <View style={styles.accountMenuSectionHeader}>
+                <Text style={styles.accountMenuSectionTitle}>Teams</Text>
+                <Pressable onPress={() => openCreateTarget('team')} hitSlop={8}>
+                  <Text style={styles.accountMenuSectionAction}>+</Text>
+                </Pressable>
+              </View>
+              {teams.length === 0 ? (
+                <Pressable onPress={() => openCreateTarget('team')} style={styles.accountMenuItem}>
+                  <Text style={styles.accountMenuMutedText}>No teams yet</Text>
+                </Pressable>
+              ) : (
+                teams.map((team) => (
+                  <Pressable
+                    key={team.id}
+                    onPress={() => selectTeamFromAccountMenu(team.id)}
+                    style={styles.accountMenuItem}
+                  >
+                    <Text
+                      style={[
+                        styles.accountMenuItemText,
+                        team.id === selectedTeamId && styles.accountMenuItemTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {team.name}
+                    </Text>
+                  </Pressable>
+                ))
+              )}
+            </View>
+            <Pressable onPress={signOut} style={styles.accountMenuItem}>
+              <Text style={styles.accountMenuSignOutText}>Log Out</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={createTarget === 'team'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateTarget(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setCreateTarget(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>New Team</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={teamName}
+              onChangeText={setTeamName}
+              placeholder="Team name"
+              placeholderTextColor="#9ca3af"
+              returnKeyType="done"
+              autoFocus
+              onSubmitEditing={createTeam}
+            />
+            <View style={styles.editModalActions}>
+              <Pressable
+                onPress={() => {
+                  setCreateTarget(null);
+                  setTeamName('');
+                }}
+              >
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={createTeam}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Create</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
         visible={!!editTodo}
         transparent
         animationType="fade"
@@ -1188,25 +1329,94 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 12,
   },
-  accountBar: {
+  accountMenuButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    maxWidth: 260,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  accountMenuButtonText: {
+    color: '#6b7280',
+    fontSize: 13,
+    fontWeight: '600',
+    maxWidth: 220,
+  },
+  accountMenuCaret: {
+    color: '#6366f1',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  accountMenuBackdrop: {
+    flex: 1,
+    alignItems: 'flex-end',
+    backgroundColor: 'rgba(17, 24, 39, 0.12)',
+    paddingTop: 64,
+    paddingRight: 16,
+  },
+  accountMenuCard: {
+    width: 240,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  accountMenuEmail: {
+    color: '#6b7280',
+    fontSize: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
   },
-  accountText: {
-    flex: 1,
-    color: '#6b7280',
-    fontSize: 13,
-    marginRight: 12,
+  accountMenuItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  signOutText: {
-    color: '#6366f1',
+  accountMenuItemText: {
+    color: '#111827',
+    fontSize: 14,
     fontWeight: '600',
+  },
+  accountMenuItemTextActive: {
+    color: '#4338ca',
+  },
+  accountMenuMutedText: {
+    color: '#9ca3af',
     fontSize: 13,
+    fontWeight: '600',
+  },
+  accountMenuSection: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e5e7eb',
+    paddingTop: 6,
+    marginTop: 4,
+  },
+  accountMenuSectionHeader: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  accountMenuSectionTitle: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  accountMenuSectionAction: {
+    color: '#6366f1',
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  accountMenuSignOutText: {
+    color: '#6366f1',
+    fontSize: 14,
+    fontWeight: '700',
   },
   teamPanel: {
     paddingHorizontal: 16,
@@ -1215,55 +1425,53 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
   },
-  workspaceButton: {
-    minHeight: 48,
-    borderColor: '#d1d5db',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   workspaceLabel: {
     color: '#6b7280',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
+    marginBottom: 8,
   },
-  workspaceName: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '700',
-    marginTop: 2,
+  workspaceTabs: {
+    paddingBottom: 2,
   },
-  workspaceArrow: {
-    color: '#6366f1',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  workspaceMenu: {
-    borderColor: '#e5e7eb',
+  workspaceTab: {
+    minHeight: 36,
+    maxWidth: 180,
+    borderColor: '#d1d5db',
     borderWidth: 1,
     borderRadius: 8,
-    marginTop: 8,
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    justifyContent: 'center',
   },
-  workspaceOption: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  workspaceOptionActive: {
+  workspaceTabActive: {
     backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
   },
-  workspaceOptionText: {
+  workspaceTabText: {
     color: '#374151',
     fontWeight: '600',
+    fontSize: 13,
   },
-  workspaceOptionTextActive: {
+  workspaceTabTextActive: {
     color: '#4338ca',
+  },
+  workspaceAddTab: {
+    width: 36,
+    minHeight: 36,
+    borderColor: '#d1d5db',
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workspaceAddText: {
+    color: '#6366f1',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 22,
   },
   memberPanel: {
     paddingHorizontal: 16,
@@ -1570,7 +1778,7 @@ const styles = StyleSheet.create({
   sortBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingRight: 16,
     paddingVertical: 7,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#e5e7eb',
@@ -1597,6 +1805,7 @@ const styles = StyleSheet.create({
   sortColPriority: {
     width: 76,
     marginLeft: 8,
+    paddingLeft: 6,
   },
   sortColDue: {
     width: 80,
@@ -1608,7 +1817,6 @@ const styles = StyleSheet.create({
   },
   sortActionsSpacer: {
     width: 56,
-    marginLeft: 8,
     flexShrink: 0,
   },
   sortColLabel: {

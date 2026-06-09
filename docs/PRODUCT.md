@@ -2,12 +2,28 @@
 
 Todo is a personal task and lightweight project/team management app. It should stay simple enough for individual todos while growing toward collaborative team and project workflows.
 
+## Market Positioning
+
+This app should not try to become a full ClickUp, Asana, or Todoist replacement. Those products are useful inspirations, but the goal is a smaller app that can make money by serving focused segments well.
+
+- **ClickUp inspiration**: broad workspace thinking, tasks plus docs plus communication, but avoid becoming too heavy for everyday users.
+- **Asana inspiration**: clear ownership, assignment, due dates, project status, and accountability, but avoid enterprise workflow complexity early.
+- **Todoist inspiration**: fast personal task capture, priorities, due dates, recurring tasks, and clean mobile use, while adding lightweight teams and projects where useful.
+
+The initial target markets are:
+
+- **Higher education**: faculty, students, research groups, labs, committees, departments, and small academic project teams that need todos, assignments, project notes, recurring responsibilities, deadlines, and calendar integration without adopting a large enterprise system.
+- **Personal users**: individuals who need a clean personal todo system that can grow into light collaboration.
+- **SMEs**: small and medium-sized organizations that need practical task, team, and project coordination without paying for or managing a complex platform.
+
+The product should compete through simplicity, useful calendar/time-management workflows, lightweight team coordination, and low setup cost rather than by matching every feature in larger project-management suites.
+
 ## Product Areas
 
 - **Personal Todos**: private tasks owned by one signed-in user.
 - **Team Workspaces**: ongoing groups of people who can share and assign todos.
 - **Team Pages**: collaboratively edited team homepages for notes, links, lightweight widgets, and shared context.
-- **Projects**: bounded efforts that belong to a team or user and can end or close.
+- **Projects**: bounded efforts that belong to a team or user and support lifecycle planning, schedule management, phases, milestones, critical path awareness, and closure.
 - **Todo Workflow**: task text, future annotations, completion, priority, optional due dates, assignment, timestamps, and filtering.
 - **Notes**: workspace-level note taking for broader personal, team, or project context.
 - **Calendars**: personal calendars, team calendars, recurring tasks, reminders, project milestones, and external calendar sync.
@@ -20,7 +36,7 @@ Todo is a personal task and lightweight project/team management app. It should s
 - **User Management**: authentication, profiles, sessions, account state, and user identity.
 - **Team Management**: teams, team membership, team roles, and team invitations.
 - **Team Knowledge Management**: shared team pages, editable sections, team notes, links, and lightweight dashboard widgets.
-- **Project Management**: projects, project scope, project status, and project closure.
+- **Project Management**: projects, project scope, project status, lifecycle planning, phases, milestones, critical path awareness, schedule management, resource planning, risk planning, and project closure.
 - **Todo Management**: todos, future annotations, priority, optional due dates, assignment, timestamps, completion, and filtering.
 - **Notes Management**: workspace notes, note ownership, note visibility, and future note tabs.
 - **Calendar Management**: personal calendar views, team calendar views, recurrence rules, external calendar connections, and sync state.
@@ -33,17 +49,25 @@ Team invitations belong primarily to Team Management, but depend on User Managem
 ## Product Rules
 
 - Personal todos should work without creating a team.
-- Workspace navigation should use tabs: `Personal`, each `Team_Name`, and eventually each active or pinned `Project_Name`.
+- Account navigation should expose user-level and administrative concepts such as Profile, Settings, Organizations, Teams, and Log Out.
+- Workspace navigation should use tabs for active work surfaces: `Personal` and eventually each active or pinned `Project_Name`.
+- The initial workspace shape should show `Personal`, a default `Project 1` placeholder, and a `+` action for new projects.
+- Organizations and Teams are containers for people, permissions, billing, and ownership; they should be managed from the account/admin menu rather than treated as primary workspace tabs.
 - Teams are ongoing/perpetual and can contain multiple projects over time.
 - Each team should have a shared page that functions as the team's living workspace, not just a list of todos.
 - Team pages should support co-editing one page of shared team context, closer to a lightweight team dashboard than a formal document.
 - Team pages should reduce the need to maintain separate Google Docs or Sheets for basic shared notes, links, status, and coordination.
 - Projects are bounded and should support lifecycle states such as active, paused, completed, and closed.
+- Projects should support lifecycle planning through phases, milestones, schedule views, and critical path identification.
+- Project names should be editable from an explicit project planning or settings surface rather than relying on double-click, because project naming is tied to planning metadata and must work well on mobile.
+- Resource management and risk management should start as lightweight planning and annotation workflows, not as a heavy enterprise module.
+- Todo annotations and project planning/annotation should capture resource constraints, risks, assumptions, blockers, and mitigation notes.
 - Assignment only makes sense in a team or project context with multiple users.
 - Priority should default to Normal on creation, stay visible on each todo row, and be changeable from that row.
 - Due dates are central to time management and project management; they should support planning, workload visibility, reminders, calendars, and milestone tracking.
 - Adding todos should stay as quick capture: the add area should have one text input for the todo text.
 - Due dates should be set and adjusted from each todo row so planning can happen after capture.
+- Completed todos should show when they were completed near their due-date value; this requires tracking completion time separately from creation time.
 - Notes should be a separate workspace-level concept; the first UI placement should be under the todo list, with a possible dedicated tab later.
 - Todo annotations should stay scoped to one task; workspace Notes should hold broader context, thoughts, snippets, and running notes.
 - Calendar sync should be optional per user and should not be required for basic todo use.
@@ -56,6 +80,7 @@ Team invitations belong primarily to Team Management, but depend on User Managem
 - Read state and acknowledgement should be separate assignee responses, especially for project-management workflows where handoff needs confirmation.
 - Email or text messaging should be later optional delivery channels beyond the default app UI notification.
 - UI customization should let users, teams, and companies adjust branding without breaking app consistency or accessibility.
+- Users should be able to choose different todo row spacing or density modes without changing task content or behavior.
 - The app should remain free for personal and small-team use; monetization should come from advanced features rather than blocking basic task management.
 
 ## Due Date Semantics
