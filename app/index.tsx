@@ -433,6 +433,7 @@ export default function HomeScreen() {
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [density, setDensity] = useState<Density>('cozy');
   const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [projectsMenuOpen, setProjectsMenuOpen] = useState(false);
 
   const rowPV = densityPV[density];
   const rowH = densityRowH[density];
@@ -2005,7 +2006,7 @@ export default function HomeScreen() {
           style={styles.workspaceTabsScroll}
         >
           <Pressable
-            onPress={() => { setSelectedTeamId(null); setSelectedProjectId(null); setTeamsViewOpen(false); }}
+            onPress={() => { setSelectedTeamId(null); setSelectedProjectId(null); setTeamsViewOpen(false); setProjectsMenuOpen(false); }}
             style={[styles.workspaceTab, isPersonal && !teamsViewOpen && styles.workspaceTabActive]}
           >
             <Text style={[styles.workspaceTabText, isPersonal && !teamsViewOpen && styles.workspaceTabTextActive]}>
@@ -2013,35 +2014,18 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
 
-          {projects.map((project) => (
-            <Pressable
-              key={project.id}
-              onPress={() => { setSelectedProjectId(project.id); setSelectedTeamId(null); setTeamsViewOpen(false); }}
-              style={[styles.workspaceTab, selectedProjectId === project.id && !teamsViewOpen && styles.workspaceTabActive]}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${project.name}`}
-            >
-              <Text style={[styles.workspaceTabText, selectedProjectId === project.id && !teamsViewOpen && styles.workspaceTabTextActive]} numberOfLines={1}>{project.name}</Text>
-            </Pressable>
-          ))}
-          {projects.length === 0 && (
-            <Pressable
-              onPress={() => openCreateTarget('project')}
-              style={styles.workspaceTab}
-              accessibilityRole="button"
-              accessibilityLabel="Create first project"
-            >
-              <Text style={[styles.workspaceTabText, { color: '#9ca3af' }]}>Project 1</Text>
-            </Pressable>
-          )}
-
           <Pressable
-            onPress={() => openCreateTarget('project')}
-            style={styles.workspaceAddTab}
+            onPress={() => { setProjectsMenuOpen(true); setTeamsViewOpen(false); }}
+            style={[styles.workspaceTab, isProject && !teamsViewOpen && styles.workspaceTabActive]}
             accessibilityRole="button"
-            accessibilityLabel="Create project"
+            accessibilityLabel="Projects"
           >
-            <Text style={styles.workspaceAddText}>+</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Text style={[styles.workspaceTabText, isProject && !teamsViewOpen && styles.workspaceTabTextActive]} numberOfLines={1}>
+                {selectedProject ? selectedProject.name : 'Projects'}
+              </Text>
+              <Text style={{ fontSize: 9, color: isProject && !teamsViewOpen ? '#4338ca' : '#9ca3af' }}>▼</Text>
+            </View>
           </Pressable>
         </ScrollView>
 
@@ -2851,6 +2835,37 @@ export default function HomeScreen() {
 
             <Pressable onPress={signOut} style={styles.navDropdownItem}>
               <Text style={styles.navDropdownSignOutText}>Log Out</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={projectsMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProjectsMenuOpen(false)}
+      >
+        <Pressable style={styles.navDropdownBackdrop} onPress={() => setProjectsMenuOpen(false)}>
+          <Pressable style={styles.projectsDropdownCard}>
+            <Text style={styles.projectsDropdownTitle}>PROJECTS</Text>
+            {projects.map((project) => (
+              <Pressable
+                key={project.id}
+                style={styles.navDropdownItem}
+                onPress={() => { setSelectedProjectId(project.id); setSelectedTeamId(null); setProjectsMenuOpen(false); }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 11, color: '#6366f1', width: 12 }}>{selectedProjectId === project.id ? '✓' : ''}</Text>
+                  <Text style={[styles.navDropdownItemText, selectedProjectId === project.id && styles.navDropdownItemTextActive]} numberOfLines={1}>{project.name}</Text>
+                </View>
+              </Pressable>
+            ))}
+            {projects.length === 0 && (
+              <Text style={[styles.navDropdownMutedText, { paddingHorizontal: 14, paddingVertical: 6 }]}>No projects yet</Text>
+            )}
+            <View style={styles.navDropdownDivider} />
+            <Pressable style={styles.navDropdownItem} onPress={() => { setProjectsMenuOpen(false); openCreateTarget('project'); }}>
+              <Text style={styles.navDropdownSectionAction}>+ New Project</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -4505,6 +4520,30 @@ const styles = StyleSheet.create({
   },
   navDropdownBackdrop: {
     flex: 1,
+  },
+  projectsDropdownCard: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 160 : 120,
+    left: 100,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+    paddingVertical: 8,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  projectsDropdownTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    letterSpacing: 0.3,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
   },
   navDropdownCard: {
     position: 'absolute',
