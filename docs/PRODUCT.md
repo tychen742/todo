@@ -101,6 +101,10 @@ Team invitations belong primarily to Team Management, but depend on User Managem
 - UI customization should let users, teams, and companies adjust branding without breaking app consistency or accessibility.
 - Users should be able to choose different todo row spacing or density modes without changing task content or behavior.
 - The app should remain free for personal and small-team use; monetization should come from advanced features rather than blocking basic task management.
+- The signup email field should use the placeholder "Email", not "Work email". Work email cannot be enforced without domain validation, and enforcing it would exclude personal users, students, and academics — all named target segments. Work-email-only access and domain-based SSO enforcement are appropriate as paid or enterprise features, not free-tier gates.
+- Supported authentication channels: email + password, Google OAuth, Apple Sign In (required for iOS App Store), GitHub OAuth, and SSO/SAML. Phone number is not used for primary sign-in or signup. Magic link (passwordless email) is a near-term candidate. Microsoft/Azure AD is deferred to the SSO implementation. Password recovery uses email only.
+- Phone number collection is deferred to a later phase. When added, it serves two purposes only: two-factor authentication (2FA) and delivery of assignment and task notifications via SMS for users who prefer or require it. Phone is not an identity anchor and should not replace email as the primary account identifier.
+- A user account supports multiple verified email addresses. One email is designated primary (used for billing, recovery, and default notifications); additional emails can be added and verified via confirmation link. Invitations sent to any verified email on an account resolve to that account automatically — a consultant invited via their work email and a personal Gmail both land in the same account. This is a deliberate stickiness design: users who manage personal todos, recurring life admin, and work projects in one place have high switching cost and strong daily habit formation. The auth model must not assume one email per account from the start. Data model implication: a separate `user_emails` table linked to `auth.users`, rather than a single email column on the profile.
 
 ## Project Management Philosophy
 
@@ -156,6 +160,7 @@ Due dates are optional at capture time, but they become a planning signal when p
 
 ## Near-Term Feature Ideas
 
+- Estimated time on tasks: when adding or editing a task, optionally specify estimated time required (e.g. 30m, 2h, 1d). Used for workload visibility, daily planning, and eventually resource/capacity planning at the project level.
 - Team invitations for users who have not signed up yet
 - Priority dropdown from the Add flow
 - Facebook-style relative timestamps
@@ -171,3 +176,14 @@ Due dates are optional at capture time, but they become a planning signal when p
 - Assignment notifications and acknowledgement requests through app UI, email, or text messaging
 - Custom logos, colors, and workspace appearance for users, teams, and companies
 - Paid feature boundaries for larger teams, advanced project management, automation, integrations, storage, admin controls, or reporting
+
+## AI Integration
+
+AI assistance is a planned feature, prioritized for the project and planning areas where the leverage is highest. Initial focus areas:
+
+- **Backlog generation**: given a project name and description, suggest an initial set of tasks and milestones to populate the backlog. Reduces the blank-slate friction of starting a new project.
+- **Phase and task suggestions**: based on project context, suggest phases (Planning, Execution, Review, etc.) and tasks appropriate to the project type.
+- **Task breakdown**: given a high-level task or milestone, suggest sub-tasks to complete it.
+- **Due date and priority hints**: based on task text and project deadline, suggest realistic due dates and flag likely high-priority items.
+
+AI features should feel like a fast, optional assistant — always skippable, never blocking. The user stays in control: AI suggests, user confirms. Candidates for paid tier once core is stable.

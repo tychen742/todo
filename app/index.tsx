@@ -39,6 +39,7 @@ type Todo = {
   project_id: string | null;
   phase_id: string | null;
   team_id: string | null;
+  estimate: string | null;
 };
 
 type Organization = {
@@ -81,7 +82,10 @@ type CreateTarget = 'team' | 'organization' | 'project';
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const defaultVisibleTaskRows = 5;
-const todoRowHeight = 88;
+const todoRowHeight = 70;
+type Density = 'compact' | 'cozy' | 'roomy';
+const densityPV: Record<Density, number> = { compact: 4, cozy: 7, roomy: 12 };
+const densityRowH: Record<Density, number> = { compact: 56, cozy: 70, roomy: 88 };
 const incomingRowHeight = 106;
 const taskHeaderHeight = 42;
 const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
@@ -280,23 +284,23 @@ const kcs = StyleSheet.create({
   checkbox: { paddingTop: 1 },
   box: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#6366f1', alignItems: 'center', justifyContent: 'center' },
   boxDone: { backgroundColor: '#9ca3af', borderColor: '#9ca3af' },
-  checkmark: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  checkmark: { color: '#fff', fontSize: 11, fontWeight: '700' },
   body: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
   milestoneIcon: { fontSize: 9, color: '#d97706', marginTop: 3, flexShrink: 0 },
   text: { flex: 1, fontSize: 13, color: '#111827', lineHeight: 18 },
   textDone: { textDecorationLine: 'line-through', color: '#9ca3af' },
   meta: { flexDirection: 'row', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' },
-  badge: { fontSize: 10, borderRadius: 4, overflow: 'hidden', paddingHorizontal: 5, paddingVertical: 2, fontWeight: '600' },
+  badge: { fontSize: 11, borderRadius: 4, overflow: 'hidden', paddingHorizontal: 5, paddingVertical: 2, fontWeight: '600' },
   priority_low: { color: '#4b5563', backgroundColor: '#f3f4f6' },
   priority_high: { color: '#92400e', backgroundColor: '#fef3c7' },
   priority_urgent: { color: '#b91c1c', backgroundColor: '#fee2e2' },
-  due: { fontSize: 10, color: '#4338ca', fontWeight: '600' },
+  due: { fontSize: 11, color: '#4338ca', fontWeight: '600' },
   dueOverdue: { color: '#b91c1c' },
-  del: { fontSize: 12, color: '#d1d5db', paddingLeft: 4 },
+  del: { fontSize: 11, color: '#d1d5db', paddingLeft: 4 },
   assigneePill: { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', maxWidth: 100 },
   assigneePillAssigned: { backgroundColor: '#ede9fe', borderColor: '#c4b5fd' },
-  assigneeText: { fontSize: 10, color: '#9ca3af', fontWeight: '600' },
+  assigneeText: { fontSize: 11, color: '#9ca3af', fontWeight: '600' },
   assigneeTextAssigned: { color: '#6d28d9' },
 });
 
@@ -412,6 +416,10 @@ export default function HomeScreen() {
   const [editTodo, setEditTodo] = useState<Todo | null>(null);
   const [editDraftText, setEditDraftText] = useState('');
   const [editDraftNote, setEditDraftNote] = useState('');
+  const [editDraftDueDate, setEditDraftDueDate] = useState<string | null>(null);
+  const [editDraftDueDateMonth, setEditDraftDueDateMonth] = useState(() => new Date());
+  const [editDraftPriority, setEditDraftPriority] = useState<Priority>('normal');
+  const [editDraftEstimate, setEditDraftEstimate] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -423,6 +431,11 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
   const [archivedExpanded, setArchivedExpanded] = useState(false);
+  const [density, setDensity] = useState<Density>('cozy');
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
+
+  const rowPV = densityPV[density];
+  const rowH = densityRowH[density];
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60000);
@@ -487,6 +500,7 @@ export default function HomeScreen() {
   }, [todos, isProject]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const assigneePickerCalendarDays = useMemo(() => buildCalendarDays(assigneePickerMonth), [assigneePickerMonth]);
+  const editDraftCalendarDays = useMemo(() => buildCalendarDays(editDraftDueDateMonth), [editDraftDueDateMonth]);
   const accountDisplayName = profile
     ? profileDisplayName(profile)
     : emailDisplayName(session?.user.email);
@@ -648,7 +662,7 @@ export default function HomeScreen() {
     setLoading(true);
     let query = supabase
       .from('todos')
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
       .is('archived_at', null)
       .order('created_at', { ascending: false });
 
@@ -679,7 +693,7 @@ export default function HomeScreen() {
     if (!session) return;
     const { data, error: err } = await supabase
       .from('todos')
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
       .eq('assigned_to', session.user.id)
       .is('accepted_at', null)
       .is('archived_at', null)
@@ -693,7 +707,7 @@ export default function HomeScreen() {
     setLoading(true);
     let query = supabase
       .from('todos')
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
       .not('archived_at', 'is', null)
       .order('archived_at', { ascending: false });
 
@@ -1241,7 +1255,7 @@ export default function HomeScreen() {
         assigned_at: assignedTo ? new Date().toISOString() : null,
         priority: 'normal',
       })
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
       .single();
 
     if (insertError) {
@@ -1275,7 +1289,7 @@ export default function HomeScreen() {
         assigned_at,
         priority: 'normal',
       })
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
       .single();
 
     if (insertError) { setError(insertError.message); return; }
@@ -1455,6 +1469,11 @@ export default function HomeScreen() {
     setEditDraftText(todo.text);
     setEditDraftNote(todo.note ?? '');
     setEditDraftPhaseId(todo.phase_id ?? null);
+    setEditDraftDueDate(todo.due_date);
+    setEditDraftPriority(todo.priority);
+    setEditDraftEstimate(todo.estimate ?? '');
+    const due = parseDateValue(todo.due_date);
+    setEditDraftDueDateMonth(due ? new Date(due.getFullYear(), due.getMonth(), 1) : new Date());
   }
 
   function closeEditModal() {
@@ -1468,10 +1487,11 @@ export default function HomeScreen() {
 
     const note = editDraftNote.trim() || null;
     const phase_id = isProject ? editDraftPhaseId : editTodo.phase_id;
+    const estimate = editDraftEstimate.trim() || null;
 
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ text, note, phase_id })
+      .update({ text, note, phase_id, due_date: editDraftDueDate, priority: editDraftPriority, estimate })
       .eq('id', editTodo.id);
 
     if (updateError) {
@@ -1481,7 +1501,9 @@ export default function HomeScreen() {
 
     setTodos((prev) =>
       prev.map((item) =>
-        item.id === editTodo.id ? { ...item, text, note, phase_id: phase_id ?? null } : item
+        item.id === editTodo.id
+          ? { ...item, text, note, phase_id: phase_id ?? null, due_date: editDraftDueDate, priority: editDraftPriority, estimate }
+          : item
       )
     );
     closeEditModal();
@@ -1651,7 +1673,7 @@ export default function HomeScreen() {
     const creatorColor = pickAvatarColor(creatorEmail);
     const creatorTooltip = creatorName ? `From: ${creatorName}` : `From: ${contextLabel}`;
     return (
-      <View key={todo.id} style={styles.assignedToMeRow}>
+      <View key={todo.id} style={[styles.assignedToMeRow, { paddingVertical: rowPV }]}>
         <Pressable
           onPress={() => moveInboxTodoToTodos(todo.id)}
           onHoverIn={() => setHoveredInboxId(todo.id)}
@@ -1670,22 +1692,14 @@ export default function HomeScreen() {
             </View>
           )}
         </Pressable>
-        <View style={{ flex: 1 }}>
-          <View style={styles.assignedToMeTitleRow}>
-            <Text style={styles.assignedToMeText} numberOfLines={1}>
-              {todo.text}
-            </Text>
-            <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} tooltip={creatorTooltip} />
-          </View>
-          <View style={styles.assignedToMeMeta}>
-            <Text style={styles.assignedToMeContext}>{contextLabel}</Text>
-            {todo.due_date && (
-              <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]}>
-                {isOverdue ? 'Overdue · ' : ''}{todo.due_date}
-              </Text>
-            )}
-          </View>
-        </View>
+        <Text style={styles.assignedToMeText} numberOfLines={1}>{todo.text}</Text>
+        {!!contextLabel && <Text style={styles.assignedToMeContext} numberOfLines={1}>{contextLabel}</Text>}
+        {todo.due_date && (
+          <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]} numberOfLines={1}>
+            {isOverdue ? 'Overdue' : todo.due_date}
+          </Text>
+        )}
+        <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} tooltip={creatorTooltip} />
       </View>
     );
   }
@@ -1727,7 +1741,7 @@ export default function HomeScreen() {
                 onPress={() => setShowPassword((p) => !p)}
                 hitSlop={8}
               >
-                <Text style={styles.passwordToggleText}>{showPassword ? '◉' : '◎'}</Text>
+                <Text style={styles.passwordToggleText}>{showPassword ? '👁' : '👁'}</Text>
               </Pressable>
             </View>
 
@@ -1765,52 +1779,14 @@ export default function HomeScreen() {
         >
           <View style={styles.authPanel}>
             <Text style={styles.authTitle}>
-              {isSignIn ? 'Welcome back!' : 'Create your account'}
+              {isSignIn ? 'Welcome back!' : 'Welcome!'}
             </Text>
-            <View style={styles.authSubtitleRow}>
-              <Text style={styles.authSubtitleText}>
-                {isSignIn ? "Don't have an account? " : 'Already have an account? '}
-              </Text>
-              <Pressable
-                onPress={() => {
-                  setAuthMode(isSignIn ? 'signUp' : 'signIn');
-                  setError('');
-                  setMessage('');
-                }}
-              >
-                <Text style={styles.authSubtitleLink}>
-                  {isSignIn ? 'Sign up' : 'Sign in'}
-                </Text>
-              </Pressable>
-            </View>
-
-            <Pressable
-              style={styles.socialBtn}
-              onPress={() => setMessage('Google sign-in is coming soon.')}
-            >
-              <Text style={styles.googleG}>G</Text>
-              <Text style={styles.socialBtnText}>Continue with Google</Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.socialBtn}
-              onPress={() => setMessage('SSO is coming soon.')}
-            >
-              <Text style={styles.ssoIcon}>☁</Text>
-              <Text style={styles.socialBtnText}>Continue with SSO</Text>
-            </Pressable>
-
-            <View style={styles.authDivider}>
-              <View style={styles.authDividerLine} />
-              <Text style={styles.authDividerText}>or</Text>
-              <View style={styles.authDividerLine} />
-            </View>
 
             <TextInput
               style={[styles.authInput, !!error && styles.authInputError]}
               value={email}
               onChangeText={(v) => { setEmail(v); if (error) setError(''); }}
-              placeholder="Work email"
+              placeholder="Email"
               placeholderTextColor="#9ca3af"
               autoCapitalize="none"
               keyboardType="email-address"
@@ -1835,7 +1811,7 @@ export default function HomeScreen() {
                 onPress={() => setShowPassword((p) => !p)}
                 hitSlop={8}
               >
-                <Text style={styles.passwordToggleText}>{showPassword ? '◉' : '◎'}</Text>
+                <Text style={styles.passwordToggleText}>{showPassword ? '👁' : '👁'}</Text>
               </Pressable>
             </View>
 
@@ -1852,7 +1828,7 @@ export default function HomeScreen() {
                 ]}
               >
                 <Text style={styles.authSubmitBtnText}>
-                  {authLoading ? 'Please wait…' : isSignIn ? 'Log In' : 'Sign Up'}
+                  {authLoading ? 'Please wait…' : isSignIn ? 'Log In' : 'Create Account'}
                 </Text>
               </Pressable>
             )}
@@ -1866,6 +1842,63 @@ export default function HomeScreen() {
                 <Text style={styles.forgotBtnText}>Forgot Password?</Text>
               </Pressable>
             )}
+
+            <View style={styles.authDivider}>
+              <View style={styles.authDividerLine} />
+              <Text style={styles.authDividerText}>or</Text>
+              <View style={styles.authDividerLine} />
+            </View>
+
+            <View style={styles.socialGrid}>
+              <Pressable
+                style={styles.socialGridBtn}
+                onPress={() => setMessage('Google sign-in is coming soon.')}
+              >
+                <Text style={styles.googleG}>G</Text>
+                <Text style={styles.socialGridBtnText}>Google</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.socialGridBtn}
+                onPress={() => setMessage('Apple sign-in is coming soon.')}
+              >
+                <Text style={styles.appleIcon}></Text>
+                <Text style={styles.socialGridBtnText}>Apple</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.socialGridBtn}
+                onPress={() => setMessage('GitHub sign-in is coming soon.')}
+              >
+                <Text style={styles.githubIcon}>GH</Text>
+                <Text style={styles.socialGridBtnText}>GitHub</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.socialGridBtn}
+                onPress={() => setMessage('SSO is coming soon.')}
+              >
+                <Text style={styles.ssoIcon}>☁</Text>
+                <Text style={styles.socialGridBtnText}>SSO</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.authSubtitleRow}>
+              <Text style={styles.authSubtitleText}>
+                {isSignIn ? "New here? " : 'Already have an account? '}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setAuthMode(isSignIn ? 'signUp' : 'signIn');
+                  setError('');
+                  setMessage('');
+                }}
+              >
+                <Text style={styles.authSubtitleLink}>
+                  {isSignIn ? 'Create account' : 'Sign in'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.authFooter}>
@@ -2361,11 +2394,11 @@ export default function HomeScreen() {
           <View style={[styles.todoBoard, showInboxSidePanel && styles.todoBoardWithAssigned]}>
             <View style={styles.todoListPane}>
               <View style={styles.activeTasksBox}>
-                <View style={styles.sortBar}>
+                <View style={[styles.sortBar, { paddingVertical: rowPV }]}>
                   {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
                   <View style={styles.sortCheckboxSpacer} />
                   <Pressable onPress={() => toggleSort('text')} style={[styles.sortColTask, styles.sortColInner]}>
-                    <Text style={[styles.sortColLabel, sortField === 'text' && styles.sortColLabelActive]}>Task</Text>
+                    <Text style={[styles.sortColLabel, sortField === 'text' && styles.sortColLabelActive]}>TASK ({active.length})</Text>
                     {sortField === 'text' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
                   </Pressable>
                   <View style={[styles.sortColPriority, { flexShrink: 0 }]} />
@@ -2381,7 +2414,7 @@ export default function HomeScreen() {
                   keyExtractor={(todo) => todo.id}
                   onDragEnd={handleDragEnd}
                   draggable={!sortField}
-                  style={styles.activeTasksList}
+                  style={[styles.activeTasksList, { maxHeight: rowH * defaultVisibleTaskRows }]}
                   keyboardShouldPersistTaps="handled"
                   renderItem={({ item: todo, drag, isActive }) => {
                     const assigner = getAssignerInfo(todo);
@@ -2398,6 +2431,7 @@ export default function HomeScreen() {
                         onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                         onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
                         onDrag={drag} isDragging={isActive ?? false}
+                        rowPV={rowPV}
                       />
                     );
                   }}
@@ -2413,25 +2447,6 @@ export default function HomeScreen() {
                   }
                   ListFooterComponent={
                     <>
-                      {done.length > 0 && <View style={styles.completedDivider} />}
-                      {done.map((todo) => {
-                        const assigner = getAssignerInfo(todo);
-                        return (
-                          <TodoItem
-                            key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
-                            dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
-                            assignedAt={todo.assigned_at ?? undefined}
-                            assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
-                            assignerInitials={assigner?.initials} assignerColor={assigner?.color}
-                            assignerName={assigner?.name}
-                            onToggle={() => toggle(todo.id)}
-                            onOpenEdit={() => openEditModal(todo)}
-                            onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
-                            onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
-                            reserveDragSpace={Platform.OS === 'web'}
-                          />
-                        );
-                      })}
                       {isPersonal && assignedToMe.length > 0 && !showInboxSidePanel && (
                         <>
                           <View style={styles.sectionDivider}>
@@ -2469,11 +2484,38 @@ export default function HomeScreen() {
                 />
               </View>
 
+              {done.length > 0 && (
+                <View style={styles.completedBox}>
+                  <Text style={[styles.completedBoxHeader, { paddingVertical: rowPV }]}>Completed ({done.length})</Text>
+                  <ScrollView style={[styles.completedBoxScroll, { maxHeight: rowH * 3 }]} scrollEnabled={done.length > 3}>
+                    {done.map((todo) => {
+                      const assigner = getAssignerInfo(todo);
+                      return (
+                        <TodoItem
+                          key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
+                          dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
+                          assignedAt={todo.assigned_at ?? undefined}
+                          assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                          assignerInitials={assigner?.initials} assignerColor={assigner?.color}
+                          assignerName={assigner?.name}
+                          onToggle={() => toggle(todo.id)}
+                          onOpenEdit={() => openEditModal(todo)}
+                          onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
+                          onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                          reserveDragSpace={Platform.OS === 'web'}
+                          rowPV={rowPV}
+                        />
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+
             </View>
 
             {showInboxSidePanel && (
               <View style={styles.assignedToMePanel}>
-                <Text style={styles.assignedToMePanelTitle}>Inbox</Text>
+                <Text style={[styles.assignedToMePanelTitle, { paddingVertical: rowPV }]}>INBOX ({assignedToMe.length})</Text>
                 <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
                   {assignedToMe.map(renderAssignedToMeTodo)}
                 </ScrollView>
@@ -2730,9 +2772,25 @@ export default function HomeScreen() {
             <Pressable onPress={() => { choosePlannedUserFeature('Profile'); setNavExpanded(false); }} style={styles.navDropdownItem}>
               <Text style={styles.navDropdownItemText}>Profile</Text>
             </Pressable>
-            <Pressable onPress={() => { choosePlannedUserFeature('Settings'); setNavExpanded(false); }} style={styles.navDropdownItem}>
-              <Text style={styles.navDropdownItemText}>Settings</Text>
+            <Pressable onPress={() => setSettingsExpanded(v => !v)} style={styles.navDropdownItem}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.navDropdownItemText}>Settings</Text>
+                <Text style={{ fontSize: 11, color: '#9ca3af' }}>{settingsExpanded ? '▲' : '▼'}</Text>
+              </View>
             </Pressable>
+            {settingsExpanded && (
+              <View style={{ paddingBottom: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#9ca3af', paddingHorizontal: 14, paddingVertical: 4, letterSpacing: 0.3 }}>VIEW DENSITY</Text>
+                {(['compact', 'cozy', 'roomy'] as Density[]).map(d => (
+                  <Pressable key={d} style={[styles.navDropdownItem, { paddingLeft: 20 }]} onPress={() => setDensity(d)}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ fontSize: 11, color: '#6366f1', width: 12 }}>{density === d ? '✓' : ''}</Text>
+                      <Text style={styles.navDropdownItemText}>{d.charAt(0).toUpperCase() + d.slice(1)}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
             <Pressable onPress={() => { setAboutVisible(true); setNavExpanded(false); }} style={styles.navDropdownItem}>
               <Text style={styles.navDropdownItemText}>About</Text>
             </Pressable>
@@ -3107,62 +3165,169 @@ export default function HomeScreen() {
         onRequestClose={closeEditModal}
       >
         <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
-          <Pressable style={styles.calendarCard}>
+          <Pressable style={[styles.calendarCard, { width: 340, maxHeight: '85%' }]}>
             <Text style={styles.editModalTitle}>Edit Todo</Text>
-            <TextInput
-              style={styles.editModalInput}
-              value={editDraftText}
-              onChangeText={setEditDraftText}
-              placeholder="Task"
-              placeholderTextColor="#9ca3af"
-              returnKeyType="done"
-              autoFocus
-            />
-            <TextInput
-              style={[styles.editModalInput, styles.editModalNoteInput]}
-              value={editDraftNote}
-              onChangeText={setEditDraftNote}
-              placeholder="Add a note..."
-              placeholderTextColor="#9ca3af"
-              multiline
-            />
-            {isProject && phases.length > 0 && (
-              <>
-                <Text style={styles.editModalSectionLabel}>Phase</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-                  <Pressable
-                    onPress={() => setEditDraftPhaseId(null)}
-                    style={[styles.phasePill, !editDraftPhaseId && styles.phasePillActive]}
-                  >
-                    <Text style={[styles.phasePillText, !editDraftPhaseId && styles.phasePillTextActive]}>
-                      None
-                    </Text>
-                  </Pressable>
-                  {phases.map((phase) => (
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <TextInput
+                style={styles.editModalInput}
+                value={editDraftText}
+                onChangeText={setEditDraftText}
+                placeholder="Task"
+                placeholderTextColor="#9ca3af"
+                returnKeyType="done"
+                autoFocus
+              />
+              <TextInput
+                style={[styles.editModalInput, styles.editModalNoteInput]}
+                value={editDraftNote}
+                onChangeText={setEditDraftNote}
+                placeholder="Add a note..."
+                placeholderTextColor="#9ca3af"
+                multiline
+              />
+
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>Priority</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+              <View style={styles.priorityPickerRow}>
+                {priorities.map((p) => {
+                  const isActive = editDraftPriority === p;
+                  return (
                     <Pressable
-                      key={phase.id}
-                      onPress={() => setEditDraftPhaseId(phase.id)}
-                      style={[styles.phasePill, editDraftPhaseId === phase.id && styles.phasePillActive]}
+                      key={p}
+                      onPress={() => setEditDraftPriority(p)}
+                      style={[
+                        styles.priorityPickerBtn,
+                        isActive
+                          ? { backgroundColor: priorityColors[p], borderColor: priorityColors[p] }
+                          : { backgroundColor: '#f3f4f6', borderColor: 'transparent' },
+                      ]}
                     >
-                      <Text style={[styles.phasePillText, editDraftPhaseId === phase.id && styles.phasePillTextActive]}>
-                        {phase.name}
+                      <Text style={[styles.priorityPickerLabel, { color: isActive ? '#fff' : priorityColors[p] }]}>
+                        {p[0].toUpperCase() + p.slice(1)}
                       </Text>
                     </Pressable>
-                  ))}
-                </ScrollView>
-              </>
-            )}
-            {isProject && (
-              <Pressable
-                onPress={() => editTodo && toggleMilestone(editTodo).then(closeEditModal)}
-                style={[styles.milestoneToggle, editTodo?.is_milestone && styles.milestoneToggleActive]}
-              >
-                <Text style={[styles.milestoneToggleText, editTodo?.is_milestone && styles.milestoneToggleTextActive]}>
-                  {editTodo?.is_milestone ? '◆ Milestone' : '◇ Mark as milestone'}
-                </Text>
-              </Pressable>
-            )}
-            <View style={styles.editModalActions}>
+                  );
+                })}
+              </View>
+
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>Due Date</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+              <View style={styles.calendarHeader}>
+                <Pressable
+                  onPress={() => setEditDraftDueDateMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+                  style={styles.calendarNavBtn}
+                >
+                  <Text style={styles.calendarNavText}>‹</Text>
+                </Pressable>
+                <Text style={styles.calendarTitle}>{monthLabel(editDraftDueDateMonth)}</Text>
+                <Pressable
+                  onPress={() => setEditDraftDueDateMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+                  style={styles.calendarNavBtn}
+                >
+                  <Text style={styles.calendarNavText}>›</Text>
+                </Pressable>
+              </View>
+              <View style={styles.weekdayRow}>
+                {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+                  <Text key={d} style={styles.weekdayText}>{d}</Text>
+                ))}
+              </View>
+              <View style={styles.calendarGrid}>
+                {editDraftCalendarDays.map((date, index) => {
+                  const selectedDate = parseDateValue(editDraftDueDate);
+                  const isSelected = !!date && !!selectedDate && isSameDate(date, selectedDate);
+                  const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+                  const isCurrentDay = !!date && isSameDate(date, todayDate);
+                  return (
+                    <Pressable
+                      key={date ? formatDateValue(date) : `blank-${index}`}
+                      onPress={() => date && setEditDraftDueDate(
+                        editDraftDueDate && isSameDate(date, parseDateValue(editDraftDueDate)!)
+                          ? null : formatDateValue(date)
+                      )}
+                      style={[
+                        styles.calendarDay,
+                        !date && styles.calendarDayBlank,
+                        isCurrentDay && styles.calendarDayToday,
+                        isSelected && styles.calendarDaySelected,
+                      ]}
+                    >
+                      <Text style={[
+                        styles.calendarDayText,
+                        isCurrentDay && styles.calendarDayTodayText,
+                        isSelected && styles.calendarDaySelectedText,
+                      ]}>
+                        {date?.getDate() ?? ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              {editDraftDueDate && (
+                <Pressable onPress={() => setEditDraftDueDate(null)} style={{ alignItems: 'center', paddingVertical: 6 }}>
+                  <Text style={styles.calendarCancelText}>Clear date</Text>
+                </Pressable>
+              )}
+
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>Estimate</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+              <TextInput
+                style={styles.editModalInput}
+                value={editDraftEstimate}
+                onChangeText={setEditDraftEstimate}
+                placeholder="e.g. 30m, 2h, 1d"
+                placeholderTextColor="#9ca3af"
+                returnKeyType="done"
+              />
+
+              {isProject && phases.length > 0 && (
+                <>
+                  <Text style={styles.editModalSectionLabel}>Phase</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                    <Pressable
+                      onPress={() => setEditDraftPhaseId(null)}
+                      style={[styles.phasePill, !editDraftPhaseId && styles.phasePillActive]}
+                    >
+                      <Text style={[styles.phasePillText, !editDraftPhaseId && styles.phasePillTextActive]}>
+                        None
+                      </Text>
+                    </Pressable>
+                    {phases.map((phase) => (
+                      <Pressable
+                        key={phase.id}
+                        onPress={() => setEditDraftPhaseId(phase.id)}
+                        style={[styles.phasePill, editDraftPhaseId === phase.id && styles.phasePillActive]}
+                      >
+                        <Text style={[styles.phasePillText, editDraftPhaseId === phase.id && styles.phasePillTextActive]}>
+                          {phase.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+              {isProject && (
+                <Pressable
+                  onPress={() => editTodo && toggleMilestone(editTodo).then(closeEditModal)}
+                  style={[styles.milestoneToggle, editTodo?.is_milestone && styles.milestoneToggleActive]}
+                >
+                  <Text style={[styles.milestoneToggleText, editTodo?.is_milestone && styles.milestoneToggleTextActive]}>
+                    {editTodo?.is_milestone ? '◆ Milestone' : '◇ Mark as milestone'}
+                  </Text>
+                </Pressable>
+              )}
+            </ScrollView>
+
+            <View style={[styles.editModalActions, { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb', paddingTop: 12 }]}>
               <Pressable onPress={() => editTodo && archiveTodo(editTodo.id)}>
                 <Text style={styles.archiveBtnText}>Archive</Text>
               </Pressable>
@@ -3365,6 +3530,34 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: '#e5e7eb',
   },
+  completedBox: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fafafa',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  completedBoxHeader: {
+    paddingVertical: 7,
+    paddingLeft: 62,
+    paddingRight: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#d1d5db',
+    backgroundColor: '#f3f4f6',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    letterSpacing: 0.3,
+  },
+  completedPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#166534',
+    letterSpacing: 0.3,
+  },
+  completedBoxScroll: {
+    maxHeight: todoRowHeight * 3,
+  },
   assignedToMePanel: {
     width: 340,
     maxWidth: '36%',
@@ -3378,14 +3571,13 @@ const styles = StyleSheet.create({
   assignedToMePanelTitle: {
     paddingHorizontal: 16,
     paddingVertical: 7,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#d1d5db',
+    backgroundColor: '#f3f4f6',
     color: '#9ca3af',
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 16,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   assignedToMePanelList: {
     maxHeight: incomingRowHeight * defaultVisibleTaskRows,
@@ -3414,7 +3606,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 28,
+    marginTop: 24,
+    marginBottom: 8,
   },
   authSubtitleText: {
     color: '#6b7280',
@@ -3425,27 +3618,48 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  socialBtn: {
+  socialGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  socialGridBtn: {
+    flexBasis: '47%',
+    flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 52,
+    height: 48,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
-    marginBottom: 12,
     backgroundColor: '#fff',
+    gap: 8,
+  },
+  socialGridBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
   },
   googleG: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '700',
     color: '#4285F4',
-    marginRight: 10,
+  },
+  appleIcon: {
+    fontSize: 18,
+    color: '#111827',
+    lineHeight: 22,
+  },
+  githubIcon: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.5,
   },
   ssoIcon: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#6b7280',
-    marginRight: 10,
   },
   socialBtnText: {
     fontSize: 15,
@@ -3464,7 +3678,7 @@ const styles = StyleSheet.create({
   },
   authDividerText: {
     color: '#6b7280',
-    fontSize: 14,
+    fontSize: 13,
     paddingHorizontal: 12,
   },
   authMessage: {
@@ -3475,17 +3689,17 @@ const styles = StyleSheet.create({
   },
   authConfirmMessage: {
     color: '#dc2626',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
     paddingVertical: 14,
   },
   authInput: {
     height: 52,
-    backgroundColor: '#fff',
+    backgroundColor: '#eef2ff',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#c7d2fe',
     paddingHorizontal: 16,
     fontSize: 15,
     color: '#111827',
@@ -3504,15 +3718,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: 52,
-    backgroundColor: '#fff',
+    backgroundColor: '#eef2ff',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#c7d2fe',
     paddingHorizontal: 16,
     marginTop: 12,
   },
   authPasswordInput: {
     flex: 1,
+    height: '100%',
     fontSize: 15,
     color: '#111827',
   },
@@ -3534,16 +3749,16 @@ const styles = StyleSheet.create({
   },
   authSubmitBtnText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   forgotBtn: {
-    alignItems: 'center',
-    marginTop: 16,
+    alignItems: 'flex-end',
+    marginTop: 12,
   },
   forgotBtnText: {
     color: '#6366f1',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   authFooter: {
@@ -3552,7 +3767,7 @@ const styles = StyleSheet.create({
   },
   authFooterText: {
     color: '#9ca3af',
-    fontSize: 14,
+    fontSize: 13,
   },
   accountMenuButton: {
     flexDirection: 'row',
@@ -3569,7 +3784,7 @@ const styles = StyleSheet.create({
   },
   accountMenuCaret: {
     color: '#6366f1',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     marginLeft: 6,
   },
@@ -3590,7 +3805,7 @@ const styles = StyleSheet.create({
   },
   accountMenuName: {
     color: '#111827',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     paddingHorizontal: 12,
     paddingTop: 8,
@@ -3598,7 +3813,7 @@ const styles = StyleSheet.create({
   },
   accountMenuEmail: {
     color: '#6b7280',
-    fontSize: 12,
+    fontSize: 11,
     paddingHorizontal: 12,
     paddingTop: 2,
     paddingBottom: 8,
@@ -3611,7 +3826,7 @@ const styles = StyleSheet.create({
   },
   accountMenuItemText: {
     color: '#111827',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   accountMenuItemTextActive: {
@@ -3649,7 +3864,7 @@ const styles = StyleSheet.create({
   },
   accountMenuSignOutText: {
     color: '#6366f1',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   teamPanel: {
@@ -3705,7 +3920,7 @@ const styles = StyleSheet.create({
   },
   workspaceAddText: {
     color: '#6366f1',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     lineHeight: 22,
   },
@@ -3772,7 +3987,7 @@ const styles = StyleSheet.create({
   },
   teamCardAvatarText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   teamCardName: {
@@ -3782,7 +3997,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   teamCardMeta: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
   },
   teamCardAddBtn: {
@@ -3816,7 +4031,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   teamCardNewIcon: {
-    fontSize: 24,
+    fontSize: 22,
     color: '#d1d5db',
     fontWeight: '300',
     lineHeight: 28,
@@ -3834,7 +4049,7 @@ const styles = StyleSheet.create({
   },
   panelTitle: {
     color: '#111827',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     marginBottom: 8,
   },
@@ -3848,7 +4063,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     marginRight: 8,
-    fontSize: 12,
+    fontSize: 11,
   },
   compactForm: {
     flexDirection: 'row',
@@ -3861,7 +4076,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
     borderRadius: 8,
     paddingHorizontal: 12,
-    fontSize: 14,
+    fontSize: 13,
     color: '#111827',
     marginRight: 8,
   },
@@ -3896,7 +4111,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
     borderRadius: 10,
     paddingHorizontal: 14,
-    fontSize: 16,
+    fontSize: 15,
     color: '#111827',
   },
   assigneePill: {
@@ -3913,7 +4128,7 @@ const styles = StyleSheet.create({
   },
   assigneePillText: {
     color: '#374151',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   assigneePillTextActive: {
@@ -3947,7 +4162,7 @@ const styles = StyleSheet.create({
     margin: 16,
     padding: 12,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: 13,
   },
   message: {
     color: '#166534',
@@ -3955,7 +4170,7 @@ const styles = StyleSheet.create({
     margin: 16,
     padding: 12,
     borderRadius: 8,
-    fontSize: 14,
+    fontSize: 13,
   },
   toast: {
     position: 'absolute',
@@ -4067,7 +4282,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6366f1',
   },
   calendarDayText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#374151',
   },
   calendarDayTodayText: {
@@ -4089,15 +4304,15 @@ const styles = StyleSheet.create({
   calendarActionText: {
     color: '#6366f1',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   calendarCancelText: {
     color: '#9ca3af',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 13,
   },
   editModalTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#111827',
     marginBottom: 14,
@@ -4158,10 +4373,11 @@ const styles = StyleSheet.create({
   sortColDue: {
     width: 64,
     marginLeft: 8,
+    paddingLeft: 6,
   },
   sortColAgeGap: {
     width: 56,
-    marginLeft: 8,
+    marginLeft: 2,
     flexShrink: 0,
   },
   sortColAdded: {
@@ -4175,7 +4391,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   sortColIndicator: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#c4c9d4',
   },
   sortColLabelActive: {
@@ -4260,7 +4476,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   userNavSectionTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#9ca3af',
     textTransform: 'uppercase',
@@ -4307,7 +4523,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   navDropdownName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#111827',
     paddingHorizontal: 14,
@@ -4331,17 +4547,17 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   navDropdownStatusText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
     fontStyle: 'italic',
   },
   navDropdownStatusPlaceholder: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#d1d5db',
     fontStyle: 'italic',
   },
   navDropdownStatusInput: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
     fontStyle: 'italic',
     marginHorizontal: 10,
@@ -4370,14 +4586,14 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   navDropdownSectionTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: '#9ca3af',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   navDropdownSectionAction: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6b7280',
     fontWeight: '700',
   },
@@ -4386,7 +4602,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   navDropdownItemText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#111827',
   },
   navDropdownItemTextActive: {
@@ -4398,7 +4614,7 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   navDropdownSignOutText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#ef4444',
   },
   userAvatarBig: {
@@ -4411,7 +4627,7 @@ const styles = StyleSheet.create({
   },
   userAvatarBigText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
   },
   userAvatarBigAnimal: {
@@ -4428,12 +4644,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   userMetaName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#111827',
   },
   userNavChevron: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#9ca3af',
     lineHeight: 14,
   },
@@ -4455,17 +4671,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
     fontStyle: 'italic',
   },
   statusPlaceholder: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#d1d5db',
   },
   statusInput: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
     fontStyle: 'italic',
     paddingVertical: 0,
@@ -4487,12 +4703,12 @@ const styles = StyleSheet.create({
     maxWidth: 360,
   },
   searchIcon: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#9ca3af',
   },
   searchPlaceholder: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: '#9ca3af',
   },
   searchShortcut: {
@@ -4512,7 +4728,7 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   titleBarTimeText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#111827',
     marginTop: 2,
@@ -4651,7 +4867,7 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   kanbanAddColText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#9ca3af',
   },
@@ -4667,7 +4883,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   backlogLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#6b7280',
     letterSpacing: 0.5,
@@ -4755,7 +4971,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   backlogCancelText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#9ca3af',
     lineHeight: 20,
   },
@@ -4843,7 +5059,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   aboutText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#374151',
     lineHeight: 22,
     marginBottom: 12,
@@ -4900,7 +5116,7 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   projectTeamBarCaret: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#d1d5db',
   },
   teamLinkRow: {
@@ -4926,12 +5142,12 @@ const styles = StyleSheet.create({
   },
   teamLinkRowText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#111827',
   },
   teamLinkMeta: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#9ca3af',
   },
   colAssigneeRow: {
@@ -4993,12 +5209,12 @@ const styles = StyleSheet.create({
   },
   assigneePickerName: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: '#111827',
     fontWeight: '500',
   },
   assigneePickerCheck: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#6366f1',
     fontWeight: '700',
     flexShrink: 0,
@@ -5009,7 +5225,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   orgMemberManageIcon: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#9ca3af',
   },
   manageMemberAction: {
@@ -5019,12 +5235,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   manageMemberActionText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#111827',
   },
   manageMemberActionNote: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
     marginTop: 2,
   },
@@ -5086,7 +5302,7 @@ const styles = StyleSheet.create({
   pickerConfirmText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 13,
   },
   archiveBtnText: {
     fontSize: 13,
@@ -5109,7 +5325,7 @@ const styles = StyleSheet.create({
   },
   archivedText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: '#9ca3af',
     textDecorationLine: 'line-through',
   },
@@ -5120,16 +5336,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   unarchiveBtnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#6b7280',
   },
   assignedToMeRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 10,
+    alignItems: 'center',
+    paddingVertical: 7,
     paddingHorizontal: 16,
-    gap: 10,
+    gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
   },
@@ -5159,33 +5375,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  assignedToMeTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   assignedToMeText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     color: '#111827',
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  assignedToMeMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 3,
-    flexWrap: 'wrap',
   },
   assignedToMeContext: {
     fontSize: 11,
-    color: '#6b7280',
-    fontWeight: '500',
+    color: '#9ca3af',
+    flexShrink: 1,
   },
   assignedToMeDue: {
     fontSize: 11,
-    color: '#6b7280',
+    color: '#9ca3af',
+    flexShrink: 0,
   },
   assignedToMeDueOverdue: {
     color: '#dc2626',
@@ -5201,7 +5404,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   assignedToMePriorityText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
   },
   priorityPickerRow: {
@@ -5218,7 +5421,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   priorityPickerLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
 });

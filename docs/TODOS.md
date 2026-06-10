@@ -17,6 +17,23 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Workspace switching uses tabs for Personal, with Projects planned.
 - Teams and Organizations live under the account/admin menu.
 
+## Personal Workspace
+
+- In the Personal workspace header/toolbar, add a toggle button with tooltip "Show personal items" that filters the list to todos belonging to the user's personal account (not assigned from other workspaces, not team todos). Useful when the inbox is crowded and the user just wants to focus on their own private work.
+- The filter should be remembered per session (or persisted in user prefs). A filled/highlighted icon indicates the filter is active.
+- Consider pairing with a complementary "Show assigned" toggle so users can quickly switch between personal-only, assigned-only, and all.
+
+## Auth UX
+
+- **"Continue as [Name]"** — when a returning user hits the login screen, detect the previously signed-in account (from local storage / last session) and surface a single-tap "Continue as [Name]" button with their avatar and email, similar to ClickUp and Google's account-picker pattern. Eliminates re-typing credentials for the common case. Falls back to the full email+password form if dismissed or if no prior session exists.
+- The button should show: avatar (photo > animal emoji > initials), display name, and email. A chevron or "switch account" link lets the user pick a different account instead.
+- For OAuth accounts (Google, Apple, GitHub), tapping "Continue as" re-triggers the same OAuth flow silently if the provider session is still valid, or opens the provider picker if not.
+- Store the last-used identity hint (display name, avatar URL, email, auth method) in `localStorage` / `AsyncStorage` — NOT a credential. Clear it on explicit sign-out.
+
+## Design System
+
+- **UI Element Design Principles** — document visual and interaction design principles for each recurring UI element type to guide consistent implementation and future decisions. Candidates: row items (task, inbox, completed), section headers, action buttons, pills/badges, modals/cards, tooltips, input fields, avatar chips, priority indicators, due date pills. For each: define spacing, typography, color, interaction state (hover/active/disabled), and the intent behind the choices. Goal is a living reference that prevents element-by-element ad-hoc decisions and makes new panels/views self-consistent from the start.
+
 ## Near-Term
 
 - Keep add-todo quick capture limited to a single todo text input.
@@ -151,4 +168,4 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Consider advanced branding as a paid feature for companies or larger teams.
 - Add built-in skins/themes (e.g. light, dark, high-contrast, color accents) for users to choose from without requiring custom branding.
 - Keep theme selection as a personal preference; team or company branding can override or extend it.
-- Let users choose todo list density or spacing preferences for tighter or roomier task rows.
+- **Display Density** — add a density picker (Compact / Cozy / Roomy) similar to Outlook's Display Density menu. Controls `paddingVertical` on all rows and section headers. Compact: 4px vertical. Cozy: 7px (current default). Roomy: 12px. The chosen value replaces the `micro` spacing token at runtime and applies uniformly to every row in every pane (tasks, completed, inbox). Persist the selection in user prefs. Show a checkmark next to the active choice like Outlook does.

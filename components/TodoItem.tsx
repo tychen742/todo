@@ -24,6 +24,7 @@ type Props = {
   onDrag?: () => void;
   reserveDragSpace?: boolean;
   isDragging?: boolean;
+  rowPV?: number;
 };
 
 const priorityLabels = {
@@ -100,18 +101,43 @@ export default function TodoItem({
   onDrag,
   reserveDragSpace = false,
   isDragging = false,
+  rowPV = 7,
 }: Props) {
   const [priorityHovered, setPriorityHovered] = useState(false);
   const [assignerHovered, setAssignerHovered] = useState(false);
   const [ageHovered, setAgeHovered] = useState(false);
+  const [dueDateHovered, setDueDateHovered] = useState(false);
 
   const duePill = dueDatePill(dueDate);
   const ageTimestamp = assignedAt ?? createdAt;
   const ageLabel = assignedAt ? 'Assigned' : 'Created';
   const age = agePill(ageTimestamp);
 
+  const dueDateTooltip = (() => {
+    if (!dueDate) return null;
+    const [y, m, d] = dueDate.split('-').map(Number);
+    if (!y || !m || !d) return null;
+    const dueDay = new Date(y, m - 1, d);
+    const full = dueDay.toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
+    const diffMs = dueDay.getTime() - Date.now();
+    const absDiff = Math.abs(diffMs);
+    const totalHours = Math.floor(absDiff / 3600000);
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    const past = diffMs < 0;
+    let relative: string;
+    if (days === 0 && hours === 0) relative = 'Due now';
+    else if (days === 0) relative = past ? `${hours}h overdue` : `In ${hours}h`;
+    else if (hours === 0) relative = past ? `${days} day${days !== 1 ? 's' : ''} overdue` : `In ${days} day${days !== 1 ? 's' : ''}`;
+    else relative = past
+      ? `${days} day${days !== 1 ? 's' : ''} and ${hours}h overdue`
+      : `In ${days} day${days !== 1 ? 's' : ''} and ${hours}h`;
+    return { full, relative };
+  })();
+
   return (
-    <View style={[styles.row, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone, ageHovered && styles.rowTooltipActive]}>
+    <View style={[styles.rowOuter, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone, (ageHovered || dueDateHovered) && styles.rowTooltipActive]}>
+    <View style={[styles.row, { paddingVertical: rowPV }]}>
       {!!onDrag && (
         <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
           <Text style={styles.dragHandleText}>⠿</Text>
@@ -193,7 +219,13 @@ export default function TodoItem({
         </Pressable>
       )}
 
-      <Pressable onPress={onDueDate} disabled={!onDueDate} style={styles.dueDateCol}>
+      <Pressable
+        onPress={onDueDate}
+        disabled={!onDueDate && !duePill}
+        onHoverIn={() => setDueDateHovered(true)}
+        onHoverOut={() => setDueDateHovered(false)}
+        style={styles.dueDateCol}
+      >
         {duePill ? (
           <View style={[styles.pill, { backgroundColor: duePill.bg }]}>
             <Text style={[styles.pillText, { color: duePill.color }]} numberOfLines={1}>
@@ -201,7 +233,13 @@ export default function TodoItem({
             </Text>
           </View>
         ) : (
-          <Text style={styles.pillEmpty}>—</Text>
+          onDueDate ? <Text style={styles.pillEmpty}>+ date</Text> : null
+        )}
+        {dueDateHovered && Platform.OS === 'web' && dueDateTooltip && (
+          <View style={styles.dueDateTooltip}>
+            <Text style={styles.tooltipText}>Due: {dueDateTooltip.full}</Text>
+            <Text style={styles.tooltipText}>{dueDateTooltip.relative}</Text>
+          </View>
         )}
       </Pressable>
 
@@ -228,17 +266,26 @@ export default function TodoItem({
         )}
       </Pressable>
     </View>
+    <View style={styles.rowSeparator} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rowOuter: {
+    flexDirection: 'column',
+    zIndex: 0,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 7,
     paddingRight: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+  },
+  rowSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#e5e7eb',
+    marginLeft: 32,
   },
   checkbox: {
     marginRight: 12,
@@ -266,7 +313,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   text: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#111827',
   },
   textDone: {
@@ -298,7 +345,7 @@ const styles = StyleSheet.create({
   },
   assignee: {
     color: '#6b7280',
-    fontSize: 12,
+    fontSize: 11,
     maxWidth: 96,
   },
   dueDateCol: {
@@ -307,7 +354,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   ageCol: {
-    marginLeft: 8,
+    marginLeft: 2,
     width: 56,
     alignItems: 'flex-start',
   },
@@ -321,8 +368,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   pillEmpty: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#d1d5db',
+    fontWeight: '500',
+    paddingLeft: 6,
   },
   agePill: {
     borderRadius: 5,
@@ -360,7 +409,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   milestoneIcon: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#d97706',
   },
   textMilestone: {
@@ -418,6 +467,18 @@ const styles = StyleSheet.create({
     zIndex: 100,
     minWidth: 80,
     alignItems: 'center',
+  },
+  dueDateTooltip: {
+    position: 'absolute',
+    bottom: 24,
+    right: 0,
+    backgroundColor: '#374151',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 100,
+    minWidth: 190,
+    alignItems: 'flex-start',
   },
   ageTooltip: {
     position: 'absolute',

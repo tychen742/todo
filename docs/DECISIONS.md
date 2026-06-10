@@ -75,6 +75,68 @@ Reason: real photos make the product feel human and are the foundation for prese
 
 **Tap to change:** tapping the avatar anywhere in the app (title bar, profile screen) should open the same picker — upload a photo or choose an emoji.
 
+## 2026-06-10: Section Header Style Is Uniform Across All Panels
+
+Decision: every section or panel header in the app — task list, completed, inbox, and any future panel — must share the same visual style.
+
+**Canonical header style:**
+
+- `paddingVertical: 7`, `paddingRight: 16`
+- `paddingLeft` aligned to where the entry item's text begins in that panel
+- `backgroundColor: '#f3f4f6'`
+- `borderBottomWidth: 1`, `borderBottomColor: '#d1d5db'`
+- `fontSize: 11`, `fontWeight: '700'`, `color: '#9ca3af'`, `letterSpacing: 0.3`
+- No `textTransform: 'uppercase'` — sentence case only (e.g. "Completed", not "COMPLETED")
+- Include item count where relevant: "Task (8)", "Completed (11)", "Inbox (4)"
+
+Reason: visual consistency across all list panels reduces cognitive load. Headers that differ in size, weight, case, or background make the app feel like a collection of features rather than a coherent product.
+
+## 2026-06-10: Spacing and Padding — Three-Value System
+
+Decision: all spacing in the app uses three values. No intermediate values may be introduced.
+
+| Token   | Value | Used for                                                                    |
+|---------|-------|-----------------------------------------------------------------------------|
+| `micro` | 7px   | Vertical padding on every row item and section header                       |
+| `macro` | 12px  | Gap between panes, outer board breathing room                               |
+| `card`  | 16px  | Internal padding for modals and floating cards; right-edge padding on rows  |
+
+**Personal view pane rules:**
+
+- `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
+- Section headers (TASK, Completed, INBOX): `paddingVertical: 7`, `paddingRight: 16`
+- All row items (todo rows, completed rows, inbox rows): `paddingVertical: 7`, `paddingRight: 16`
+- Row left edge: determined by column structure (drag handle + checkbox), not by a padding value
+- Modals and calendar cards: `padding: 16`
+
+**Height consistency rule:** every row in every pane — active tasks, completed, inbox — must use `paddingVertical: 7`. Using any other vertical padding on a row is a bug.
+
+Reason: inconsistent vertical padding is the primary cause of rows feeling different heights across panes. A single micro value (7px) applied uniformly makes all rows visually equal regardless of which pane they appear in.
+
+## 2026-06-10: Typography Scale — 5 Sizes
+
+Decision: the app uses exactly five font sizes. No other sizes may be introduced without updating this decision.
+
+| Token | Size | Used for                                                           |
+|-------|----- |--------------------------------------------------------------------|
+| `xs`  | 11px | Metadata, pills, sort headers, note previews, tooltips, phase tags |
+| `sm`  | 13px | Secondary labels, tab text, button labels, inbox metadata          |
+| `md`  | 15px | Primary body text, todo item text, inputs                          |
+| `lg`  | 18px | Modal titles, section headings, icons                              |
+| `xl`  | 22px | Large display elements (calendar nav, workspace add button)        |
+
+**Exceptions (do not expand):**
+
+- 9px: avatar initials inside tiny (18px) avatar circles — cannot be raised without clipping
+- 26px: auth screen "Welcome back!" hero heading and animal emoji picker cells — display-only, not UI chrome
+
+Reason: the codebase had 14 distinct font sizes (9–26px) before this decision. That many sizes make the visual hierarchy incoherent and make UI reviews slow. Five sizes cover every UI layer with clear semantic meaning. All new styles must pick from the scale; never introduce an in-between value like 14 or 16.
+
+**Implementation note — React Native sizing:**
+React Native `fontSize` values are density-independent points, not literal screen pixels. They behave like `pt` on iOS and `dp` on Android, so they automatically scale across screen densities without using `rem` or `em`. Web best-practice guidance to use `rem`/`em` does not apply here; our integer values are already device-agnostic.
+
+However, Dynamic Type (iOS) and font scaling (Android accessibility settings) are a separate concern. React Native respects the system font scale by default (`allowFontScaling` defaults to `true`). This means our `xs` (11px) items could become unreadably small if a user has reduced their system font size, or overflow their containers if enlarged. To do: audit small-text and fixed-width containers for scaling robustness before the first public release.
+
 ## 2026-06-08: Calendar Integrations Are Future Optional User Integrations
 
 Decision: Outlook Calendar and Google Calendar integration should be planned, but not required for core todo use.

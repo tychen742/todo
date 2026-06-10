@@ -817,3 +817,5 @@ begin
     alter publication supabase_realtime add table task_comments;
   end if;
 end $$;
+
+alter table todos add column if not exists estimate text;
