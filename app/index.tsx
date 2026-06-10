@@ -9,11 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 import { DraggableList } from '../components/DraggableList';
 import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
 import type { Session } from '@supabase/supabase-js';
+import { ArrowLeft, Clock } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import PhaseStrip, { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -23,10 +25,15 @@ type Todo = {
   text: string;
   done: boolean;
   assigned_to: string | null;
+  created_by: string | null;
   priority: Priority;
   due_date: string | null;
   note: string | null;
   created_at: string;
+  assigned_at: string | null;
+  accepted_at: string | null;
+  completed_at: string | null;
+  archived_at: string | null;
   position: number | null;
   is_milestone: boolean;
   project_id: string | null;
@@ -51,6 +58,7 @@ type Project = {
   id: string;
   name: string;
   team_id: string | null;
+  archived_at: string | null;
 };
 
 type Member = {
@@ -72,12 +80,39 @@ type SortField = 'text' | 'priority' | 'due_date' | 'created_at';
 type CreateTarget = 'team' | 'organization' | 'project';
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
+const defaultVisibleTaskRows = 5;
+const todoRowHeight = 88;
+const incomingRowHeight = 106;
+const taskHeaderHeight = 42;
+const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
+const incomingBoxMaxHeight = taskHeaderHeight + incomingRowHeight * defaultVisibleTaskRows;
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0,
   high: 1,
   normal: 2,
   low: 3,
+};
+
+const priorityColors: Record<Priority, string> = {
+  low: '#9ca3af',
+  normal: '#60a5fa',
+  high: '#f59e0b',
+  urgent: '#ef4444',
+};
+
+const assignedPriorityColors: Record<Priority, string> = {
+  low: '#d1fae5',
+  normal: '#e0e7ff',
+  high: '#fef3c7',
+  urgent: '#fee2e2',
+};
+
+const assignedPriorityTextColors: Record<Priority, string> = {
+  low: '#065f46',
+  normal: '#3730a3',
+  high: '#92400e',
+  urgent: '#991b1b',
 };
 
 function sortTodos(items: Todo[]) {
@@ -283,11 +318,52 @@ function pickAvatarAnimal(seed: string): string {
   return AVATAR_ANIMALS[Math.abs(h) % AVATAR_ANIMALS.length];
 }
 
+const priorityLabels: Record<string, string> = {
+  low: 'Low',
+  normal: 'Normal',
+  high: 'High',
+  urgent: 'Urgent',
+};
+
+function InboxAssignerAvatar({ initials, color, tooltip }: { initials: string; color: string; tooltip: string }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Pressable
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={ias.wrap}
+      hitSlop={4}
+    >
+      <View style={[ias.avatar, { backgroundColor: color }]}>
+        <Text style={ias.initials}>{initials}</Text>
+      </View>
+      {hovered && Platform.OS === 'web' && (
+        <View style={ias.tooltip}>
+          <Text style={ias.tooltipText}>{tooltip}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+const ias = StyleSheet.create({
+  wrap: { position: 'relative' },
+  avatar: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  initials: { fontSize: 9, fontWeight: '700', color: '#fff' },
+  tooltip: {
+    position: 'absolute', bottom: 26, right: 0, backgroundColor: '#111827',
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, zIndex: 100, minWidth: 80,
+  },
+  tooltipText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+});
+
 export default function HomeScreen() {
+  const { width } = useWindowDimensions();
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState<'signIn' | 'signUp'>('signIn');
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const [navExpanded, setNavExpanded] = useState(false);
+  const [statusEditing, setStatusEditing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -317,7 +393,6 @@ export default function HomeScreen() {
   const [animalPickerVisible, setAnimalPickerVisible] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
-  const [statusEditing, setStatusEditing] = useState(false);
   const [orgModalId, setOrgModalId] = useState<string | null>(null);
   const [orgModalMembers, setOrgModalMembers] = useState<Member[]>([]);
   const [orgMemberEmail, setOrgMemberEmail] = useState('');
@@ -325,6 +400,7 @@ export default function HomeScreen() {
   const [assigneeTodo, setAssigneeTodo] = useState<Todo | null>(null);
   const [assigneePickerUserId, setAssigneePickerUserId] = useState<string | null>(null);
   const [assigneePickerDueDate, setAssigneePickerDueDate] = useState<string | null>(null);
+  const [assigneePickerPriority, setAssigneePickerPriority] = useState<Priority>('normal');
   const [assigneePickerMonth, setAssigneePickerMonth] = useState(() => new Date());
   const [assignedToMe, setAssignedToMe] = useState<Todo[]>([]);
   const [memberEmail, setMemberEmail] = useState('');
@@ -342,10 +418,20 @@ export default function HomeScreen() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [toast, setToast] = useState('');
+  const [hoveredInboxId, setHoveredInboxId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
 
   const isProject = selectedProjectId !== null;
   const isPersonal = selectedTeamId === null && !isProject;
+  const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal && assignedToMe.length > 0;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
   const active = useMemo(() => {
@@ -374,6 +460,16 @@ export default function HomeScreen() {
     [members]
   );
   const phaseById = useMemo(() => new Map(phases.map((p) => [p.id, p])), [phases]);
+
+  function showToast(text: string) {
+    setToast(text);
+  }
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = setTimeout(() => setToast(''), 3000);
+    return () => clearTimeout(timeout);
+  }, [toast]);
   const nextMilestone = useMemo(() => {
     if (!isProject) return null;
     const todayMidnight = new Date();
@@ -469,7 +565,8 @@ export default function HomeScreen() {
     if (!session) return;
     const { data, error: err } = await supabase
       .from('projects')
-      .select('id, name, team_id')
+      .select('id, name, team_id, archived_at')
+      .is('archived_at', null)
       .order('created_at', { ascending: true });
     if (!err) setProjects(data ?? []);
   }, [session]);
@@ -551,16 +648,20 @@ export default function HomeScreen() {
     setLoading(true);
     let query = supabase
       .from('todos')
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id, team_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
+      .is('archived_at', null)
       .order('created_at', { ascending: false });
 
     if (selectedProjectId) {
       query = query.eq('project_id', selectedProjectId);
     } else {
-      query = selectedTeamId
-        ? query.eq('team_id', selectedTeamId)
-        : query.is('team_id', null);
-      query = query.is('project_id', null);
+      if (selectedTeamId) {
+        query = query.eq('team_id', selectedTeamId).is('project_id', null);
+      } else if (session) {
+        query = query.or(
+          `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
+        );
+      }
     }
 
     const { data, error: loadError } = await query;
@@ -572,23 +673,52 @@ export default function HomeScreen() {
       setError('');
     }
     setLoading(false);
-  }, [selectedTeamId, selectedProjectId]);
+  }, [selectedTeamId, selectedProjectId, session]);
 
   const loadAssignedToMe = useCallback(async () => {
     if (!session) return;
     const { data, error: err } = await supabase
       .from('todos')
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id, team_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
       .eq('assigned_to', session.user.id)
+      .is('accepted_at', null)
+      .is('archived_at', null)
       .eq('done', false)
       .or('team_id.not.is.null,project_id.not.is.null')
       .order('due_date', { ascending: true, nullsFirst: false });
     if (!err) setAssignedToMe((data ?? []) as Todo[]);
   }, [session]);
 
+  const loadArchivedTodos = useCallback(async () => {
+    setLoading(true);
+    let query = supabase
+      .from('todos')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
+      .not('archived_at', 'is', null)
+      .order('archived_at', { ascending: false });
+
+    if (selectedProjectId) {
+      query = query.eq('project_id', selectedProjectId);
+    } else if (selectedTeamId) {
+      query = query.eq('team_id', selectedTeamId).is('project_id', null);
+    } else if (session) {
+      query = query.or(
+        `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id})`
+      );
+    }
+
+    const { data, error: err } = await query;
+    if (!err) setArchivedTodos((data ?? []) as Todo[]);
+    setLoading(false);
+  }, [selectedTeamId, selectedProjectId, session]);
+
   useEffect(() => {
     loadAssignedToMe();
   }, [loadAssignedToMe]);
+
+  useEffect(() => {
+    loadArchivedTodos();
+  }, [loadArchivedTodos]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -786,7 +916,6 @@ export default function HomeScreen() {
   }
 
   async function signOut() {
-    setAccountMenuOpen(false);
     setProfile(null);
     await supabase.auth.signOut();
     setInput('');
@@ -801,7 +930,6 @@ export default function HomeScreen() {
   }
 
   function choosePlannedUserFeature(label: string) {
-    setAccountMenuOpen(false);
     setMessage(`${label} is planned.`);
     setError('');
   }
@@ -815,7 +943,7 @@ export default function HomeScreen() {
     const { data: team, error: teamError } = await supabase
       .from('teams')
       .insert({ name, created_by: session.user.id })
-      .select('id, name')
+      .select('id, name, org_id')
       .single();
 
     if (teamError) {
@@ -929,8 +1057,6 @@ export default function HomeScreen() {
   }
 
   function openCreateTarget(target: CreateTarget) {
-    setAccountMenuOpen(false);
-
     if (target === 'team') {
       setCreateTarget('team');
       return;
@@ -946,7 +1072,6 @@ export default function HomeScreen() {
 
   function selectTeamFromAccountMenu(teamId: string) {
     setSelectedTeamId(teamId);
-    setAccountMenuOpen(false);
   }
 
   async function addMember() {
@@ -1018,7 +1143,6 @@ export default function HomeScreen() {
 
   async function openOrgModal(orgId: string) {
     setOrgModalId(orgId);
-    setAccountMenuOpen(false);
     setOrgMemberEmail('');
     setError('');
     await loadOrgMembers(orgId);
@@ -1104,6 +1228,7 @@ export default function HomeScreen() {
   async function addTodo() {
     const text = input.trim();
     if (!text || !session) return;
+    const assignedTo = selectedTeamId && !isProject ? newTodoAssignee : null;
 
     const { data, error: insertError } = await supabase
       .from('todos')
@@ -1112,10 +1237,11 @@ export default function HomeScreen() {
         team_id: isProject ? null : selectedTeamId,
         project_id: selectedProjectId,
         created_by: session.user.id,
-        assigned_to: selectedTeamId && !isProject ? newTodoAssignee : null,
+        assigned_to: assignedTo,
+        assigned_at: assignedTo ? new Date().toISOString() : null,
         priority: 'normal',
       })
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
       .single();
 
     if (insertError) {
@@ -1136,6 +1262,7 @@ export default function HomeScreen() {
     if (!text || !session || !selectedProjectId) return;
 
     const assigned_to = columnAssignees[key] ?? null;
+    const assigned_at = assigned_to ? new Date().toISOString() : null;
 
     const { data, error: insertError } = await supabase
       .from('todos')
@@ -1145,9 +1272,10 @@ export default function HomeScreen() {
         phase_id: phaseId,
         created_by: session.user.id,
         assigned_to,
+        assigned_at,
         priority: 'normal',
       })
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, is_milestone, project_id, phase_id')
+      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id')
       .single();
 
     if (insertError) { setError(insertError.message); return; }
@@ -1160,10 +1288,12 @@ export default function HomeScreen() {
   async function toggle(id: string) {
     const todo = todos.find((item) => item.id === id);
     if (!todo) return;
+    const done = !todo.done;
+    const completed_at = done ? new Date().toISOString() : null;
 
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ done: !todo.done })
+      .update({ done, completed_at })
       .eq('id', id);
 
     if (updateError) {
@@ -1171,30 +1301,42 @@ export default function HomeScreen() {
       return;
     }
 
-    setTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item)));
+    setTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done, completed_at } : item)));
     setError('');
   }
 
-  async function toggleAssigned(id: string) {
+  async function moveInboxTodoToTodos(id: string) {
+    const todo = assignedToMe.find((item) => item.id === id);
+    if (!todo) return;
+    const accepted_at = new Date().toISOString();
+
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ done: true })
+      .update({ accepted_at })
       .eq('id', id);
     if (updateError) { setError(updateError.message); return; }
+    const acceptedTodo = { ...todo, accepted_at };
     setAssignedToMe(prev => prev.filter(t => t.id !== id));
+    setTodos((prev) => sortTodos([acceptedTodo, ...prev.filter((item) => item.id !== id)]));
+    showToast('Moved from Inbox to Todos');
     setError('');
   }
 
   async function setAssignee(todo: Todo, userId: string | null) {
+    const updates = {
+      assigned_to: userId,
+      assigned_at: userId ? new Date().toISOString() : null,
+      accepted_at: null,
+    };
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ assigned_to: userId })
+      .update(updates)
       .eq('id', todo.id);
 
     if (updateError) { setError(updateError.message); return; }
 
     setTodos((prev) =>
-      prev.map((item) => (item.id === todo.id ? { ...item, assigned_to: userId } : item))
+      prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item))
     );
     setAssigneeTodo(null);
     setError('');
@@ -1205,6 +1347,7 @@ export default function HomeScreen() {
     setAssigneeTodo(todo);
     setAssigneePickerUserId(todo.assigned_to);
     setAssigneePickerDueDate(todo.due_date);
+    setAssigneePickerPriority(todo.priority);
     setAssigneePickerMonth(due ? new Date(due.getFullYear(), due.getMonth(), 1) : new Date());
   }
 
@@ -1212,11 +1355,19 @@ export default function HomeScreen() {
     setAssigneeTodo(null);
     setAssigneePickerUserId(null);
     setAssigneePickerDueDate(null);
+    setAssigneePickerPriority('normal');
   }
 
   async function confirmAssignment() {
     if (!assigneeTodo) return;
-    const updates = { assigned_to: assigneePickerUserId, due_date: assigneePickerDueDate };
+    const assigneeChanged = assigneePickerUserId !== assigneeTodo.assigned_to;
+    const updates = {
+      assigned_to: assigneePickerUserId,
+      due_date: assigneePickerDueDate,
+      priority: assigneePickerPriority,
+      assigned_at: assigneeChanged ? (assigneePickerUserId ? new Date().toISOString() : null) : assigneeTodo.assigned_at,
+      accepted_at: assigneeChanged ? null : assigneeTodo.accepted_at,
+    };
     const { error: updateError } = await supabase.from('todos').update(updates).eq('id', assigneeTodo.id);
     if (updateError) { setError(updateError.message); return; }
     setTodos(prev => prev.map(t => t.id === assigneeTodo!.id ? { ...t, ...updates } : t));
@@ -1337,15 +1488,41 @@ export default function HomeScreen() {
     setError('');
   }
 
-  async function remove(id: string) {
-    const { error: deleteError } = await supabase.from('todos').delete().eq('id', id);
+  async function archiveTodo(id: string) {
+    const archived_at = new Date().toISOString();
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ archived_at })
+      .eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
+    const todo = todos.find((t) => t.id === id);
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+    if (todo) setArchivedTodos((prev) => [{ ...todo, archived_at }, ...prev]);
+    if (editTodo?.id === id) closeEditModal();
+    setError('');
+  }
 
-    if (deleteError) {
-      setError(deleteError.message);
-      return;
-    }
+  async function unarchiveTodo(id: string) {
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ archived_at: null })
+      .eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
+    const todo = archivedTodos.find((t) => t.id === id);
+    setArchivedTodos((prev) => prev.filter((t) => t.id !== id));
+    if (todo) setTodos((prev) => sortTodos([{ ...todo, archived_at: null }, ...prev]));
+    setError('');
+  }
 
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
+  async function archiveProject(id: string) {
+    const archived_at = new Date().toISOString();
+    const { error: updateError } = await supabase
+      .from('projects')
+      .update({ archived_at })
+      .eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
+    setProjects((prev) => prev.filter((p) => p.id !== id));
+    if (selectedProjectId === id) setSelectedProjectId(null);
     setError('');
   }
 
@@ -1434,6 +1611,83 @@ export default function HomeScreen() {
     if (!member) return 'Assigned to unknown';
     if (session?.user.id === userId) return 'Assigned to me';
     return `Assigned to ${profileDisplayName(member)}`;
+  }
+
+  function getAssignerInfo(todo: Todo): { initials: string; color: string; name: string } | null {
+    if (!todo.assigned_to || !todo.created_by) return null;
+    const isMe = todo.created_by === session?.user.id;
+    const creator = memberById.get(todo.created_by);
+    const name = isMe
+      ? 'From: you'
+      : creator
+        ? `From: ${profileDisplayName(creator)}`
+        : null;
+    if (!name) return null;
+    const email = isMe ? (profile?.email ?? '') : (creator?.email ?? todo.created_by);
+    const displayName = isMe ? accountDisplayName : profileDisplayName(creator!);
+    return {
+      initials: (displayName[0] ?? '?').toUpperCase(),
+      color: pickAvatarColor(email),
+      name,
+    };
+  }
+
+  function renderAssignedToMeTodo(todo: Todo) {
+    const project = projects.find(p => p.id === todo.project_id);
+    const contextLabel = project?.name ?? 'Team task';
+    const due = parseDateValue(todo.due_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isOverdue = due ? due < today : false;
+    const creatorMember = todo.created_by ? memberById.get(todo.created_by) : null;
+    const isCreatorMe = todo.created_by === session?.user.id;
+    const creatorName = isCreatorMe
+      ? accountDisplayName
+      : creatorMember
+        ? profileDisplayName(creatorMember)
+        : null;
+    const creatorEmail = isCreatorMe ? (profile?.email ?? '') : (creatorMember?.email ?? todo.created_by ?? '');
+    const creatorInitials = creatorName ? (creatorName[0] ?? '?').toUpperCase() : '?';
+    const creatorColor = pickAvatarColor(creatorEmail);
+    const creatorTooltip = creatorName ? `From: ${creatorName}` : `From: ${contextLabel}`;
+    return (
+      <View key={todo.id} style={styles.assignedToMeRow}>
+        <Pressable
+          onPress={() => moveInboxTodoToTodos(todo.id)}
+          onHoverIn={() => setHoveredInboxId(todo.id)}
+          onHoverOut={() => setHoveredInboxId(null)}
+          style={[
+            styles.incomingAcceptIcon,
+            { backgroundColor: priorityColors[todo.priority], borderColor: priorityColors[todo.priority] },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Move to Todos"
+        >
+          <ArrowLeft size={11} strokeWidth={2.75} color="#fff" />
+          {Platform.OS === 'web' && hoveredInboxId === todo.id && (
+            <View style={styles.incomingAcceptTooltip}>
+              <Text style={styles.incomingAcceptTooltipText} numberOfLines={1}>Move to Todos · {priorityLabels[todo.priority]}</Text>
+            </View>
+          )}
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <View style={styles.assignedToMeTitleRow}>
+            <Text style={styles.assignedToMeText} numberOfLines={1}>
+              {todo.text}
+            </Text>
+            <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} tooltip={creatorTooltip} />
+          </View>
+          <View style={styles.assignedToMeMeta}>
+            <Text style={styles.assignedToMeContext}>{contextLabel}</Text>
+            {todo.due_date && (
+              <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]}>
+                {isOverdue ? 'Overdue · ' : ''}{todo.due_date}
+              </Text>
+            )}
+          </View>
+        </View>
+      </View>
+    );
   }
 
   if (passwordRecovery) {
@@ -1643,38 +1897,49 @@ export default function HomeScreen() {
         return (
           <View style={styles.titleBar}>
             <View style={styles.titleBarLeft}>
-              <Pressable
-                onPress={() => setAnimalPickerVisible(true)}
-                accessibilityLabel="Change avatar"
-              >
-                <View style={[styles.userAvatarBig, { backgroundColor: avatarColor }]}>
-                  <Text style={styles.userAvatarBigAnimal}>{animal}</Text>
-                </View>
-              </Pressable>
-              <View style={styles.userMeta}>
-                <Text style={styles.userMetaName} numberOfLines={1}>{accountDisplayName}</Text>
-                <View style={styles.userMetaStatusRow}>
-                  <View style={styles.onlineDot} />
-                  {statusEditing ? (
-                    <TextInput
-                      style={styles.statusInput}
-                      value={statusDraft}
-                      onChangeText={setStatusDraft}
-                      onBlur={saveStatus}
-                      onSubmitEditing={saveStatus}
-                      placeholder="What are you up to?"
-                      placeholderTextColor="#d1d5db"
-                      autoFocus
-                      maxLength={80}
-                      returnKeyType="done"
-                    />
-                  ) : (
-                    <Pressable onPress={() => setStatusEditing(true)} style={styles.statusPressable}>
-                      <Text style={statusDraft ? styles.statusText : styles.statusPlaceholder} numberOfLines={1}>
-                        {statusDraft || 'What are you up to?'}
-                      </Text>
-                    </Pressable>
-                  )}
+              <View style={styles.userIdentityRow}>
+                <Pressable
+                  onPress={() => setAnimalPickerVisible(true)}
+                  accessibilityLabel="Change avatar"
+                  hitSlop={4}
+                >
+                  <View style={[styles.userAvatarBig, { backgroundColor: avatarColor }]}>
+                    <Text style={styles.userAvatarBigAnimal}>{animal}</Text>
+                  </View>
+                </Pressable>
+                <View style={styles.userMeta}>
+                  <Pressable
+                    onPress={() => setNavExpanded((v) => !v)}
+                    style={styles.userMetaNameRow}
+                    accessibilityRole="button"
+                    accessibilityLabel="Toggle account menu"
+                  >
+                    <Text style={styles.userMetaName} numberOfLines={1}>{accountDisplayName}</Text>
+                    <Text style={styles.userNavChevron}>{navExpanded ? '▴' : '▾'}</Text>
+                  </Pressable>
+                  <View style={styles.userMetaStatusRow}>
+                    <View style={styles.onlineDot} />
+                    {statusEditing ? (
+                      <TextInput
+                        style={styles.statusInput}
+                        value={statusDraft}
+                        onChangeText={setStatusDraft}
+                        onBlur={saveStatus}
+                        onSubmitEditing={saveStatus}
+                        placeholder="What are you up to?"
+                        placeholderTextColor="#d1d5db"
+                        autoFocus
+                        maxLength={80}
+                        returnKeyType="done"
+                      />
+                    ) : (
+                      <Pressable onPress={() => setStatusEditing(true)} style={styles.statusPressable}>
+                        <Text style={statusDraft ? styles.statusText : styles.statusPlaceholder} numberOfLines={1}>
+                          {statusDraft || 'What are you up to?'}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
               </View>
             </View>
@@ -1687,17 +1952,14 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <Pressable
-              onPress={() => setAccountMenuOpen(true)}
-              style={styles.titleBarRight}
-              accessibilityRole="button"
-              accessibilityLabel="Open account menu"
-            >
-              <View style={[styles.avatarBadge, { backgroundColor: avatarColor }]}>
-                <Text style={styles.avatarText}>{initials || (accountDisplayName[0] ?? '?').toUpperCase()}</Text>
-              </View>
-              <Text style={styles.titleBarCaretDown}>⌄</Text>
-            </Pressable>
+            <View style={styles.titleBarRight}>
+              <Text style={styles.titleBarDateText}>
+                {now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+              </Text>
+              <Text style={styles.titleBarTimeText}>
+                {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+              </Text>
+            </View>
           </View>
         );
       })()}
@@ -2026,7 +2288,7 @@ export default function HomeScreen() {
                     {colActive.map((todo) => (
                       <KanbanCard key={todo.id} todo={todo}
                         assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
-                        onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
+                        onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
                         onEdit={() => openEditModal(todo)}
                         onCycleAssignee={() => openAssigneePicker(todo)} />
                     ))}
@@ -2039,7 +2301,7 @@ export default function HomeScreen() {
                       {colDone.map((todo) => (
                         <KanbanCard key={todo.id} todo={todo}
                           assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
-                          onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
+                          onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
                           onEdit={() => openEditModal(todo)}
                           onCycleAssignee={() => openAssigneePicker(todo)} />
                       ))}
@@ -2096,130 +2358,153 @@ export default function HomeScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.sortBar}>
-            {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
-            <View style={styles.sortCheckboxSpacer} />
-            {(
-              [
-                { field: 'text', label: 'Task', colStyle: styles.sortColTask },
-                { field: 'priority', label: 'Priority', colStyle: styles.sortColPriority },
-                { field: 'due_date', label: 'Due', colStyle: styles.sortColDue },
-                { field: 'created_at', label: 'Age', colStyle: styles.sortColAdded },
-              ] as { field: SortField; label: string; colStyle: object }[]
-            ).map(({ field, label, colStyle }) => {
-              const isActive = sortField === field;
-              const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
-              return (
-                <Pressable key={field} onPress={() => toggleSort(field)} style={[colStyle, styles.sortColInner]}>
-                  <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
-                  <Text style={[styles.sortColIndicator, isActive && styles.sortColLabelActive]}>{indicator}</Text>
-                </Pressable>
-              );
-            })}
-            <View style={styles.sortActionsSpacer} />
-          </View>
+          <View style={[styles.todoBoard, showInboxSidePanel && styles.todoBoardWithAssigned]}>
+            <View style={styles.todoListPane}>
+              <View style={styles.activeTasksBox}>
+                <View style={styles.sortBar}>
+                  {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
+                  <View style={styles.sortCheckboxSpacer} />
+                  {(
+                    [
+                      { field: 'text', label: 'Task', colStyle: styles.sortColTask },
+                      { field: 'priority', label: 'Priority', colStyle: styles.sortColPriority },
+                      { field: 'due_date', label: 'Due', colStyle: styles.sortColDue },
+                      { field: 'created_at', label: null, colStyle: styles.sortColAdded },
+                    ] as { field: SortField; label: string | null; colStyle: object }[]
+                  ).map(({ field, label, colStyle }) => {
+                    const isActive = sortField === field;
+                    const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
+                    return (
+                      <Pressable key={field} onPress={() => toggleSort(field)} style={[colStyle, styles.sortColInner]}>
+                        {label !== null
+                          ? <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
+                          : <Clock size={12} color={isActive ? '#6366f1' : '#9ca3af'} strokeWidth={2.5} />
+                        }
+                        <Text style={[styles.sortColIndicator, isActive && styles.sortColLabelActive]}>{indicator}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
 
-          <DraggableList
-            data={active}
-            keyExtractor={(todo) => todo.id}
-            onDragEnd={handleDragEnd}
-            draggable={!sortField}
-            style={styles.list}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item: todo, drag, isActive }) => (
-              <TodoItem
-                text={todo.text} done={todo.done} priority={todo.priority}
-                dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
-                assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
-                onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
-                onEdit={(text) => editTodoText(todo.id, text)} onOpenEdit={() => openEditModal(todo)}
-                onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
-                onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
-                onDrag={drag} isDragging={isActive ?? false}
-              />
-            )}
-            ListHeaderComponent={
-              <>
-                {!!error && <Text style={styles.error}>{error}</Text>}
-                {!!message && <Text style={styles.message}>{message}</Text>}
-                {loading && !error && <Text style={styles.empty}>Loading todos...</Text>}
-                {!loading && active.length === 0 && done.length === 0 && (
-                  <Text style={styles.empty}>No todos yet. Add one above.</Text>
-                )}
-              </>
-            }
-            ListFooterComponent={
-              <>
-                {isPersonal && assignedToMe.length > 0 && (
-                  <>
-                    <View style={styles.sectionDivider}>
-                      <View style={styles.sectionDividerLine} />
-                      <Text style={styles.sectionLabel}>Assigned to me</Text>
-                      <View style={styles.sectionDividerLine} />
-                    </View>
-                    {assignedToMe.map((todo) => {
-                      const project = projects.find(p => p.id === todo.project_id);
-                      const contextLabel = project?.name ?? 'Team task';
-                      const due = parseDateValue(todo.due_date);
-                      const priorityColors: Record<Priority, string> = {
-                        low: '#d1fae5', normal: '#e0e7ff', high: '#fef3c7', urgent: '#fee2e2',
-                      };
-                      const priorityTextColors: Record<Priority, string> = {
-                        low: '#065f46', normal: '#3730a3', high: '#92400e', urgent: '#991b1b',
-                      };
-                      const today2 = new Date(); today2.setHours(0,0,0,0);
-                      const isOverdue = due ? due < today2 : false;
-                      return (
-                        <View key={todo.id} style={styles.assignedToMeRow}>
-                          <Pressable onPress={() => toggleAssigned(todo.id)} style={styles.assignedToMeCheck}>
-                            <View style={styles.assignedToMeCheckBox} />
-                          </Pressable>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.assignedToMeText} numberOfLines={2}>{todo.text}</Text>
-                            <View style={styles.assignedToMeMeta}>
-                              <Text style={styles.assignedToMeContext}>{contextLabel}</Text>
-                              {todo.due_date && (
-                                <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]}>
-                                  {isOverdue ? 'Overdue · ' : ''}{todo.due_date}
-                                </Text>
-                              )}
-                            </View>
-                          </View>
-                          <View style={[styles.assignedToMePriority, { backgroundColor: priorityColors[todo.priority] }]}>
-                            <Text style={[styles.assignedToMePriorityText, { color: priorityTextColors[todo.priority] }]}>
-                              {todo.priority[0].toUpperCase()}
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </>
-                )}
-                {done.length > 0 && (
-                  <>
-                    <View style={styles.sectionDivider}>
-                      <View style={styles.sectionDividerLine} />
-                      <Text style={styles.sectionLabel}>Completed</Text>
-                      <View style={styles.sectionDividerLine} />
-                    </View>
-                    {done.map((todo) => (
+                <DraggableList
+                  data={active}
+                  keyExtractor={(todo) => todo.id}
+                  onDragEnd={handleDragEnd}
+                  draggable={!sortField}
+                  style={styles.activeTasksList}
+                  keyboardShouldPersistTaps="handled"
+                  renderItem={({ item: todo, drag, isActive }) => {
+                    const assigner = getAssignerInfo(todo);
+                    return (
                       <TodoItem
-                        key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
+                        text={todo.text} done={todo.done} priority={todo.priority}
                         dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
                         assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
-                        onToggle={() => toggle(todo.id)} onDelete={() => remove(todo.id)}
-                        onEdit={(text) => editTodoText(todo.id, text)} onOpenEdit={() => openEditModal(todo)}
+                        assignerInitials={assigner?.initials} assignerColor={assigner?.color}
+                        assignerName={assigner?.name}
+                        onToggle={() => toggle(todo.id)}
+                        onOpenEdit={() => openEditModal(todo)}
                         onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                         onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
-                        reserveDragSpace={Platform.OS === 'web'}
+                        onDrag={drag} isDragging={isActive ?? false}
                       />
-                    ))}
-                  </>
-                )}
-              </>
-            }
-          />
+                    );
+                  }}
+                  ListHeaderComponent={
+                    <>
+                      {!!error && <Text style={styles.error}>{error}</Text>}
+                      {!!message && <Text style={styles.message}>{message}</Text>}
+                      {loading && !error && <Text style={styles.empty}>Loading todos...</Text>}
+                      {!loading && active.length === 0 && done.length === 0 && (
+                        <Text style={styles.empty}>No todos yet. Add one above.</Text>
+                      )}
+                    </>
+                  }
+                  ListFooterComponent={
+                    <>
+                      {isPersonal && assignedToMe.length > 0 && !showInboxSidePanel && (
+                        <>
+                          <View style={styles.sectionDivider}>
+                            <View style={styles.sectionDividerLine} />
+                            <Text style={styles.sectionLabel}>Inbox</Text>
+                            <View style={styles.sectionDividerLine} />
+                          </View>
+                          {assignedToMe.map(renderAssignedToMeTodo)}
+                        </>
+                      )}
+                      {archivedTodos.length > 0 && (
+                        <>
+                          <Pressable
+                            onPress={() => setArchivedExpanded((v) => !v)}
+                            style={styles.sectionDivider}
+                          >
+                            <View style={styles.sectionDividerLine} />
+                            <Text style={styles.sectionLabel}>
+                              Archived ({archivedTodos.length}) {archivedExpanded ? '↑' : '↓'}
+                            </Text>
+                            <View style={styles.sectionDividerLine} />
+                          </Pressable>
+                          {archivedExpanded && archivedTodos.map((todo) => (
+                            <View key={todo.id} style={styles.archivedRow}>
+                              <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
+                              <Pressable onPress={() => unarchiveTodo(todo.id)} style={styles.unarchiveBtn}>
+                                <Text style={styles.unarchiveBtnText}>Restore</Text>
+                              </Pressable>
+                            </View>
+                          ))}
+                        </>
+                      )}
+                    </>
+                  }
+                />
+              </View>
+
+              {done.length > 0 && (
+                <View style={styles.completedTasksBox}>
+                  <View style={styles.sectionDivider}>
+                    <View style={styles.sectionDividerLine} />
+                    <Text style={styles.sectionLabel}>Completed</Text>
+                    <View style={styles.sectionDividerLine} />
+                  </View>
+                  <ScrollView style={styles.completedTasksList} showsVerticalScrollIndicator={false}>
+                    {done.map((todo) => {
+                      const assigner = getAssignerInfo(todo);
+                      return (
+                        <TodoItem
+                          key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
+                          dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
+                          assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                          assignerInitials={assigner?.initials} assignerColor={assigner?.color}
+                          assignerName={assigner?.name}
+                          onToggle={() => toggle(todo.id)}
+                          onOpenEdit={() => openEditModal(todo)}
+                          onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
+                          onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                          reserveDragSpace={Platform.OS === 'web'}
+                        />
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+
+            {showInboxSidePanel && (
+              <View style={styles.assignedToMePanel}>
+                <Text style={styles.assignedToMePanelTitle}>Inbox</Text>
+                <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
+                  {assignedToMe.map(renderAssignedToMeTodo)}
+                </ScrollView>
+              </View>
+            )}
+          </View>
         </>
+      )}
+
+      {!!toast && (
+        <View pointerEvents="none" style={styles.toast}>
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
       )}
 
       <Modal
@@ -2268,6 +2553,33 @@ export default function HomeScreen() {
                   </Pressable>
                 );
               })}
+
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>Priority</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+              <View style={styles.priorityPickerRow}>
+                {priorities.map((p) => {
+                  const isActive = assigneePickerPriority === p;
+                  return (
+                    <Pressable
+                      key={p}
+                      onPress={() => setAssigneePickerPriority(p)}
+                      style={[
+                        styles.priorityPickerBtn,
+                        isActive
+                          ? { backgroundColor: priorityColors[p], borderColor: priorityColors[p] }
+                          : { backgroundColor: '#f3f4f6', borderColor: 'transparent' },
+                      ]}
+                    >
+                      <Text style={[styles.priorityPickerLabel, { color: isActive ? '#fff' : priorityColors[p] }]}>
+                        {p[0].toUpperCase() + p.slice(1)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
               <View style={styles.pickerSectionDivider}>
                 <View style={styles.pickerSectionLine} />
@@ -2421,80 +2733,71 @@ export default function HomeScreen() {
         </Pressable>
       </Modal>
       <Modal
-        visible={accountMenuOpen}
+        visible={navExpanded}
         transparent
         animationType="fade"
-        onRequestClose={() => setAccountMenuOpen(false)}
+        onRequestClose={() => setNavExpanded(false)}
       >
-        <Pressable style={styles.accountMenuBackdrop} onPress={() => setAccountMenuOpen(false)}>
-          <Pressable style={styles.accountMenuCard}>
-            <Text style={styles.accountMenuName} numberOfLines={1}>
-              {accountDisplayName}
-            </Text>
-            <Text style={styles.accountMenuEmail} numberOfLines={1}>
-              {profile?.email ?? session.user.email}
-            </Text>
-            <Pressable
-              onPress={() => choosePlannedUserFeature('Profile')}
-              style={styles.accountMenuItem}
-            >
-              <Text style={styles.accountMenuItemText}>Profile</Text>
+        <Pressable style={styles.navDropdownBackdrop} onPress={() => setNavExpanded(false)}>
+          <Pressable style={styles.navDropdownCard}>
+            <Text style={styles.navDropdownName} numberOfLines={1}>{accountDisplayName}</Text>
+            <Text style={styles.navDropdownEmail} numberOfLines={1}>{profile?.email ?? session.user.email}</Text>
+
+            <View style={styles.navDropdownDivider} />
+
+            <Pressable onPress={() => { choosePlannedUserFeature('Profile'); setNavExpanded(false); }} style={styles.navDropdownItem}>
+              <Text style={styles.navDropdownItemText}>Profile</Text>
             </Pressable>
-            <Pressable
-              onPress={() => choosePlannedUserFeature('Settings')}
-              style={styles.accountMenuItem}
-            >
-              <Text style={styles.accountMenuItemText}>Settings</Text>
+            <Pressable onPress={() => { choosePlannedUserFeature('Settings'); setNavExpanded(false); }} style={styles.navDropdownItem}>
+              <Text style={styles.navDropdownItemText}>Settings</Text>
             </Pressable>
-            <Pressable
-              onPress={() => { setAccountMenuOpen(false); setAboutVisible(true); }}
-              style={styles.accountMenuItem}
-            >
-              <Text style={styles.accountMenuItemText}>About</Text>
+            <Pressable onPress={() => { setAboutVisible(true); setNavExpanded(false); }} style={styles.navDropdownItem}>
+              <Text style={styles.navDropdownItemText}>About</Text>
             </Pressable>
-            <View style={styles.accountMenuSection}>
-              <View style={styles.accountMenuSectionHeader}>
-                <Text style={styles.accountMenuSectionTitle}>Organizations</Text>
-                <Pressable onPress={() => openCreateTarget('organization')} hitSlop={8}>
-                  <Text style={styles.accountMenuSectionAction}>+</Text>
+
+            <View style={styles.navDropdownDivider} />
+
+            <View style={styles.navDropdownSection}>
+              <View style={styles.navDropdownSectionHeader}>
+                <Text style={styles.navDropdownSectionTitle}>Organizations</Text>
+                <Pressable onPress={() => { openCreateTarget('organization'); setNavExpanded(false); }} hitSlop={8}>
+                  <Text style={styles.navDropdownSectionAction}>+</Text>
                 </Pressable>
               </View>
               {organizations.length === 0 ? (
-                <Pressable onPress={() => openCreateTarget('organization')} style={styles.accountMenuItem}>
-                  <Text style={styles.accountMenuMutedText}>No organizations yet</Text>
+                <Pressable onPress={() => { openCreateTarget('organization'); setNavExpanded(false); }} style={styles.navDropdownItem}>
+                  <Text style={styles.navDropdownMutedText}>No organizations yet</Text>
                 </Pressable>
               ) : (
                 organizations.map((org) => (
-                  <Pressable key={org.id} onPress={() => openOrgModal(org.id)} style={styles.accountMenuItem}>
-                    <Text style={styles.accountMenuItemText} numberOfLines={1}>{org.name}</Text>
-                    <Text style={styles.accountMenuMutedText}>{org.member_count ?? 0} member{(org.member_count ?? 0) !== 1 ? 's' : ''}</Text>
+                  <Pressable key={org.id} onPress={() => { openOrgModal(org.id); setNavExpanded(false); }} style={styles.navDropdownItem}>
+                    <Text style={styles.navDropdownItemText} numberOfLines={1}>{org.name}</Text>
+                    <Text style={styles.navDropdownMutedText}>{org.member_count ?? 0} member{(org.member_count ?? 0) !== 1 ? 's' : ''}</Text>
                   </Pressable>
                 ))
               )}
             </View>
-            <View style={styles.accountMenuSection}>
-              <View style={styles.accountMenuSectionHeader}>
-                <Text style={styles.accountMenuSectionTitle}>Teams</Text>
-                <Pressable onPress={() => openCreateTarget('team')} hitSlop={8}>
-                  <Text style={styles.accountMenuSectionAction}>+</Text>
+
+            <View style={styles.navDropdownSection}>
+              <View style={styles.navDropdownSectionHeader}>
+                <Text style={styles.navDropdownSectionTitle}>Teams</Text>
+                <Pressable onPress={() => { openCreateTarget('team'); setNavExpanded(false); }} hitSlop={8}>
+                  <Text style={styles.navDropdownSectionAction}>+</Text>
                 </Pressable>
               </View>
               {teams.length === 0 ? (
-                <Pressable onPress={() => openCreateTarget('team')} style={styles.accountMenuItem}>
-                  <Text style={styles.accountMenuMutedText}>No teams yet</Text>
+                <Pressable onPress={() => { openCreateTarget('team'); setNavExpanded(false); }} style={styles.navDropdownItem}>
+                  <Text style={styles.navDropdownMutedText}>No teams yet</Text>
                 </Pressable>
               ) : (
                 teams.map((team) => (
                   <Pressable
                     key={team.id}
-                    onPress={() => selectTeamFromAccountMenu(team.id)}
-                    style={styles.accountMenuItem}
+                    onPress={() => { selectTeamFromAccountMenu(team.id); setNavExpanded(false); }}
+                    style={styles.navDropdownItem}
                   >
                     <Text
-                      style={[
-                        styles.accountMenuItemText,
-                        team.id === selectedTeamId && styles.accountMenuItemTextActive,
-                      ]}
+                      style={[styles.navDropdownItemText, team.id === selectedTeamId && styles.navDropdownItemTextActive]}
                       numberOfLines={1}
                     >
                       {team.name}
@@ -2503,8 +2806,11 @@ export default function HomeScreen() {
                 ))
               )}
             </View>
-            <Pressable onPress={signOut} style={styles.accountMenuItem}>
-              <Text style={styles.accountMenuSignOutText}>Log Out</Text>
+
+            <View style={styles.navDropdownDivider} />
+
+            <Pressable onPress={signOut} style={styles.navDropdownItem}>
+              <Text style={styles.navDropdownSignOutText}>Log Out</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -2875,15 +3181,20 @@ export default function HomeScreen() {
               </Pressable>
             )}
             <View style={styles.editModalActions}>
-              <Pressable onPress={closeEditModal}>
-                <Text style={styles.calendarCancelText}>Cancel</Text>
+              <Pressable onPress={() => editTodo && archiveTodo(editTodo.id)}>
+                <Text style={styles.archiveBtnText}>Archive</Text>
               </Pressable>
-              <Pressable
-                onPress={saveEditModal}
-                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
-              >
-                <Text style={styles.smallBtnText}>Save</Text>
-              </Pressable>
+              <View style={styles.editModalActionsRight}>
+                <Pressable onPress={closeEditModal}>
+                  <Text style={styles.calendarCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={saveEditModal}
+                  style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+                >
+                  <Text style={styles.smallBtnText}>Save</Text>
+                </Pressable>
+              </View>
             </View>
           </Pressable>
         </Pressable>
@@ -3040,6 +3351,70 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+  },
+  todoBoard: {
+    flex: 1,
+    padding: 12,
+    gap: 12,
+  },
+  todoBoardWithAssigned: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    minHeight: 0,
+  },
+  todoListPane: {
+    flex: 1,
+    minWidth: 0,
+    gap: 12,
+  },
+  activeTasksBox: {
+    maxHeight: taskBoxMaxHeight,
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  activeTasksList: {
+    maxHeight: todoRowHeight * defaultVisibleTaskRows,
+    flexGrow: 0,
+  },
+  completedTasksBox: {
+    maxHeight: taskBoxMaxHeight,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  completedTasksList: {
+    maxHeight: todoRowHeight * defaultVisibleTaskRows,
+    flexGrow: 0,
+  },
+  assignedToMePanel: {
+    width: 340,
+    maxWidth: '36%',
+    maxHeight: incomingBoxMaxHeight,
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  assignedToMePanelTitle: {
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 16,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  assignedToMePanelList: {
+    maxHeight: incomingRowHeight * defaultVisibleTaskRows,
+    flexGrow: 0,
   },
   authScroll: {
     flexGrow: 1,
@@ -3607,6 +3982,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontSize: 14,
   },
+  toast: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    backgroundColor: '#111827',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  toastText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   sectionDivider: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3757,8 +4151,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingRight: 16,
     paddingVertical: 7,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e5e7eb',
     borderBottomWidth: 1,
     borderBottomColor: '#d1d5db',
     backgroundColor: '#f3f4f6',
@@ -3780,9 +4172,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sortColPriority: {
-    width: 76,
+    width: 48,
     marginLeft: 8,
-    paddingLeft: 6,
   },
   sortColDue: {
     width: 80,
@@ -3791,10 +4182,6 @@ const styles = StyleSheet.create({
   sortColAdded: {
     width: 56,
     marginLeft: 8,
-  },
-  sortActionsSpacer: {
-    width: 56,
-    flexShrink: 0,
   },
   sortColLabel: {
     fontSize: 11,
@@ -3811,7 +4198,7 @@ const styles = StyleSheet.create({
   },
   titleBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 14,
     paddingTop: Platform.OS === 'ios' ? 52 : 12,
     paddingBottom: 10,
@@ -3821,11 +4208,213 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   titleBarLeft: {
+    flexDirection: 'column',
+    flex: 1,
+    maxWidth: 280,
+  },
+  userIdentityRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
+  },
+  userNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 2,
+    marginTop: 6,
+    marginLeft: 48,
+  },
+  userNavLink: {
+    paddingVertical: 1,
+    paddingHorizontal: 2,
+  },
+  userNavLinkText: {
+    fontSize: 11,
+    color: '#6b7280',
+  },
+  userNavDot: {
+    fontSize: 11,
+    color: '#d1d5db',
+  },
+  userNavSignOutText: {
+    fontSize: 11,
+    color: '#ef4444',
+  },
+  userNavStatusEdit: {
+    marginTop: 4,
+    marginLeft: 48,
+    paddingVertical: 1,
+    paddingHorizontal: 2,
+  },
+  userNavStatusInput: {
+    marginTop: 4,
+    marginLeft: 48,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    width: 200,
+  },
+  userNavSections: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 6,
+    marginLeft: 48,
+  },
+  userNavSection: {
+    flexDirection: 'column',
+    minWidth: 80,
+  },
+  userNavSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  userNavSectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  userNavSectionAction: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  userNavSectionItem: {
+    paddingVertical: 1,
+  },
+  userNavSectionItemText: {
+    fontSize: 11,
+    color: '#374151',
+  },
+  userNavSectionItemTextActive: {
+    color: '#6366f1',
+    fontWeight: '600',
+  },
+  userNavSectionMuted: {
+    fontSize: 11,
+    color: '#d1d5db',
+  },
+  navDropdownBackdrop: {
     flex: 1,
-    maxWidth: 260,
+  },
+  navDropdownCard: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 112 : 72,
+    left: 14,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+    paddingVertical: 8,
+    minWidth: 240,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  navDropdownName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 1,
+  },
+  navDropdownEmail: {
+    fontSize: 11,
+    color: '#9ca3af',
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+  },
+  navDropdownStatusPressable: {
+    marginHorizontal: 10,
+    marginBottom: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  navDropdownStatusText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontStyle: 'italic',
+  },
+  navDropdownStatusPlaceholder: {
+    fontSize: 12,
+    color: '#d1d5db',
+    fontStyle: 'italic',
+  },
+  navDropdownStatusInput: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    marginHorizontal: 10,
+    marginBottom: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#6366f1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  navDropdownDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 4,
+  },
+  navDropdownSection: {
+    paddingBottom: 2,
+  },
+  navDropdownSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 2,
+  },
+  navDropdownSectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  navDropdownSectionAction: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '700',
+  },
+  navDropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  navDropdownItemText: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  navDropdownItemTextActive: {
+    color: '#6366f1',
+    fontWeight: '600',
+  },
+  navDropdownMutedText: {
+    fontSize: 13,
+    color: '#9ca3af',
+  },
+  navDropdownSignOutText: {
+    fontSize: 14,
+    color: '#ef4444',
   },
   userAvatarBig: {
     width: 38,
@@ -3846,11 +4435,22 @@ const styles = StyleSheet.create({
   },
   userMeta: {
     flexShrink: 1,
+    flex: 1,
+  },
+  userMetaNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   userMetaName: {
     fontSize: 14,
     fontWeight: '700',
     color: '#111827',
+  },
+  userNavChevron: {
+    fontSize: 10,
+    color: '#9ca3af',
+    lineHeight: 14,
   },
   userMetaStatusRow: {
     flexDirection: 'row',
@@ -3916,16 +4516,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   titleBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    flexDirection: 'column',
+    alignItems: 'flex-end',
     flexShrink: 0,
+    minWidth: 90,
   },
-  titleBarCaretDown: {
-    color: '#9ca3af',
+  titleBarDateText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  titleBarTimeText: {
     fontSize: 16,
     fontWeight: '700',
-    lineHeight: 18,
+    color: '#111827',
+    marginTop: 2,
   },
   avatarBadge: {
     width: 34,
@@ -4498,6 +5103,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  archiveBtnText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontWeight: '600',
+  },
+  editModalActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  archivedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f3f4f6',
+    gap: 8,
+  },
+  archivedText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#9ca3af',
+    textDecorationLine: 'line-through',
+  },
+  unarchiveBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+  },
+  unarchiveBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
   assignedToMeRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -4507,19 +5148,39 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
   },
-  assignedToMeCheck: {
-    paddingTop: 2,
-    paddingRight: 2,
-  },
-  assignedToMeCheckBox: {
+  incomingAcceptIcon: {
     width: 18,
     height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  incomingAcceptTooltip: {
+    position: 'absolute',
+    top: 32,
+    left: 0,
+    zIndex: 10,
+    borderRadius: 6,
+    backgroundColor: '#111827',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  incomingAcceptTooltipText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  assignedToMeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   assignedToMeText: {
+    flex: 1,
     fontSize: 14,
     color: '#111827',
     fontWeight: '500',
@@ -4557,5 +5218,22 @@ const styles = StyleSheet.create({
   assignedToMePriorityText: {
     fontSize: 10,
     fontWeight: '700',
+  },
+  priorityPickerRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  priorityPickerBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  priorityPickerLabel: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

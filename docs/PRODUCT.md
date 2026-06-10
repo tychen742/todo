@@ -25,7 +25,7 @@ The product should compete through simplicity and genuine usefulness — a tool 
 - **Team Workspaces**: ongoing groups of people who can share and assign todos.
 - **Team Pages**: collaboratively edited team homepages for notes, links, lightweight widgets, and shared context.
 - **Projects**: bounded efforts that belong to a team or user and support lifecycle planning, schedule management, phases, milestones, critical path awareness, and closure.
-- **Todo Workflow**: task text, future annotations, completion, priority, optional due dates, assignment, timestamps, and filtering.
+- **Todo Workflow**: task text, annotations/comments, completion, priority, optional due dates, assignment with acceptance lifecycle, timestamps, archiving, and filtering.
 - **Notes**: workspace-level note taking for broader personal, team, or project context.
 - **Calendars**: personal calendars, team calendars, recurring tasks, reminders, project milestones, and external calendar sync.
 - **Communications**: personal messages, team chat, todo/project discussion, assignment notifications, acknowledgements, and external messages.

@@ -39,6 +39,9 @@ alter table todos add column if not exists team_id uuid references teams(id) on 
 alter table todos add column if not exists position integer;
 alter table todos add column if not exists created_by uuid references profiles(id) on delete cascade;
 alter table todos add column if not exists assigned_to uuid references profiles(id) on delete set null;
+alter table todos add column if not exists assigned_at timestamptz;
+alter table todos add column if not exists accepted_at timestamptz;
+alter table todos add column if not exists completed_at timestamptz;
 
 -- One-time migration: remove orphaned rows that pre-date the created_by column.
 -- Safe to skip on a fresh database; idempotent because created_by is NOT NULL after this block.
@@ -52,6 +55,7 @@ create index if not exists team_members_user_id_idx on team_members (user_id);
 create index if not exists todos_team_id_idx on todos (team_id);
 create index if not exists todos_created_by_idx on todos (created_by);
 create index if not exists todos_assigned_to_idx on todos (assigned_to);
+create index if not exists todos_accepted_at_idx on todos (accepted_at);
 
 -- Partial unique indexes so active drag positions stay consistent per workspace.
 drop index if exists todos_position_personal_unique;
@@ -693,7 +697,7 @@ end;
 $$;
 
 -- Allow reading todos assigned to the current user across all workspaces.
--- This enables the "Assigned to me" section in the Personal workspace.
+-- This enables the "Inbox" section and accepted assigned todos in the Personal workspace.
 drop policy if exists "Team members can read team todos" on todos;
 create policy "Team members can read team todos"
   on todos for select
@@ -704,7 +708,7 @@ create policy "Team members can read team todos"
     or assigned_to = auth.uid()
   );
 
--- Allow assignees to mark their assigned todos done.
+-- Allow assignees to accept and update their assigned todos.
 drop policy if exists "Team members can update team todos" on todos;
 create policy "Team members can update team todos"
   on todos for update
@@ -714,3 +718,102 @@ create policy "Team members can update team todos"
     or public.is_team_member(team_id, auth.uid())
     or assigned_to = auth.uid()
   );
+
+-- ============================================================
+-- Migration: archive support, decline tracking, task comments
+-- ============================================================
+
+-- Soft-delete for todos: archived tasks are hidden from all active views
+-- but retained for history and can be un-archived.
+alter table todos add column if not exists archived_at timestamptz;
+
+-- Decline lifecycle: assignee can decline before accepting.
+-- declined_at records when; declined_by records who (always the assignee).
+alter table todos add column if not exists declined_at  timestamptz;
+alter table todos add column if not exists declined_by  uuid references profiles(id) on delete set null;
+
+create index if not exists todos_archived_at_idx on todos (archived_at)
+  where archived_at is not null;
+create index if not exists todos_declined_at_idx on todos (declined_at)
+  where declined_at is not null;
+
+-- Soft-delete for projects.
+-- Projects are archived rather than deleted to preserve task history.
+alter table projects add column if not exists archived_at timestamptz;
+
+create index if not exists projects_archived_at_idx on projects (archived_at)
+  where archived_at is not null;
+
+-- Task comments: pre- and post-acceptance discussion thread on a todo.
+-- Both assigner and assignee can post at any lifecycle stage.
+create table if not exists task_comments (
+  id         uuid        primary key default gen_random_uuid(),
+  todo_id    uuid        not null references todos(id) on delete cascade,
+  user_id    uuid        not null references profiles(id) on delete cascade,
+  body       text        not null check (char_length(body) > 0),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists task_comments_todo_id_idx    on task_comments (todo_id);
+create index if not exists task_comments_created_at_idx on task_comments (todo_id, created_at desc);
+
+alter table task_comments enable row level security;
+
+-- Helper: can the current user access a given todo's comment thread?
+-- Mirrors the union of all todo SELECT policies.
+create or replace function public.can_access_todo(p_todo_id uuid, p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from todos t
+    where t.id = p_todo_id
+      and (
+        (t.team_id is null and t.created_by = p_user_id)
+        or public.is_team_member(t.team_id, p_user_id)
+        or t.assigned_to = p_user_id
+        or (
+          t.project_id is not null
+          and exists (
+            select 1 from projects p
+            where p.id = t.project_id
+              and (
+                p.created_by = p_user_id
+                or (p.team_id is not null and public.is_team_member(p.team_id, p_user_id))
+              )
+          )
+        )
+      )
+  );
+$$;
+
+drop policy if exists "Accessible todo members can read comments" on task_comments;
+drop policy if exists "Accessible todo members can post comments" on task_comments;
+
+create policy "Accessible todo members can read comments"
+  on task_comments for select
+  to authenticated
+  using (public.can_access_todo(todo_id, auth.uid()));
+
+create policy "Accessible todo members can post comments"
+  on task_comments for insert
+  to authenticated
+  with check (
+    user_id = auth.uid()
+    and public.can_access_todo(todo_id, auth.uid())
+  );
+
+-- Publish task_comments to realtime so threads update live.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'task_comments'
+  ) then
+    alter publication supabase_realtime add table task_comments;
+  end if;
+end $$;

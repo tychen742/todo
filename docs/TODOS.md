@@ -118,6 +118,16 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Design team invitation acceptance and expiration.
 - Add roles and permissions beyond owner/admin/member only when needed.
 
+## Profile & Avatar
+
+- Onboarding avatar step: offer (1) import from LinkedIn, (2) upload a photo, (3) choose an animal emoji. LinkedIn import is the encouraged path — users already have a professional photo there and it reduces friction. See `docs/DECISIONS.md` for the full onboarding design.
+- LinkedIn import: use LinkedIn OAuth to fetch the profile photo and optionally display name and job title. Cache the photo to Supabase Storage (`avatars/{user_id}`) to avoid CDN dependency.
+- Photo upload: store in Supabase Storage; write public URL to `profiles.avatar_url`. Support crop/resize on upload.
+- Keep the animal emoji picker as a fun fallback for users who prefer not to use a photo.
+- Display priority throughout the app: profile photo > animal emoji > initials fallback.
+- Show the avatar consistently everywhere: title bar, assignment pills, inbox rows, member panels, and team pages.
+- Add a Profile screen where users can change display name, avatar, status, and other profile fields after onboarding.
+
 ## Status & Presence
 
 - Phase 1 (done): Users set their own status text from the title bar; stored in `profiles.status`; visible only to themselves for now.

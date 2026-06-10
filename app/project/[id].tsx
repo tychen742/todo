@@ -10,7 +10,8 @@ import {
   Platform,
   Modal,
 } from 'react-native';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { Clock } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '../../lib/supabase';
 import { DraggableList } from '../../components/DraggableList';
@@ -26,6 +27,7 @@ type Project = {
   description: string | null;
   team_id: string | null;
   status: 'active' | 'paused' | 'completed' | 'closed';
+  archived_at: string | null;
 };
 
 type Todo = {
@@ -37,6 +39,10 @@ type Todo = {
   due_date: string | null;
   note: string | null;
   created_at: string;
+  assigned_at: string | null;
+  accepted_at: string | null;
+  completed_at: string | null;
+  archived_at: string | null;
   position: number | null;
   project_id: string | null;
   phase_id: string | null;
@@ -103,11 +109,12 @@ function isSameDate(left: Date, right: Date) {
 
 export default function ProjectScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
 
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [input, setInput] = useState('');
@@ -163,7 +170,7 @@ export default function ProjectScreen() {
     if (!id) return;
     const { data, error: err } = await supabase
       .from('projects')
-      .select('id, name, description, team_id, status')
+      .select('id, name, description, team_id, status, archived_at')
       .eq('id', id)
       .single();
     if (err) { setError(err.message); return; }
@@ -185,12 +192,24 @@ export default function ProjectScreen() {
     setLoading(true);
     const { data, error: loadErr } = await supabase
       .from('todos')
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, project_id, phase_id, is_milestone')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone')
       .eq('project_id', id)
+      .is('archived_at', null)
       .order('created_at', { ascending: false });
     if (loadErr) { setError(loadErr.message); }
     else { setTodos(sortTodos(data ?? [])); setError(''); }
     setLoading(false);
+  }, [id]);
+
+  const loadArchivedTodos = useCallback(async () => {
+    if (!id) return;
+    const { data, error: err } = await supabase
+      .from('todos')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone')
+      .eq('project_id', id)
+      .not('archived_at', 'is', null)
+      .order('archived_at', { ascending: false });
+    if (!err) setArchivedTodos(data ?? []);
   }, [id]);
 
   useEffect(() => {
@@ -198,18 +217,19 @@ export default function ProjectScreen() {
     loadProject();
     loadPhases();
     loadTodos();
+    loadArchivedTodos();
 
     const channel = supabase
       .channel(`project-todos-${id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'todos', filter: `project_id=eq.${id}` },
-        loadTodos
+        () => { loadTodos(); loadArchivedTodos(); }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [id, loadProject, loadPhases, loadTodos]);
+  }, [id, loadProject, loadPhases, loadTodos, loadArchivedTodos]);
 
   async function addTodo() {
     const text = input.trim();
@@ -217,7 +237,7 @@ export default function ProjectScreen() {
     const { data, error: err } = await supabase
       .from('todos')
       .insert({ text, project_id: id, priority: 'normal' })
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, position, project_id, phase_id, is_milestone')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone')
       .single();
     if (err) { setError(err.message); return; }
     setInput('');
@@ -228,24 +248,40 @@ export default function ProjectScreen() {
   async function toggle(todoId: string) {
     const todo = todos.find((t) => t.id === todoId);
     if (!todo) return;
+    const done = !todo.done;
+    const completed_at = done ? new Date().toISOString() : null;
     const { error: err } = await supabase
       .from('todos')
-      .update({ done: !todo.done })
+      .update({ done, completed_at })
       .eq('id', todoId);
     if (err) { setError(err.message); return; }
-    setTodos((prev) => prev.map((t) => (t.id === todoId ? { ...t, done: !t.done } : t)));
+    setTodos((prev) => prev.map((t) => (t.id === todoId ? { ...t, done, completed_at } : t)));
   }
 
-  async function remove(todoId: string) {
-    const { error: err } = await supabase.from('todos').delete().eq('id', todoId);
+  async function archiveTodo(todoId: string) {
+    const archived_at = new Date().toISOString();
+    const { error: err } = await supabase
+      .from('todos')
+      .update({ archived_at })
+      .eq('id', todoId);
     if (err) { setError(err.message); return; }
+    const todo = todos.find((t) => t.id === todoId);
     setTodos((prev) => prev.filter((t) => t.id !== todoId));
+    if (todo) setArchivedTodos((prev) => [{ ...todo, archived_at }, ...prev]);
+    if (editTodo?.id === todoId) closeEditModal();
+    setError('');
   }
 
-  async function editTodoText(todoId: string, text: string) {
-    const { error: err } = await supabase.from('todos').update({ text }).eq('id', todoId);
+  async function unarchiveTodo(todoId: string) {
+    const { error: err } = await supabase
+      .from('todos')
+      .update({ archived_at: null })
+      .eq('id', todoId);
     if (err) { setError(err.message); return; }
-    setTodos((prev) => prev.map((t) => (t.id === todoId ? { ...t, text } : t)));
+    const todo = archivedTodos.find((t) => t.id === todoId);
+    setArchivedTodos((prev) => prev.filter((t) => t.id !== todoId));
+    if (todo) setTodos((prev) => sortTodos([{ ...todo, archived_at: null }, ...prev]));
+    setError('');
   }
 
   async function cyclePriority(todo: Todo) {
@@ -435,8 +471,8 @@ export default function ProjectScreen() {
             { field: 'text', label: 'Task', colStyle: styles.sortColTask },
             { field: 'priority', label: 'Priority', colStyle: styles.sortColPriority },
             { field: 'due_date', label: 'Due', colStyle: styles.sortColDue },
-            { field: 'created_at', label: 'Age', colStyle: styles.sortColAdded },
-          ] as { field: SortField; label: string; colStyle: object }[]
+            { field: 'created_at', label: null, colStyle: styles.sortColAdded },
+          ] as { field: SortField; label: string | null; colStyle: object }[]
         ).map(({ field, label, colStyle }) => {
           const isActive = sortField === field;
           const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
@@ -446,12 +482,14 @@ export default function ProjectScreen() {
               onPress={() => toggleSort(field)}
               style={[colStyle, styles.sortColInner]}
             >
-              <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
+              {label !== null
+                ? <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
+                : <Clock size={12} color={isActive ? '#6366f1' : '#9ca3af'} strokeWidth={2.5} />
+              }
               <Text style={[styles.sortColIndicator, isActive && styles.sortColLabelActive]}>{indicator}</Text>
             </Pressable>
           );
         })}
-        <View style={styles.sortActionsSpacer} />
       </View>
 
       <DraggableList
@@ -472,8 +510,6 @@ export default function ProjectScreen() {
             isMilestone={todo.is_milestone}
             phaseLabel={todo.phase_id ? (phaseById.get(todo.phase_id)?.name ?? '') : undefined}
             onToggle={() => toggle(todo.id)}
-            onDelete={() => remove(todo.id)}
-            onEdit={(text) => editTodoText(todo.id, text)}
             onOpenEdit={() => openEditModal(todo)}
             onPriority={() => cyclePriority(todo)}
             onDueDate={() => openDueCalendar(todo)}
@@ -492,36 +528,58 @@ export default function ProjectScreen() {
           </>
         }
         ListFooterComponent={
-          done.length > 0 ? (
-            <>
-              <View style={styles.sectionDivider}>
-                <View style={styles.sectionDividerLine} />
-                <Text style={styles.sectionLabel}>Completed</Text>
-                <View style={styles.sectionDividerLine} />
-              </View>
-              {done.map((todo) => (
-                <TodoItem
-                  key={todo.id}
-                  text={todo.text}
-                  done={todo.done}
-                  priority={todo.priority}
-                  dueDate={todo.due_date}
-                  note={todo.note}
-                  createdAt={todo.created_at}
-                  isMilestone={todo.is_milestone}
-                  phaseLabel={todo.phase_id ? (phaseById.get(todo.phase_id)?.name ?? '') : undefined}
-                  onToggle={() => toggle(todo.id)}
-                  onDelete={() => remove(todo.id)}
-                  onEdit={(text) => editTodoText(todo.id, text)}
-                  onOpenEdit={() => openEditModal(todo)}
-                  onPriority={() => cyclePriority(todo)}
-                  onDueDate={() => openDueCalendar(todo)}
-                  onPhase={() => setPhasePickerTodo(todo)}
-                  reserveDragSpace={Platform.OS === 'web'}
-                />
-              ))}
-            </>
-          ) : null
+          <>
+            {done.length > 0 && (
+              <>
+                <View style={styles.sectionDivider}>
+                  <View style={styles.sectionDividerLine} />
+                  <Text style={styles.sectionLabel}>Completed</Text>
+                  <View style={styles.sectionDividerLine} />
+                </View>
+                {done.map((todo) => (
+                  <TodoItem
+                    key={todo.id}
+                    text={todo.text}
+                    done={todo.done}
+                    priority={todo.priority}
+                    dueDate={todo.due_date}
+                    note={todo.note}
+                    createdAt={todo.created_at}
+                    isMilestone={todo.is_milestone}
+                    phaseLabel={todo.phase_id ? (phaseById.get(todo.phase_id)?.name ?? '') : undefined}
+                    onToggle={() => toggle(todo.id)}
+                    onOpenEdit={() => openEditModal(todo)}
+                    onPriority={() => cyclePriority(todo)}
+                    onDueDate={() => openDueCalendar(todo)}
+                    onPhase={() => setPhasePickerTodo(todo)}
+                    reserveDragSpace={Platform.OS === 'web'}
+                  />
+                ))}
+              </>
+            )}
+            {archivedTodos.length > 0 && (
+              <>
+                <Pressable
+                  onPress={() => setArchivedExpanded((v) => !v)}
+                  style={styles.sectionDivider}
+                >
+                  <View style={styles.sectionDividerLine} />
+                  <Text style={styles.sectionLabel}>
+                    Archived ({archivedTodos.length}) {archivedExpanded ? '↑' : '↓'}
+                  </Text>
+                  <View style={styles.sectionDividerLine} />
+                </Pressable>
+                {archivedExpanded && archivedTodos.map((todo) => (
+                  <View key={todo.id} style={styles.archivedRow}>
+                    <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
+                    <Pressable onPress={() => unarchiveTodo(todo.id)} style={styles.unarchiveBtn}>
+                      <Text style={styles.unarchiveBtnText}>Restore</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </>
+            )}
+          </>
         }
       />
 
@@ -679,15 +737,20 @@ export default function ProjectScreen() {
               </Text>
             </Pressable>
             <View style={styles.editModalActions}>
-              <Pressable onPress={closeEditModal}>
-                <Text style={styles.calendarCancelText}>Cancel</Text>
+              <Pressable onPress={() => editTodo && archiveTodo(editTodo.id)}>
+                <Text style={styles.archiveBtnText}>Archive</Text>
               </Pressable>
-              <Pressable
-                onPress={saveEditModal}
-                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
-              >
-                <Text style={styles.smallBtnText}>Save</Text>
-              </Pressable>
+              <View style={styles.editModalActionsRight}>
+                <Pressable onPress={closeEditModal}>
+                  <Text style={styles.calendarCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={saveEditModal}
+                  style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+                >
+                  <Text style={styles.smallBtnText}>Save</Text>
+                </Pressable>
+              </View>
             </View>
           </Pressable>
         </Pressable>
@@ -831,7 +894,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sortColPriority: {
-    width: 76,
+    width: 48,
     marginLeft: 8,
   },
   sortColDue: {
@@ -841,9 +904,6 @@ const styles = StyleSheet.create({
   sortColAdded: {
     width: 56,
     marginLeft: 8,
-  },
-  sortActionsSpacer: {
-    width: 64,
   },
   sortColLabel: {
     fontSize: 11,
@@ -888,6 +948,32 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  archivedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f3f4f6',
+    gap: 8,
+  },
+  archivedText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#9ca3af',
+    textDecorationLine: 'line-through',
+  },
+  unarchiveBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+  },
+  unarchiveBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
   },
   modalBackdrop: {
     flex: 1,
@@ -1019,6 +1105,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 8,
+  },
+  editModalActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  archiveBtnText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontWeight: '600',
   },
   phasePillRow: {
     flexGrow: 0,

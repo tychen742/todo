@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 
 type Props = {
   text: string;
@@ -11,9 +11,10 @@ type Props = {
   assignedLabel?: string;
   phaseLabel?: string;
   isMilestone?: boolean;
+  assignerInitials?: string;
+  assignerColor?: string;
+  assignerName?: string;
   onToggle: () => void;
-  onDelete: () => void;
-  onEdit?: (text: string) => void;
   onOpenEdit?: () => void;
   onAssign?: () => void;
   onPriority?: () => void;
@@ -31,58 +32,47 @@ const priorityLabels = {
   urgent: 'Urgent',
 };
 
-function relativeTime(value?: string) {
-  if (!value) return '';
+const priorityColors = {
+  low: '#9ca3af',
+  normal: '#60a5fa',
+  high: '#f59e0b',
+  urgent: '#ef4444',
+};
 
-  const createdAt = new Date(value).getTime();
-  if (Number.isNaN(createdAt)) return '';
-
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - createdAt) / 1000));
-  if (elapsedSeconds < 30) return 'Just now';
-  if (elapsedSeconds < 60) return `${elapsedSeconds}s ago`;
-
-  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
-
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h ago`;
-
-  const elapsedDays = Math.floor(elapsedHours / 24);
-  if (elapsedDays === 1) return 'Yesterday';
-  if (elapsedDays < 7) return `${elapsedDays}d ago`;
-
-  return new Date(value).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+function agePill(value?: string): { label: string } | null {
+  if (!value) return null;
+  const ms = Date.now() - new Date(value).getTime();
+  if (Number.isNaN(ms) || ms < 0) return null;
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return { label: 'now' };
+  const m = Math.floor(s / 60);
+  if (m < 60) return { label: `${m}m` };
+  const h = Math.floor(m / 60);
+  if (h < 24) return { label: `${h}h` };
+  const d = Math.floor(h / 24);
+  return { label: `${d}d` };
 }
 
-function dueDateLabel(value?: string | null) {
-  if (!value) return '';
+type DuePill = { label: string; bg: string; color: string };
 
-  const [yearText, monthText, dayText] = value.split('-');
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const dueDate = new Date(year, month - 1, day);
-
-  if (Number.isNaN(dueDate.getTime())) return '';
-
+function dueDatePill(value?: string | null): DuePill | null {
+  if (!value) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return null;
   const today = new Date();
-  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const dueMidnight = new Date(year, month - 1, day);
-  const dayDelta = Math.round(
-    (dueMidnight.getTime() - todayMidnight.getTime()) / (24 * 60 * 60 * 1000)
-  );
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dueMid = new Date(y, m - 1, d);
+  if (Number.isNaN(dueMid.getTime())) return null;
+  const delta = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000);
 
-  if (dayDelta === 0) return 'Today';
-  if (dayDelta === 1) return 'Tomorrow';
-  if (dayDelta === -1) return 'Yesterday';
-
-  return dueDate.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+  if (delta < -1) return { label: `${Math.abs(delta)}d late`, bg: '#fef2f2', color: '#dc2626' };
+  if (delta === -1) return { label: 'Yest', bg: '#fef2f2', color: '#dc2626' };
+  if (delta === 0) return { label: 'Today', bg: '#fef3c7', color: '#d97706' };
+  if (delta === 1) return { label: 'Tmrw', bg: '#fefce8', color: '#ca8a04' };
+  if (delta <= 7) return { label: `${delta}d`, bg: '#eef2ff', color: '#4338ca' };
+  const date = new Date(y, m - 1, d);
+  const label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return { label, bg: '#f3f4f6', color: '#6b7280' };
 }
 
 export default function TodoItem({
@@ -95,9 +85,10 @@ export default function TodoItem({
   assignedLabel,
   phaseLabel,
   isMilestone = false,
+  assignerInitials,
+  assignerColor,
+  assignerName,
   onToggle,
-  onDelete,
-  onEdit,
   onOpenEdit,
   onAssign,
   onPriority,
@@ -107,21 +98,11 @@ export default function TodoItem({
   reserveDragSpace = false,
   isDragging = false,
 }: Props) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState(text);
+  const [priorityHovered, setPriorityHovered] = useState(false);
+  const [assignerHovered, setAssignerHovered] = useState(false);
 
-  function startEdit() {
-    setDraft(text);
-    setIsEditing(true);
-  }
-
-  function commitEdit() {
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== text) {
-      onEdit?.(trimmed);
-    }
-    setIsEditing(false);
-  }
+  const duePill = dueDatePill(dueDate);
+  const age = agePill(createdAt);
 
   return (
     <View style={[styles.row, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone]}>
@@ -131,51 +112,73 @@ export default function TodoItem({
         </Pressable>
       )}
       {!onDrag && reserveDragSpace && <View style={styles.dragHandle} />}
+
       <Pressable onPress={onToggle} style={styles.checkbox}>
         <View style={[styles.box, done && styles.boxChecked]}>
           {done && <Text style={styles.checkmark}>✓</Text>}
         </View>
       </Pressable>
 
-      {isEditing ? (
-        <TextInput
-          style={[styles.text, styles.textEditing]}
-          value={draft}
-          onChangeText={setDraft}
-          onBlur={commitEdit}
-          onSubmitEditing={commitEdit}
-          returnKeyType="done"
-          autoFocus
-          selectTextOnFocus
-        />
-      ) : (
-        <Pressable onPress={startEdit} style={styles.textWrap}>
-          <View style={styles.textRow}>
-            {isMilestone && <Text style={styles.milestoneIcon}>◆</Text>}
-            <Text style={[styles.text, done && styles.textDone, isMilestone && !done && styles.textMilestone]} numberOfLines={1}>
-              {text}
+      <Pressable onPress={onOpenEdit} disabled={!onOpenEdit} style={styles.textWrap}>
+        <View style={styles.textRow}>
+          {isMilestone && <Text style={styles.milestoneIcon}>◆</Text>}
+          <Text
+            style={[styles.text, done && styles.textDone, isMilestone && !done && styles.textMilestone]}
+            numberOfLines={1}
+          >
+            {text}
+          </Text>
+        </View>
+        {!!onPhase && (
+          <Pressable onPress={onPhase} style={styles.phaseTagWrap}>
+            <Text style={phaseLabel ? styles.phaseTag : styles.phaseTagEmpty}>
+              {phaseLabel ?? 'Set phase'}
             </Text>
-          </View>
-          {!!onPhase && (
-            <Pressable onPress={onPhase} style={styles.phaseTagWrap}>
-              <Text style={phaseLabel ? styles.phaseTag : styles.phaseTagEmpty}>
-                {phaseLabel ?? 'Set phase'}
-              </Text>
-            </Pressable>
-          )}
-          {!!note && (
-            <Text style={styles.notePreview} numberOfLines={1}>
-              {note}
-            </Text>
+          </Pressable>
+        )}
+        {!!note && (
+          <Text style={styles.notePreview} numberOfLines={1}>
+            {note}
+          </Text>
+        )}
+      </Pressable>
+
+      <View style={styles.priorityGroup}>
+        <Pressable
+          onPress={onPriority}
+          disabled={!onPriority}
+          onHoverIn={() => setPriorityHovered(true)}
+          onHoverOut={() => setPriorityHovered(false)}
+          style={styles.priorityControl}
+          accessibilityRole="button"
+          accessibilityLabel={`Priority: ${priorityLabels[priority]}`}
+        >
+          <View style={[styles.prioritySquare, { backgroundColor: priorityColors[priority] }]} />
+          {priorityHovered && Platform.OS === 'web' && (
+            <View style={styles.tooltip}>
+              <Text style={styles.tooltipText}>{priorityLabels[priority]}</Text>
+            </View>
           )}
         </Pressable>
-      )}
+        {!!assignerInitials && (
+          <Pressable
+            onHoverIn={() => setAssignerHovered(true)}
+            onHoverOut={() => setAssignerHovered(false)}
+            style={styles.assignerAvatarWrap}
+            hitSlop={4}
+          >
+            <View style={[styles.assignerAvatar, { backgroundColor: assignerColor ?? '#9ca3af' }]}>
+              <Text style={styles.assignerAvatarText}>{assignerInitials}</Text>
+            </View>
+            {assignerHovered && Platform.OS === 'web' && assignerName && (
+              <View style={styles.tooltip}>
+                <Text style={styles.tooltipText}>{assignerName}</Text>
+              </View>
+            )}
+          </Pressable>
+        )}
+      </View>
 
-      <Pressable onPress={onPriority} disabled={!onPriority} style={styles.inlineControl}>
-        <Text style={[styles.priority, styles[`priority_${priority}`]]}>
-          {priorityLabels[priority]}
-        </Text>
-      </Pressable>
       {!!assignedLabel && (
         <Pressable onPress={onAssign} disabled={!onAssign} style={styles.inlineControl}>
           <Text style={styles.assignee} numberOfLines={1}>
@@ -183,31 +186,26 @@ export default function TodoItem({
           </Text>
         </Pressable>
       )}
-      <Pressable onPress={onDueDate} disabled={!onDueDate} style={styles.inlineControl}>
-        <Text
-          style={[
-            styles.dueDate,
-            !dueDate && styles.dueDateEmpty,
-            (priority === 'urgent' || priority === 'high') && styles.dueDateBold,
-          ]}
-          numberOfLines={1}
-        >
-          {dueDate ? dueDateLabel(dueDate) : '—'}
-        </Text>
+
+      <Pressable onPress={onDueDate} disabled={!onDueDate} style={styles.dueDateCol}>
+        {duePill ? (
+          <View style={[styles.pill, { backgroundColor: duePill.bg }]}>
+            <Text style={[styles.pillText, { color: duePill.color }]} numberOfLines={1}>
+              {duePill.label}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.pillEmpty}>—</Text>
+        )}
       </Pressable>
-      {!!createdAt && (
-        <Text style={styles.timestamp} numberOfLines={1}>
-          {relativeTime(createdAt)}
-        </Text>
-      )}
-      {!!onOpenEdit && (
-        <Pressable onPress={onOpenEdit} style={styles.editBtn} hitSlop={8}>
-          <Text style={styles.editText}>✏</Text>
-        </Pressable>
-      )}
-      <Pressable onPress={onDelete} style={styles.deleteBtn} hitSlop={8}>
-        <Text style={styles.deleteText}>✕</Text>
-      </Pressable>
+
+      <View style={styles.ageCol}>
+        {age ? (
+          <View style={styles.agePill}>
+            <Text style={styles.agePillText}>{age.label}</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -277,72 +275,61 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#d1d5db',
   },
-  textEditing: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 16,
-    color: '#111827',
-    borderBottomWidth: 1.5,
-    borderBottomColor: '#6366f1',
-    paddingVertical: 2,
-    marginRight: 4,
-  },
   assignee: {
     color: '#6b7280',
     fontSize: 12,
     maxWidth: 96,
   },
-  timestamp: {
-    color: '#9ca3af',
-    fontSize: 12,
+  dueDateCol: {
+    marginLeft: 8,
+    width: 80,
+    alignItems: 'flex-start',
+  },
+  ageCol: {
     marginLeft: 8,
     width: 56,
+    alignItems: 'flex-start',
   },
-  dueDate: {
-    color: '#4338ca',
-    fontSize: 12,
-    width: 80,
-  },
-  dueDateBold: {
-    fontWeight: '700',
-  },
-  dueDateEmpty: {
-    color: '#6b7280',
-  },
-  priority: {
-    borderRadius: 6,
-    overflow: 'hidden',
+  pill: {
+    borderRadius: 5,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    fontSize: 11,
-    width: 76,
   },
-  priority_low: {
-    color: '#4b5563',
+  pillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  pillEmpty: {
+    fontSize: 12,
+    color: '#d1d5db',
+  },
+  agePill: {
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     backgroundColor: '#f3f4f6',
   },
-  priority_normal: {
-    color: '#1d4ed8',
-    backgroundColor: '#dbeafe',
+  agePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
   },
-  priority_high: {
-    color: '#92400e',
-    backgroundColor: '#fef3c7',
-    fontWeight: '700',
-  },
-  priority_urgent: {
-    color: '#b91c1c',
-    backgroundColor: '#fee2e2',
-    fontWeight: '700',
-  },
-  editBtn: {
-    paddingLeft: 8,
-    width: 28,
+  priorityGroup: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginLeft: 8,
+    width: 48,
   },
-  editText: {
-    fontSize: 13,
-    color: '#9ca3af',
+  priorityControl: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prioritySquare: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
   },
   rowMilestone: {
     backgroundColor: '#fefce8',
@@ -377,16 +364,42 @@ const styles = StyleSheet.create({
     color: '#d1d5db',
     lineHeight: 22,
   },
-  deleteBtn: {
-    paddingLeft: 8,
-    width: 28,
-    alignItems: 'center',
-  },
-  deleteText: {
-    fontSize: 14,
-    color: '#9ca3af',
-  },
   inlineControl: {
     marginLeft: 8,
+  },
+  assignerAvatarWrap: {
+    marginLeft: 2,
+    position: 'relative',
+  },
+  assignerAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assignerAvatarText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  tooltip: {
+    position: 'absolute',
+    bottom: 24,
+    left: '50%' as unknown as number,
+    transform: [{ translateX: -40 }],
+    backgroundColor: '#111827',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 100,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  tooltipText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+    whiteSpace: 'nowrap' as any,
   },
 });
