@@ -8,6 +8,7 @@ type Props = {
   dueDate?: string | null;
   note?: string | null;
   createdAt?: string;
+  assignedAt?: string;
   assignedLabel?: string;
   phaseLabel?: string;
   isMilestone?: boolean;
@@ -39,18 +40,19 @@ const priorityColors = {
   urgent: '#ef4444',
 };
 
-function agePill(value?: string): { label: string } | null {
+function agePill(value?: string): { label: string; days: number; hours: number } | null {
   if (!value) return null;
   const ms = Date.now() - new Date(value).getTime();
   if (Number.isNaN(ms) || ms < 0) return null;
   const s = Math.floor(ms / 1000);
-  if (s < 60) return { label: 'now' };
-  const m = Math.floor(s / 60);
-  if (m < 60) return { label: `${m}m` };
-  const h = Math.floor(m / 60);
-  if (h < 24) return { label: `${h}h` };
-  const d = Math.floor(h / 24);
-  return { label: `${d}d` };
+  const totalMinutes = Math.floor(s / 60);
+  const totalHours = Math.floor(totalMinutes / 60);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  if (s < 60) return { label: 'now', days: 0, hours: 0 };
+  if (totalMinutes < 60) return { label: `${totalMinutes}m`, days: 0, hours: 0 };
+  if (totalHours < 24) return { label: `${totalHours}h`, days: 0, hours: totalHours };
+  return { label: `${days}d`, days, hours };
 }
 
 type DuePill = { label: string; bg: string; color: string };
@@ -66,7 +68,7 @@ function dueDatePill(value?: string | null): DuePill | null {
   const delta = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000);
 
   if (delta < -1) return { label: `${Math.abs(delta)}d late`, bg: '#fef2f2', color: '#dc2626' };
-  if (delta === -1) return { label: 'Yest', bg: '#fef2f2', color: '#dc2626' };
+  if (delta === -1) return { label: '1d late', bg: '#fef2f2', color: '#dc2626' };
   if (delta === 0) return { label: 'Today', bg: '#fef3c7', color: '#d97706' };
   if (delta === 1) return { label: 'Tmrw', bg: '#fefce8', color: '#ca8a04' };
   if (delta <= 7) return { label: `${delta}d`, bg: '#eef2ff', color: '#4338ca' };
@@ -82,6 +84,7 @@ export default function TodoItem({
   dueDate,
   note,
   createdAt,
+  assignedAt,
   assignedLabel,
   phaseLabel,
   isMilestone = false,
@@ -100,12 +103,15 @@ export default function TodoItem({
 }: Props) {
   const [priorityHovered, setPriorityHovered] = useState(false);
   const [assignerHovered, setAssignerHovered] = useState(false);
+  const [ageHovered, setAgeHovered] = useState(false);
 
   const duePill = dueDatePill(dueDate);
-  const age = agePill(createdAt);
+  const ageTimestamp = assignedAt ?? createdAt;
+  const ageLabel = assignedAt ? 'Assigned' : 'Created';
+  const age = agePill(ageTimestamp);
 
   return (
-    <View style={[styles.row, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone]}>
+    <View style={[styles.row, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone, ageHovered && styles.rowTooltipActive]}>
       {!!onDrag && (
         <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
           <Text style={styles.dragHandleText}>⠿</Text>
@@ -199,13 +205,28 @@ export default function TodoItem({
         )}
       </Pressable>
 
-      <View style={styles.ageCol}>
+      <Pressable
+        style={styles.ageCol}
+        onHoverIn={() => setAgeHovered(true)}
+        onHoverOut={() => setAgeHovered(false)}
+        disabled={!ageTimestamp}
+      >
         {age ? (
           <View style={styles.agePill}>
             <Text style={styles.agePillText}>{age.label}</Text>
           </View>
         ) : null}
-      </View>
+        {ageHovered && Platform.OS === 'web' && !!ageTimestamp && age && (
+          <View style={styles.ageTooltip}>
+            <Text style={styles.tooltipText}>
+              {'Age: ' + (age.days > 0 ? `${age.days}d ` : '') + (age.hours > 0 ? `${age.hours}h` : age.days === 0 ? age.label : '0h')}
+            </Text>
+            <Text style={styles.tooltipText}>
+              {ageLabel + ' ' + new Date(ageTimestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </Text>
+          </View>
+        )}
+      </Pressable>
     </View>
   );
 }
@@ -223,9 +244,9 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   box: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 5,
     borderWidth: 2,
     borderColor: '#6366f1',
     alignItems: 'center',
@@ -237,7 +258,7 @@ const styles = StyleSheet.create({
   },
   checkmark: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
   },
   textWrap: {
@@ -282,7 +303,7 @@ const styles = StyleSheet.create({
   },
   dueDateCol: {
     marginLeft: 8,
-    width: 80,
+    width: 64,
     alignItems: 'flex-start',
   },
   ageCol: {
@@ -311,8 +332,7 @@ const styles = StyleSheet.create({
   },
   agePillText: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
+    color: '#9ca3af',
   },
   priorityGroup: {
     flexDirection: 'row',
@@ -383,18 +403,33 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  rowTooltipActive: {
+    zIndex: 10,
+  },
   tooltip: {
     position: 'absolute',
     bottom: 24,
     left: '50%' as unknown as number,
     transform: [{ translateX: -40 }],
-    backgroundColor: '#111827',
+    backgroundColor: '#374151',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
     zIndex: 100,
     minWidth: 80,
     alignItems: 'center',
+  },
+  ageTooltip: {
+    position: 'absolute',
+    top: 24,
+    right: 0,
+    backgroundColor: '#374151',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 100,
+    minWidth: 160,
+    alignItems: 'flex-start',
   },
   tooltipText: {
     color: '#fff',

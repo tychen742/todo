@@ -466,30 +466,16 @@ export default function ProjectScreen() {
       <View style={styles.sortBar}>
         {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
         <View style={styles.sortCheckboxSpacer} />
-        {(
-          [
-            { field: 'text', label: 'Task', colStyle: styles.sortColTask },
-            { field: 'priority', label: 'Priority', colStyle: styles.sortColPriority },
-            { field: 'due_date', label: 'Due', colStyle: styles.sortColDue },
-            { field: 'created_at', label: null, colStyle: styles.sortColAdded },
-          ] as { field: SortField; label: string | null; colStyle: object }[]
-        ).map(({ field, label, colStyle }) => {
-          const isActive = sortField === field;
-          const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
-          return (
-            <Pressable
-              key={field}
-              onPress={() => toggleSort(field)}
-              style={[colStyle, styles.sortColInner]}
-            >
-              {label !== null
-                ? <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
-                : <Clock size={12} color={isActive ? '#6366f1' : '#9ca3af'} strokeWidth={2.5} />
-              }
-              <Text style={[styles.sortColIndicator, isActive && styles.sortColLabelActive]}>{indicator}</Text>
-            </Pressable>
-          );
-        })}
+        <Pressable onPress={() => toggleSort('text')} style={[styles.sortColTask, styles.sortColInner]}>
+          <Text style={[styles.sortColLabel, sortField === 'text' && styles.sortColLabelActive]}>Task</Text>
+          {sortField === 'text' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
+        </Pressable>
+        <View style={[styles.sortColPriority, { flexShrink: 0 }]} />
+        <Pressable onPress={() => toggleSort('due_date')} style={[styles.sortColDue, styles.sortColInner]}>
+          <Text style={[styles.sortColLabel, sortField === 'due_date' && styles.sortColLabelActive]}>Due</Text>
+          {sortField === 'due_date' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
+        </Pressable>
+        <View style={styles.sortColAgeGap} />
       </View>
 
       <DraggableList
@@ -897,9 +883,19 @@ const styles = StyleSheet.create({
     width: 48,
     marginLeft: 8,
   },
+  prioritySortSquare: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+  },
   sortColDue: {
-    width: 80,
+    width: 64,
     marginLeft: 8,
+  },
+  sortColAgeGap: {
+    width: 56,
+    marginLeft: 8,
+    flexShrink: 0,
   },
   sortColAdded: {
     width: 56,

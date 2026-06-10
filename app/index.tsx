@@ -2364,26 +2364,16 @@ export default function HomeScreen() {
                 <View style={styles.sortBar}>
                   {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
                   <View style={styles.sortCheckboxSpacer} />
-                  {(
-                    [
-                      { field: 'text', label: 'Task', colStyle: styles.sortColTask },
-                      { field: 'priority', label: 'Priority', colStyle: styles.sortColPriority },
-                      { field: 'due_date', label: 'Due', colStyle: styles.sortColDue },
-                      { field: 'created_at', label: null, colStyle: styles.sortColAdded },
-                    ] as { field: SortField; label: string | null; colStyle: object }[]
-                  ).map(({ field, label, colStyle }) => {
-                    const isActive = sortField === field;
-                    const indicator = isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕';
-                    return (
-                      <Pressable key={field} onPress={() => toggleSort(field)} style={[colStyle, styles.sortColInner]}>
-                        {label !== null
-                          ? <Text style={[styles.sortColLabel, isActive && styles.sortColLabelActive]}>{label}</Text>
-                          : <Clock size={12} color={isActive ? '#6366f1' : '#9ca3af'} strokeWidth={2.5} />
-                        }
-                        <Text style={[styles.sortColIndicator, isActive && styles.sortColLabelActive]}>{indicator}</Text>
-                      </Pressable>
-                    );
-                  })}
+                  <Pressable onPress={() => toggleSort('text')} style={[styles.sortColTask, styles.sortColInner]}>
+                    <Text style={[styles.sortColLabel, sortField === 'text' && styles.sortColLabelActive]}>Task</Text>
+                    {sortField === 'text' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
+                  </Pressable>
+                  <View style={[styles.sortColPriority, { flexShrink: 0 }]} />
+                  <Pressable onPress={() => toggleSort('due_date')} style={[styles.sortColDue, styles.sortColInner]}>
+                    <Text style={[styles.sortColLabel, sortField === 'due_date' && styles.sortColLabelActive]}>Due</Text>
+                    {sortField === 'due_date' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
+                  </Pressable>
+                  <View style={styles.sortColAgeGap} />
                 </View>
 
                 <DraggableList
@@ -2399,6 +2389,7 @@ export default function HomeScreen() {
                       <TodoItem
                         text={todo.text} done={todo.done} priority={todo.priority}
                         dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
+                        assignedAt={todo.assigned_at ?? undefined}
                         assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
                         assignerInitials={assigner?.initials} assignerColor={assigner?.color}
                         assignerName={assigner?.name}
@@ -2422,6 +2413,25 @@ export default function HomeScreen() {
                   }
                   ListFooterComponent={
                     <>
+                      {done.length > 0 && <View style={styles.completedDivider} />}
+                      {done.map((todo) => {
+                        const assigner = getAssignerInfo(todo);
+                        return (
+                          <TodoItem
+                            key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
+                            dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
+                            assignedAt={todo.assigned_at ?? undefined}
+                            assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                            assignerInitials={assigner?.initials} assignerColor={assigner?.color}
+                            assignerName={assigner?.name}
+                            onToggle={() => toggle(todo.id)}
+                            onOpenEdit={() => openEditModal(todo)}
+                            onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
+                            onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                            reserveDragSpace={Platform.OS === 'web'}
+                          />
+                        );
+                      })}
                       {isPersonal && assignedToMe.length > 0 && !showInboxSidePanel && (
                         <>
                           <View style={styles.sectionDivider}>
@@ -2459,34 +2469,6 @@ export default function HomeScreen() {
                 />
               </View>
 
-              {done.length > 0 && (
-                <View style={styles.completedTasksBox}>
-                  <View style={styles.sectionDivider}>
-                    <View style={styles.sectionDividerLine} />
-                    <Text style={styles.sectionLabel}>Completed</Text>
-                    <View style={styles.sectionDividerLine} />
-                  </View>
-                  <ScrollView style={styles.completedTasksList} showsVerticalScrollIndicator={false}>
-                    {done.map((todo) => {
-                      const assigner = getAssignerInfo(todo);
-                      return (
-                        <TodoItem
-                          key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
-                          dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
-                          assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
-                          assignerInitials={assigner?.initials} assignerColor={assigner?.color}
-                          assignerName={assigner?.name}
-                          onToggle={() => toggle(todo.id)}
-                          onOpenEdit={() => openEditModal(todo)}
-                          onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
-                          onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
-                          reserveDragSpace={Platform.OS === 'web'}
-                        />
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              )}
             </View>
 
             {showInboxSidePanel && (
@@ -3379,16 +3361,9 @@ const styles = StyleSheet.create({
     maxHeight: todoRowHeight * defaultVisibleTaskRows,
     flexGrow: 0,
   },
-  completedTasksBox: {
-    maxHeight: taskBoxMaxHeight,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
-    overflow: 'hidden',
-  },
-  completedTasksList: {
-    maxHeight: todoRowHeight * defaultVisibleTaskRows,
-    flexGrow: 0,
+  completedDivider: {
+    height: 2,
+    backgroundColor: '#e5e7eb',
   },
   assignedToMePanel: {
     width: 340,
@@ -4175,9 +4150,19 @@ const styles = StyleSheet.create({
     width: 48,
     marginLeft: 8,
   },
+  prioritySortSquare: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+  },
   sortColDue: {
-    width: 80,
+    width: 64,
     marginLeft: 8,
+  },
+  sortColAgeGap: {
+    width: 56,
+    marginLeft: 8,
+    flexShrink: 0,
   },
   sortColAdded: {
     width: 56,
