@@ -215,3 +215,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Add built-in skins/themes (e.g. light, dark, high-contrast, color accents) for users to choose from without requiring custom branding.
 - Keep theme selection as a personal preference; team or company branding can override or extend it.
 - **Display Density** — add a density picker (Compact / Cozy / Roomy) similar to Outlook's Display Density menu. Controls `paddingVertical` on all rows and section headers. Compact: 4px vertical. Cozy: 7px (current default). Roomy: 12px. The chosen value replaces the `micro` spacing token at runtime and applies uniformly to every row in every pane (tasks, completed, inbox). Persist the selection in user prefs. Show a checkmark next to the active choice like Outlook does.
+
+
+this is a good UI element to have.
+![alt text](image.png)
