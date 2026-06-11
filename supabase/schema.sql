@@ -865,3 +865,53 @@ begin
 end $$;
 
 alter table todos add column if not exists estimate text;
+
+-- Atomically create a team and add the caller as owner in one transaction.
+-- Using security invoker so auth.uid() resolves to the calling user.
+create or replace function public.create_team_with_owner(p_name text, p_org_id uuid default null)
+returns table(id uuid, name text, org_id uuid)
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_team_id uuid;
+begin
+  insert into teams (name, created_by, org_id)
+  values (p_name, auth.uid(), p_org_id)
+  returning teams.id into v_team_id;
+
+  insert into team_members (team_id, user_id, role)
+  values (v_team_id, auth.uid(), 'owner');
+
+  return query
+    select t.id, t.name, t.org_id
+    from teams t
+    where t.id = v_team_id;
+end;
+$$;
+
+-- Atomically create an organization and add the caller as owner in one transaction.
+-- Using security invoker so auth.uid() resolves to the calling user.
+create or replace function public.create_org_with_owner(p_name text)
+returns table(id uuid, name text)
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_org_id uuid;
+begin
+  insert into organizations (name, created_by)
+  values (p_name, auth.uid())
+  returning organizations.id into v_org_id;
+
+  insert into org_members (org_id, user_id, role)
+  values (v_org_id, auth.uid(), 'owner');
+
+  return query
+    select o.id, o.name
+    from organizations o
+    where o.id = v_org_id;
+end;
+$$;

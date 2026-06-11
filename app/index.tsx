@@ -1129,27 +1129,17 @@ export default function HomeScreen() {
     const name = teamName.trim();
     if (!name) return;
 
-    const { data: team, error: teamError } = await supabase
-      .from('teams')
-      .insert({ name, created_by: session.user.id, org_id: newTeamOrgId })
-      .select('id, name, org_id')
-      .single();
+    const { data, error: teamError } = await supabase
+      .rpc('create_team_with_owner', { p_name: name, p_org_id: newTeamOrgId });
 
     if (teamError) {
       setError(teamError.message);
       return;
     }
 
-    const { error: memberError } = await supabase.from('team_members').insert({
-      team_id: team.id,
-      user_id: session.user.id,
-      role: 'owner',
-    });
-
-    if (memberError) {
-      // Roll back the team row so we don't leave an owner-less team.
-      await supabase.from('teams').delete().eq('id', team.id);
-      setError(memberError.message);
+    const team = (data as Array<{ id: string; name: string; org_id: string | null }>)?.[0];
+    if (!team) {
+      setError('Failed to create team.');
       return;
     }
 
@@ -1167,25 +1157,13 @@ export default function HomeScreen() {
     const name = orgName.trim();
     if (!name) return;
 
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .insert({ name, created_by: session.user.id })
-      .select('id, name')
-      .single();
+    const { data, error: orgError } = await supabase
+      .rpc('create_org_with_owner', { p_name: name });
 
     if (orgError) { setError(orgError.message); return; }
 
-    const { error: memberError } = await supabase.from('org_members').insert({
-      org_id: org.id,
-      user_id: session.user.id,
-      role: 'owner',
-    });
-
-    if (memberError) {
-      await supabase.from('organizations').delete().eq('id', org.id);
-      setError(memberError.message);
-      return;
-    }
+    const org = (data as Array<{ id: string; name: string }>)?.[0];
+    if (!org) { setError('Failed to create organization.'); return; }
 
     setOrgName('');
     setOrganizations((prev) => [...prev, { ...org, member_count: 1 }]);
