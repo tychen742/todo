@@ -2,13 +2,13 @@ import React from 'react';
 
 type ProviderProps = {
   children: React.ReactNode;
-  onMove: (todoId: string, targetPhaseId: string | null, overTodoId: string | null, targetDone?: boolean) => void;
+  onMove: (todoId: string, targetPhaseId: string | null, targetWorkflowStatus: string | null, overTodoId: string | null) => void;
 };
 
 type LaneProps = {
   id: string;
   phaseId: string | null;
-  done?: boolean;
+  workflowStatus?: string | null;
   itemIds: string[];
   children: React.ReactNode;
   orientation?: 'horizontal' | 'vertical';
@@ -17,7 +17,7 @@ type LaneProps = {
 type ItemProps = {
   id: string;
   phaseId: string | null;
-  done?: boolean;
+  workflowStatus?: string | null;
   children: React.ReactNode;
 };
 

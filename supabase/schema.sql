@@ -297,7 +297,15 @@ create table if not exists project_phases (
 
 alter table todos add column if not exists project_id uuid references projects(id) on delete set null;
 alter table todos add column if not exists phase_id uuid references project_phases(id) on delete set null;
+alter table todos add column if not exists workflow_status text not null default 'backlog'
+  check (workflow_status in ('backlog', 'doing', 'review', 'done'));
+alter table todos add column if not exists workflow_position integer;
 alter table todos add column if not exists is_milestone boolean not null default false;
+
+update todos
+set workflow_status = 'done'
+where done = true
+  and workflow_status <> 'done';
 
 create index if not exists todos_project_id_idx on todos (project_id);
 create index if not exists project_phases_project_id_idx on project_phases (project_id);
@@ -308,9 +316,15 @@ create unique index if not exists todos_position_personal_active_unique
   on todos (created_by, position)
   where team_id is null and project_id is null and done = false and position is not null;
 
+drop index if exists todos_position_project_active_unique;
 create unique index if not exists todos_position_project_active_unique
   on todos (project_id, position)
   where project_id is not null and done = false and position is not null;
+
+drop index if exists todos_workflow_position_project_active_unique;
+create unique index if not exists todos_workflow_position_project_active_unique
+  on todos (project_id, workflow_status, workflow_position)
+  where project_id is not null and done = false and workflow_position is not null;
 
 alter table projects enable row level security;
 alter table project_phases enable row level security;
@@ -693,6 +707,38 @@ begin
   from incoming
   where todos.id = incoming.id
     and todos.done = false;
+end;
+$$;
+
+create or replace function public.batch_update_todo_workflow_positions(updates jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  with incoming as (
+    select
+      (item->>'id')::uuid as id,
+      (item->>'position')::integer as position,
+      row_number() over () as ordinal
+    from jsonb_array_elements(updates) as item
+  )
+  update todos
+  set workflow_position = -1000000 + incoming.ordinal
+  from incoming
+  where todos.id = incoming.id;
+
+  with incoming as (
+    select
+      (item->>'id')::uuid as id,
+      (item->>'position')::integer as position
+    from jsonb_array_elements(updates) as item
+  )
+  update todos
+  set workflow_position = incoming.position
+  from incoming
+  where todos.id = incoming.id;
 end;
 $$;
 

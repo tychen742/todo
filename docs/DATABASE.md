@@ -60,6 +60,10 @@ Personal or team-scoped tasks.
 - `accepted_at`
 - `completed_at`
 - `created_at`
+- `project_id`
+- `phase_id`
+- `workflow_status`
+- `workflow_position`
 
 Priority values:
 
@@ -67,6 +71,15 @@ Priority values:
 - `normal`
 - `high`
 - `urgent`
+
+Workflow status values:
+
+- `backlog`
+- `doing`
+- `review`
+- `done`
+
+`phase_id` and `position` are the project Plan placement. They answer where the task belongs in the project structure. `workflow_status` and `workflow_position` are the Kanban placement. They answer what is happening to the task now. These fields are intentionally separate.
 
 Personal todos have `team_id = null`. Team todos have `team_id` set and can be assigned to a team member.
 Assigned tasks start as incoming work until the assignee accepts them. `assigned_at` records when the task was assigned, `accepted_at` records when the assignee accepted it into their todo list, and `completed_at` records when the task was marked done.

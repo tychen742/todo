@@ -18,13 +18,13 @@ import { CSS } from '@dnd-kit/utilities';
 
 type ProviderProps = {
   children: React.ReactNode;
-  onMove: (todoId: string, targetPhaseId: string | null, overTodoId: string | null, targetDone?: boolean) => void;
+  onMove: (todoId: string, targetPhaseId: string | null, targetWorkflowStatus: string | null, overTodoId: string | null) => void;
 };
 
 type LaneProps = {
   id: string;
   phaseId: string | null;
-  done?: boolean;
+  workflowStatus?: string | null;
   itemIds: string[];
   children: React.ReactNode;
   orientation?: 'horizontal' | 'vertical';
@@ -33,7 +33,7 @@ type LaneProps = {
 type ItemProps = {
   id: string;
   phaseId: string | null;
-  done?: boolean;
+  workflowStatus?: string | null;
   children: React.ReactNode;
 };
 
@@ -41,7 +41,7 @@ type DragData = {
   type: 'todo' | 'lane';
   todoId?: string;
   phaseId: string | null;
-  done?: boolean;
+  workflowStatus?: string | null;
 };
 
 export function KanbanDragProvider({ children, onMove }: ProviderProps) {
@@ -58,10 +58,14 @@ export function KanbanDragProvider({ children, onMove }: ProviderProps) {
     if (activeData?.type !== 'todo' || !activeData.todoId || !overData) return;
 
     const targetPhaseId = overData.phaseId;
-    const targetDone = overData.done ?? false;
+    const targetWorkflowStatus = overData.workflowStatus ?? null;
     const overTodoId = overData.type === 'todo' ? (overData.todoId ?? null) : null;
-    if (activeData.phaseId === targetPhaseId && activeData.done === targetDone && activeData.todoId === overTodoId) return;
-    onMove(activeData.todoId, targetPhaseId, overTodoId, targetDone);
+    if (
+      activeData.phaseId === targetPhaseId &&
+      activeData.workflowStatus === targetWorkflowStatus &&
+      activeData.todoId === overTodoId
+    ) return;
+    onMove(activeData.todoId, targetPhaseId, targetWorkflowStatus, overTodoId);
   }
 
   return (
@@ -71,10 +75,10 @@ export function KanbanDragProvider({ children, onMove }: ProviderProps) {
   );
 }
 
-export function KanbanDropLane({ id, phaseId, done = false, itemIds, children, orientation = 'vertical' }: LaneProps) {
+export function KanbanDropLane({ id, phaseId, workflowStatus = null, itemIds, children, orientation = 'vertical' }: LaneProps) {
   const { setNodeRef, isOver } = useDroppable({
     id,
-    data: { type: 'lane', phaseId, done } satisfies DragData,
+    data: { type: 'lane', phaseId, workflowStatus } satisfies DragData,
   });
 
   const style: React.CSSProperties = {
@@ -99,10 +103,10 @@ export function KanbanDropLane({ id, phaseId, done = false, itemIds, children, o
   );
 }
 
-export function KanbanDragItem({ id, phaseId, done = false, children }: ItemProps) {
+export function KanbanDragItem({ id, phaseId, workflowStatus = null, children }: ItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
-    data: { type: 'todo', todoId: id, phaseId, done } satisfies DragData,
+    data: { type: 'todo', todoId: id, phaseId, workflowStatus } satisfies DragData,
   });
 
   const style: React.CSSProperties = {

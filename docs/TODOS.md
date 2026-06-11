@@ -4,6 +4,9 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Recently Completed
 
+- Resources tab: workspace tab showing per-member workload — active tasks, overdue, due today, urgent. Reads from existing todos and members state; no new schema needed.
+- Dashboard tab: workspace tab with a 6-stat grid (Active, Overdue, Due Today, Due This Week, Done This Week, Urgent), team member workload chips, and inline overdue/due-today task lists. Context-aware: reflects personal or team todos depending on what's loaded.
+- Auth flow improvements: app logo/brand header, display name field on sign-up (saved to `profiles.display_name`), email format validation, password length check (≥8 chars) on sign-up, "Show/Hide" password toggle, success confirmation box (green) instead of red text, password-reset screen matches new design, social OAuth buttons visually disabled with "coming soon" label, footer with terms note.
 - Personal workspace remains usable without creating a team.
 - Todo priority levels: low, normal, high, urgent.
 - New todos default to Normal priority.
@@ -23,6 +26,42 @@ This file collects product and implementation TODOs from working sessions. Move 
 - The filter should be remembered per session (or persisted in user prefs). A filled/highlighted icon indicates the filter is active.
 - Consider pairing with a complementary "Show assigned" toggle so users can quickly switch between personal-only, assigned-only, and all.
 
+## Resources View
+
+**Current (implemented):** Read-only workload overview tab showing each team member's active task count, overdue count, due-today count, and urgent count. Reads from in-memory todos and members — no new API calls.
+
+**Next steps:**
+
+- Add a capacity indicator: estimated hours remaining vs. capacity per person. Requires `estimated_time` on todos (already in near-term plan).
+- Add a timeline row per member: mini bar showing tasks sorted by due date, highlighting overdue in red.
+- Show project breakdown per member: group assigned tasks by project.
+- Allow the resource view to be filtered by team or project when multiple teams are loaded.
+- Add a "workload balance" warning when one member has significantly more urgent/overdue tasks than others.
+- Future: resource scheduling — assign tasks directly from the resource view by dragging into a member's row.
+- Future: capacity planning — set weekly hour capacity per member; surface when capacity is exceeded.
+
+## Dashboard View
+
+**Current (implemented):** Stat grid + team workload chips + overdue/due-today task lists. Renders from in-memory state; auto-refreshes with the rest of the app.
+
+**Near-term:**
+
+- Add a "Done this month" stat card.
+- Add a sparkline or bar chart for task completion trend over the last 7 days.
+- Add a "next milestone" banner if a project milestone is due within 7 days.
+- Add project health summary cards when projects are loaded.
+
+**Custom dashboards (future — user creates their own):**
+
+- Allow a user to create a named dashboard and choose which widgets appear on it.
+- Widget types (phase 1): Stat counter (any metric), Task list (filtered by priority/assignee/project), Member workload grid, Milestone countdown.
+- Widget types (phase 2): Activity feed, Notes widget, Team status board, Chart widget.
+- Dashboards can be scoped to: personal, a team, a project, or a custom group of users.
+- A "group of users" dashboard lets a manager or org owner see aggregated workload across multiple teams or projects in one view — useful for portfolio management.
+- Schema: `dashboards` (id, owner_id, name, scope_type, scope_id, created_at), `dashboard_widgets` (id, dashboard_id, widget_type, config jsonb, position, created_at). Widget config holds filter params and display options.
+- Sharing: dashboards can be shared read-only with a team or org. Edit rights stay with the owner.
+- Dashboards are a candidate for a paid tier feature for teams with 5+ members.
+
 ## Auth UX
 
 - **"Continue as [Name]"** — when a returning user hits the login screen, detect the previously signed-in account (from local storage / last session) and surface a single-tap "Continue as [Name]" button with their avatar and email, similar to ClickUp and Google's account-picker pattern. Eliminates re-typing credentials for the common case. Falls back to the full email+password form if dismissed or if no prior session exists.
@@ -33,6 +72,8 @@ This file collects product and implementation TODOs from working sessions. Move 
 ## Design System
 
 - **UI Element Design Principles** — document visual and interaction design principles for each recurring UI element type to guide consistent implementation and future decisions. Candidates: row items (task, inbox, completed), section headers, action buttons, pills/badges, modals/cards, tooltips, input fields, avatar chips, priority indicators, due date pills. For each: define spacing, typography, color, interaction state (hover/active/disabled), and the intent behind the choices. Goal is a living reference that prevents element-by-element ad-hoc decisions and makes new panels/views self-consistent from the start.
+
+- **Text truncation with `...` (ellipsis) — learn from this pattern.** When a row has multiple fixed-width elements competing for space (text, context label, date, avatar), `numberOfLines={1}` can produce very short clips like "E…" that destroy meaning. Rules to follow: (1) Text is primary — give it `flex: 1` and let fixed elements shrink before the text does. (2) Secondary metadata (context label, date) should use `flexShrink: 1` with a `maxWidth` cap so they yield space to the text. (3) Never let a truncated label be shorter than ~3–4 characters — if it would be, hide it entirely rather than show a useless fragment. (4) On hover/tap of a truncated row, show the full text in a tooltip or expanded state. (5) Audit compact row layouts (Inbox, Assigned, Completed side panels) specifically — they are most likely to have this problem because they squeeze many columns into a narrow panel width.
 
 ## Near-Term
 

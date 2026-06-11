@@ -159,11 +159,27 @@ Reason: accepted project tasks can appear in a user's personal todo list, so the
 
 Implementation rules:
 
-- Resolve stage from the same Kanban mapping used by the board: Backlog, Doing, Review, Done.
+- Resolve stage from `todos.workflow_status`: Backlog, Doing, Review, Done.
 - Use Lucide icons, not text glyphs, for the stage indicator.
 - Keep the indicator compact enough to preserve one-line task titles.
 - Provide an accessibility label and a web hover tooltip with the stage name.
-- Store no duplicate stage value on `todos`; derive it from `done`, `phase_id`, and project phase configuration.
+- Do not derive Kanban stage from `phase_id`; Plan and Kanban are separate views over the same task.
+
+## 2026-06-11: Project Plan and Kanban Are Separate Axes
+
+Decision: project Plan and Kanban workflow are separate fields.
+
+Reason: Plan answers where a task belongs in the project structure. Kanban answers what is happening to the task right now. A task can belong to the Execution phase while still being Backlog, Doing, Review, or Done.
+
+Implementation rules:
+
+- Plan view groups and moves tasks by `phase_id`.
+- Kanban view groups and moves tasks by `workflow_status`.
+- Plan ordering uses `position`; Kanban ordering uses `workflow_position`.
+- Moving a task in Plan must not change `workflow_status`.
+- Moving a task in Kanban must not change `phase_id`.
+- The Done Kanban lane sets `done = true` and `completed_at`; moving out of Done clears completion.
+- Task rows can show both concepts: phase/context and workflow-state icon.
 
 ## 2026-06-10: Icon and Avatar Size Scale
 
@@ -229,3 +245,17 @@ Rules:
 Decision: Outlook Calendar and Google Calendar integration should be planned, but not required for core todo use.
 
 Reason: calendar sync depends on due dates, reminders, and project milestones. Those concepts should be modeled before integrating provider APIs.
+
+## 2026-06-11: Calendar Has Day, Week, and Month Views
+
+Decision: the in-app Calendar supports three views: Day, Week, and Month.
+
+Reason: Month view is good for scanning load, Week view is good for near-term planning, and Day view is good for execution. Day view includes a note area because daily planning often needs context that does not belong inside a single task.
+
+Implementation rules:
+
+- Calendar tasks are derived from todo `due_date`; do not duplicate calendar event state on todos.
+- Month view remains the broad overview and opens a day when the user selects a date.
+- Week view shows seven columns for quick comparison.
+- Day view shows due tasks plus a note pane.
+- Calendar notes are local `AsyncStorage` data for now. Do not sync them or treat them as team-visible until the product model decides whether day notes are personal, team, project, or organization scoped.

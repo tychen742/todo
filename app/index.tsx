@@ -37,9 +37,11 @@ type Todo = {
   completed_at: string | null;
   archived_at: string | null;
   position: number | null;
+  workflow_position: number | null;
   is_milestone: boolean;
   project_id: string | null;
   phase_id: string | null;
+  workflow_status: WorkflowLaneKey;
   team_id: string | null;
   estimate: string | null;
 };
@@ -83,6 +85,7 @@ type SortField = 'text' | 'priority' | 'due_date' | 'created_at';
 type CreateTarget = 'team' | 'organization' | 'project';
 type ProjectViewMode = 'plan' | 'kanban';
 type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
+type CalendarViewMode = 'day' | 'week' | 'month';
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const defaultVisibleTaskRows = 5;
@@ -116,36 +119,11 @@ const defaultWorkflowColumnLabels: Record<WorkflowLaneKey, string> = {
   done: 'Done',
 };
 
-type WorkflowPhaseTargets = {
-  doingPhaseId: string | null;
-  reviewPhaseId: string | null;
-};
+const todoSelectColumns = 'id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, workflow_position, is_milestone, project_id, phase_id, workflow_status, team_id, estimate';
 
-function resolveWorkflowPhaseTargets(phases: Phase[]): WorkflowPhaseTargets {
-  const doingPhase =
-    phases.find((phase) => /doing|execution|active/i.test(phase.name)) ??
-    phases[1] ??
-    phases[0] ??
-    null;
-  const reviewPhase =
-    phases.find((phase) => /review/i.test(phase.name)) ??
-    phases.find((phase) => phase.id !== doingPhase?.id && /test|qa|verify/i.test(phase.name)) ??
-    phases.find((phase) => phase.id !== doingPhase?.id && phase.order_index >= 2) ??
-    phases.find((phase) => phase.id !== doingPhase?.id) ??
-    null;
-  const doingPhaseId = doingPhase?.id ?? null;
-  const reviewPhaseId = reviewPhase?.id ?? null;
-  return {
-    doingPhaseId,
-    reviewPhaseId,
-  };
-}
-
-function workflowStageForTodo(todo: Pick<Todo, 'done' | 'phase_id'>, targets: WorkflowPhaseTargets): WorkflowLaneKey {
+function workflowStageForTodo(todo: Pick<Todo, 'done' | 'workflow_status'>): WorkflowLaneKey {
   if (todo.done) return 'done';
-  if (todo.phase_id === targets.doingPhaseId) return 'doing';
-  if (todo.phase_id === targets.reviewPhaseId) return 'review';
-  return 'backlog';
+  return todo.workflow_status;
 }
 
 function sortTodos(items: Todo[]) {
@@ -161,6 +139,15 @@ function sortTodos(items: Todo[]) {
     const priorityDelta = priorityRank[a.priority] - priorityRank[b.priority];
     if (priorityDelta !== 0) return priorityDelta;
     return Date.parse(b.created_at) - Date.parse(a.created_at);
+  });
+}
+
+function sortWorkflowTodos(items: Todo[]) {
+  return [...items].sort((a, b) => {
+    if (a.workflow_position !== null && b.workflow_position !== null) return a.workflow_position - b.workflow_position;
+    if (a.workflow_position !== null) return -1;
+    if (b.workflow_position !== null) return 1;
+    return sortTodos([a, b])[0].id === a.id ? -1 : 1;
   });
 }
 
@@ -205,6 +192,38 @@ function buildCalendarDays(monthDate: Date) {
   }
 
   return cells;
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+function startOfWeek(date: Date) {
+  return addDays(date, -date.getDay());
+}
+
+function buildWeekDays(date: Date) {
+  const start = startOfWeek(date);
+  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+}
+
+function calendarViewTitle(mode: CalendarViewMode, date: Date) {
+  if (mode === 'day') {
+    return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  }
+  if (mode === 'week') {
+    const start = startOfWeek(date);
+    const end = addDays(start, 6);
+    const sameMonth = start.getMonth() === end.getMonth();
+    const startLabel = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const endLabel = end.toLocaleDateString(undefined, {
+      month: sameMonth ? undefined : 'short',
+      day: 'numeric',
+      year: start.getFullYear() === end.getFullYear() ? undefined : 'numeric',
+    });
+    return `${startLabel} - ${endLabel}`;
+  }
+  return monthLabel(date);
 }
 
 function isSameDate(left: Date, right: Date) {
@@ -415,7 +434,6 @@ export default function HomeScreen() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
-  const [allProjectPhases, setAllProjectPhases] = useState<Phase[]>([]);
   const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>('plan');
   const [workflowColumnLabels, setWorkflowColumnLabels] = useState(defaultWorkflowColumnLabels);
   const [phasePickerTodo, setPhasePickerTodo] = useState<Todo | null>(null);
@@ -433,7 +451,12 @@ export default function HomeScreen() {
   const [projectsViewOpen, setProjectsViewOpen] = useState(false);
   const [teamsViewOpen, setTeamsViewOpen] = useState(false);
   const [calendarViewOpen, setCalendarViewOpen] = useState(false);
+  const [resourcesViewOpen, setResourcesViewOpen] = useState(false);
+  const [dashboardViewOpen, setDashboardViewOpen] = useState(false);
+  const [calendarViewMode, setCalendarViewMode] = useState<CalendarViewMode>('month');
   const [calendarViewMonth, setCalendarViewMonth] = useState(() => new Date());
+  const [calendarViewSelectedDate, setCalendarViewSelectedDate] = useState(() => new Date());
+  const [calendarViewNotes, setCalendarViewNotes] = useState<Record<string, string>>({});
   const [animalPickerVisible, setAnimalPickerVisible] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
@@ -461,6 +484,7 @@ export default function HomeScreen() {
   const [editDraftPriority, setEditDraftPriority] = useState<Priority>('normal');
   const [editDraftEstimate, setEditDraftEstimate] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [displayNameInput, setDisplayNameInput] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
@@ -506,36 +530,30 @@ export default function HomeScreen() {
     };
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem('todo:calendar-notes')
+      .then((value) => {
+        if (cancelled || !value) return;
+        setCalendarViewNotes(JSON.parse(value) as Record<string, string>);
+      })
+      .catch(() => {
+        if (!cancelled) setCalendarViewNotes({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const isProject = selectedProjectId !== null;
-  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !calendarViewOpen;
+  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal && assignedToMe.length > 0;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
-  const workflowPhaseTargets = useMemo(() => resolveWorkflowPhaseTargets(phases), [phases]);
-  const workflowPhaseTargetsByProject = useMemo(() => {
-    const phasesByProject = new Map<string, Phase[]>();
-    allProjectPhases.forEach((phase) => {
-      const projectPhases = phasesByProject.get(phase.project_id) ?? [];
-      projectPhases.push(phase);
-      phasesByProject.set(phase.project_id, projectPhases);
-    });
-
-    const targetsByProject = new Map<string, WorkflowPhaseTargets>();
-    phasesByProject.forEach((projectPhases, projectId) => {
-      targetsByProject.set(
-        projectId,
-        resolveWorkflowPhaseTargets(projectPhases.sort((a, b) => a.order_index - b.order_index))
-      );
-    });
-    return targetsByProject;
-  }, [allProjectPhases]);
 
   function todoKanbanStage(todo: Todo): { key: WorkflowLaneKey; label: string } | undefined {
     if (!todo.project_id && !isProject) return undefined;
-    const targets = todo.project_id
-      ? (workflowPhaseTargetsByProject.get(todo.project_id) ?? workflowPhaseTargets)
-      : workflowPhaseTargets;
-    const key = workflowStageForTodo(todo, targets);
+    const key = workflowStageForTodo(todo);
     return { key, label: workflowColumnLabels[key] };
   }
   const active = useMemo(() => {
@@ -568,6 +586,38 @@ export default function HomeScreen() {
     setToast(text);
   }
 
+  function saveCalendarViewNote(value: string) {
+    const dateKey = calendarViewSelectedDateKey;
+    const nextNotes = { ...calendarViewNotes, [dateKey]: value };
+    if (!value.trim()) delete nextNotes[dateKey];
+    setCalendarViewNotes(nextNotes);
+    AsyncStorage.setItem('todo:calendar-notes', JSON.stringify(nextNotes)).catch(() => {
+      setError('Could not save calendar note.');
+    });
+  }
+
+  function moveCalendarView(offset: number) {
+    if (calendarViewMode === 'day') {
+      const nextDate = addDays(calendarViewSelectedDate, offset);
+      setCalendarViewSelectedDate(nextDate);
+      setCalendarViewMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+      return;
+    }
+    if (calendarViewMode === 'week') {
+      const nextDate = addDays(calendarViewSelectedDate, offset * 7);
+      setCalendarViewSelectedDate(nextDate);
+      setCalendarViewMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
+      return;
+    }
+    setCalendarViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
+  }
+
+  function showCalendarToday() {
+    const today = new Date();
+    setCalendarViewSelectedDate(today);
+    setCalendarViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+  }
+
   useEffect(() => {
     if (!toast) return;
     const timeout = setTimeout(() => setToast(''), 3000);
@@ -590,6 +640,7 @@ export default function HomeScreen() {
   }, [todos, isProject]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
   const calendarViewDays = useMemo(() => buildCalendarDays(calendarViewMonth), [calendarViewMonth]);
+  const calendarViewWeekDays = useMemo(() => buildWeekDays(calendarViewSelectedDate), [calendarViewSelectedDate]);
   const calendarViewTodosByDate = useMemo(() => {
     const byDate = new Map<string, Todo[]>();
     todos.forEach((todo) => {
@@ -600,6 +651,9 @@ export default function HomeScreen() {
     });
     return byDate;
   }, [todos]);
+  const calendarViewSelectedDateKey = formatDateValue(calendarViewSelectedDate);
+  const calendarViewSelectedDateTodos = calendarViewTodosByDate.get(calendarViewSelectedDateKey) ?? [];
+  const calendarViewSelectedDateNote = calendarViewNotes[calendarViewSelectedDateKey] ?? '';
   const assigneePickerCalendarDays = useMemo(() => buildCalendarDays(assigneePickerMonth), [assigneePickerMonth]);
   const editDraftCalendarDays = useMemo(() => buildCalendarDays(editDraftDueDateMonth), [editDraftDueDateMonth]);
   const accountDisplayName = profile
@@ -686,16 +740,6 @@ export default function HomeScreen() {
     if (!err) setProjects(data ?? []);
   }, [session]);
 
-  const loadAllProjectPhases = useCallback(async () => {
-    if (!session) return;
-    const { data, error: err } = await supabase
-      .from('project_phases')
-      .select('id, project_id, name, order_index, status, planned_start, planned_end')
-      .order('project_id', { ascending: true })
-      .order('order_index', { ascending: true });
-    if (!err) setAllProjectPhases(data ?? []);
-  }, [session]);
-
   const loadPhases = useCallback(async () => {
     if (!selectedProjectId) {
       setPhases([]);
@@ -706,13 +750,7 @@ export default function HomeScreen() {
       .select('id, project_id, name, order_index, status, planned_start, planned_end')
       .eq('project_id', selectedProjectId)
       .order('order_index', { ascending: true });
-    if (!err) {
-      setPhases(data ?? []);
-      setAllProjectPhases((prev) => [
-        ...prev.filter((phase) => phase.project_id !== selectedProjectId),
-        ...(data ?? []),
-      ]);
-    }
+    if (!err) setPhases(data ?? []);
   }, [selectedProjectId]);
 
   const loadMembers = useCallback(async () => {
@@ -779,7 +817,7 @@ export default function HomeScreen() {
     setLoading(true);
     let query = supabase
       .from('todos')
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
+      .select(todoSelectColumns)
       .is('archived_at', null)
       .order('created_at', { ascending: false });
 
@@ -810,7 +848,7 @@ export default function HomeScreen() {
     if (!session) return;
     const { data, error: err } = await supabase
       .from('todos')
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
+      .select(todoSelectColumns)
       .eq('assigned_to', session.user.id)
       .is('accepted_at', null)
       .is('archived_at', null)
@@ -824,7 +862,7 @@ export default function HomeScreen() {
     setLoading(true);
     let query = supabase
       .from('todos')
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
+      .select(todoSelectColumns)
       .not('archived_at', 'is', null)
       .order('archived_at', { ascending: false });
 
@@ -878,7 +916,6 @@ export default function HomeScreen() {
       setSelectedTeamId(null);
       setSelectedProjectId(null);
       setPhases([]);
-      setAllProjectPhases([]);
       setMembers([]);
       setTodos([]);
       setError('');
@@ -897,9 +934,8 @@ export default function HomeScreen() {
       loadOrganizations();
       loadTeams();
       loadProjects();
-      loadAllProjectPhases();
     });
-  }, [ensureProfile, loadOrganizations, loadTeams, loadProjects, loadAllProjectPhases, session]);
+  }, [ensureProfile, loadOrganizations, loadTeams, loadProjects, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -959,7 +995,15 @@ export default function HomeScreen() {
   async function submitAuth() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) {
-      setError('Enter an email and password.');
+      setError('Enter your email and password.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setError('Enter a valid email address.');
+      return;
+    }
+    if (authMode === 'signUp' && password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
     if (!isSupabaseConfigured) {
@@ -979,6 +1023,7 @@ export default function HomeScreen() {
             password,
             options: {
               emailRedirectTo: authRedirectUrl(),
+              data: { display_name: displayNameInput.trim() || null },
             },
           });
 
@@ -990,7 +1035,13 @@ export default function HomeScreen() {
     }
 
     if (authMode === 'signUp' && !result.data.session) {
-      setMessage('Check your email to confirm the account, then sign in.');
+      setMessage('Account created! Check your email to confirm, then sign in.');
+      return;
+    }
+
+    // On sign-up with immediate session (email confirm disabled), save display name
+    if (authMode === 'signUp' && result.data.session && displayNameInput.trim()) {
+      await supabase.from('profiles').update({ display_name: displayNameInput.trim() }).eq('id', result.data.session.user.id);
     }
   }
 
@@ -1182,7 +1233,6 @@ export default function HomeScreen() {
     setNewProjectTeamId(null);
     setProjects((prev) => [...prev, project]);
     setPhases(nextPhases);
-    setAllProjectPhases((prev) => [...prev, ...nextPhases]);
     setSelectedProjectId(project.id);
     setSelectedTeamId(null);
     setCreateTarget(null);
@@ -1388,8 +1438,9 @@ export default function HomeScreen() {
         assigned_to: assignedTo,
         assigned_at: assignedTo ? new Date().toISOString() : null,
         priority: 'normal',
+        workflow_status: 'backlog',
       })
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
+      .select(todoSelectColumns)
       .single();
 
     if (insertError) {
@@ -1422,8 +1473,9 @@ export default function HomeScreen() {
         assigned_to,
         assigned_at,
         priority: 'normal',
+        workflow_status: 'backlog',
       })
-      .select('id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, is_milestone, project_id, phase_id, team_id, estimate')
+      .select(todoSelectColumns)
       .single();
 
     if (insertError) { setError(insertError.message); return; }
@@ -1438,10 +1490,15 @@ export default function HomeScreen() {
     if (!todo) return;
     const done = !todo.done;
     const completed_at = done ? new Date().toISOString() : null;
+    const workflow_status: WorkflowLaneKey = done
+      ? 'done'
+      : todo.workflow_status === 'done'
+        ? 'backlog'
+        : todo.workflow_status;
 
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ done, completed_at })
+      .update({ done, completed_at, workflow_status })
       .eq('id', id);
 
     if (updateError) {
@@ -1449,7 +1506,7 @@ export default function HomeScreen() {
       return;
     }
 
-    setTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done, completed_at } : item)));
+    setTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done, completed_at, workflow_status } : item)));
     setError('');
   }
 
@@ -1703,28 +1760,19 @@ export default function HomeScreen() {
     }
   }
 
-  async function moveProjectTodo(todoId: string, targetPhaseId: string | null, overTodoId: string | null, targetDone = false) {
+  async function movePlanTodo(todoId: string, targetPhaseId: string | null, overTodoId: string | null) {
     const movingTodo = todos.find((todo) => todo.id === todoId);
-    if (!movingTodo || movingTodo.phase_id === targetPhaseId && movingTodo.done === targetDone && overTodoId === todoId) return;
+    if (!movingTodo || movingTodo.phase_id === targetPhaseId && overTodoId === todoId) return;
 
-    const completed_at = targetDone ? (movingTodo.completed_at ?? new Date().toISOString()) : null;
-    const resolvedTargetPhaseId = targetDone && targetPhaseId === null ? movingTodo.phase_id : targetPhaseId;
-    const sourceDone = movingTodo.done;
-    const targetLaneKey = targetDone ? 'done' : (resolvedTargetPhaseId ?? 'backlog');
-    const sourceLaneKey = sourceDone ? 'done' : (movingTodo.phase_id ?? 'backlog');
+    const targetLaneKey = targetPhaseId ?? 'backlog';
+    const sourceLaneKey = movingTodo.phase_id ?? 'backlog';
     const affectedLaneKeys = new Set([sourceLaneKey, targetLaneKey]);
     const nextTodos = todos.map((todo) =>
-      todo.id === todoId ? { ...todo, phase_id: resolvedTargetPhaseId, done: targetDone, completed_at } : todo
+      todo.id === todoId ? { ...todo, phase_id: targetPhaseId } : todo
     );
 
     const targetItems = sortTodos(
-      nextTodos.filter((todo) =>
-        todo.id !== todoId && (
-          targetDone
-            ? todo.done
-            : !todo.done && todo.phase_id === resolvedTargetPhaseId
-        )
-      )
+      nextTodos.filter((todo) => todo.id !== todoId && !todo.done && todo.phase_id === targetPhaseId)
     );
     const movingNext = nextTodos.find((todo) => todo.id === todoId)!;
     const overIndex = overTodoId ? targetItems.findIndex((todo) => todo.id === overTodoId) : -1;
@@ -1736,13 +1784,7 @@ export default function HomeScreen() {
     if (sourceLaneKey !== targetLaneKey) {
       orderedByLane.set(
         sourceLaneKey,
-        sortTodos(nextTodos.filter((todo) =>
-          todo.id !== todoId && (
-            sourceDone
-              ? todo.done
-              : !todo.done && todo.phase_id === movingTodo.phase_id
-          )
-        ))
+        sortTodos(nextTodos.filter((todo) => todo.id !== todoId && !todo.done && todo.phase_id === movingTodo.phase_id))
       );
     }
 
@@ -1757,13 +1799,11 @@ export default function HomeScreen() {
           if (todo.id === todoId) {
             return {
               ...todo,
-              phase_id: resolvedTargetPhaseId,
-              done: targetDone,
-              completed_at,
+              phase_id: targetPhaseId,
               position: nextPositionById.get(todo.id) ?? 0,
             };
           }
-          const laneKey = todo.done ? 'done' : (todo.phase_id ?? 'backlog');
+          const laneKey = todo.phase_id ?? 'backlog';
           if (affectedLaneKeys.has(laneKey) && nextPositionById.has(todo.id)) {
             return { ...todo, position: nextPositionById.get(todo.id)! };
           }
@@ -1776,9 +1816,7 @@ export default function HomeScreen() {
     const { error: updateError } = await supabase
       .from('todos')
       .update({
-        phase_id: resolvedTargetPhaseId,
-        done: targetDone,
-        completed_at,
+        phase_id: targetPhaseId,
         position: nextPositionById.get(todoId) ?? 0,
       })
       .eq('id', todoId);
@@ -1788,6 +1826,88 @@ export default function HomeScreen() {
     }
 
     const { error: batchError } = await supabase.rpc('batch_update_todo_positions', {
+      updates: positionUpdates,
+    });
+    if (batchError) setError(batchError.message);
+    else setError('');
+  }
+
+  async function moveWorkflowTodo(todoId: string, targetWorkflowStatus: WorkflowLaneKey, overTodoId: string | null) {
+    const movingTodo = todos.find((todo) => todo.id === todoId);
+    if (!movingTodo || movingTodo.workflow_status === targetWorkflowStatus && overTodoId === todoId) return;
+
+    const done = targetWorkflowStatus === 'done';
+    const completed_at = done ? (movingTodo.completed_at ?? new Date().toISOString()) : null;
+    const sourceLaneKey = workflowStageForTodo(movingTodo);
+    const targetLaneKey = targetWorkflowStatus;
+    const affectedLaneKeys = new Set([sourceLaneKey, targetLaneKey]);
+    const nextTodos = todos.map((todo) =>
+      todo.id === todoId ? { ...todo, workflow_status: targetWorkflowStatus, done, completed_at } : todo
+    );
+
+    const targetItems = sortWorkflowTodos(
+      nextTodos.filter((todo) =>
+        todo.id !== todoId && workflowStageForTodo(todo) === targetWorkflowStatus
+      )
+    );
+    const movingNext = nextTodos.find((todo) => todo.id === todoId)!;
+    const overIndex = overTodoId ? targetItems.findIndex((todo) => todo.id === overTodoId) : -1;
+    const insertIndex = overIndex >= 0 ? overIndex : targetItems.length;
+    targetItems.splice(insertIndex, 0, movingNext);
+
+    const orderedByLane = new Map<string, Todo[]>();
+    orderedByLane.set(targetLaneKey, targetItems);
+    if (sourceLaneKey !== targetLaneKey) {
+      orderedByLane.set(
+        sourceLaneKey,
+        sortWorkflowTodos(nextTodos.filter((todo) =>
+          todo.id !== todoId && workflowStageForTodo(todo) === sourceLaneKey
+        ))
+      );
+    }
+
+    const nextWorkflowPositionById = new Map<string, number>();
+    for (const items of orderedByLane.values()) {
+      items.forEach((todo, index) => nextWorkflowPositionById.set(todo.id, index));
+    }
+
+    setTodos((prev) =>
+      sortTodos(
+        prev.map((todo) => {
+          if (todo.id === todoId) {
+            return {
+              ...todo,
+              workflow_status: targetWorkflowStatus,
+              done,
+              completed_at,
+              workflow_position: nextWorkflowPositionById.get(todo.id) ?? 0,
+            };
+          }
+          const laneKey = workflowStageForTodo(todo);
+          if (affectedLaneKeys.has(laneKey) && nextWorkflowPositionById.has(todo.id)) {
+            return { ...todo, workflow_position: nextWorkflowPositionById.get(todo.id)! };
+          }
+          return todo;
+        })
+      )
+    );
+
+    const positionUpdates = Array.from(nextWorkflowPositionById, ([id, position]) => ({ id, position }));
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({
+        workflow_status: targetWorkflowStatus,
+        done,
+        completed_at,
+        workflow_position: nextWorkflowPositionById.get(todoId) ?? 0,
+      })
+      .eq('id', todoId);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    const { error: batchError } = await supabase.rpc('batch_update_todo_workflow_positions', {
       updates: positionUpdates,
     });
     if (batchError) setError(batchError.message);
@@ -1813,7 +1933,6 @@ export default function HomeScreen() {
       .eq('id', phase.id);
     if (updateError) { setError(updateError.message); return; }
     setPhases((prev) => prev.map((p) => (p.id === phase.id ? { ...p, status: next } : p)));
-    setAllProjectPhases((prev) => prev.map((p) => (p.id === phase.id ? { ...p, status: next } : p)));
   }
 
   async function addPhase() {
@@ -1828,7 +1947,6 @@ export default function HomeScreen() {
     if (err) { setError(err.message); return; }
     if (data) {
       setPhases((prev) => [...prev, data as Phase]);
-      setAllProjectPhases((prev) => [...prev, data as Phase]);
     }
     setNewPhaseName('');
     setAddingPhase(false);
@@ -1859,9 +1977,6 @@ export default function HomeScreen() {
     }
 
     setPhases((prev) => prev.map((phase) => (
-      phase.id === renamingPhase.id ? { ...phase, name } : phase
-    )));
-    setAllProjectPhases((prev) => prev.map((phase) => (
       phase.id === renamingPhase.id ? { ...phase, name } : phase
     )));
     closeRenamePhase();
@@ -2007,8 +2122,14 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.authPanel}>
+            <View style={styles.authBrand}>
+              <View style={styles.authLogo}>
+                <Text style={styles.authLogoText}>✓</Text>
+              </View>
+              <Text style={styles.authBrandName}>Todo</Text>
+            </View>
             <Text style={styles.authTitle}>Set a new password</Text>
-            <Text style={styles.authSubtitleText}>
+            <Text style={styles.authTitleSub}>
               Enter a new password for your account.
             </Text>
 
@@ -2016,22 +2137,21 @@ export default function HomeScreen() {
               <Text style={styles.authFieldError}>{error}</Text>
             )}
 
+            <Text style={styles.authLabel}>New password</Text>
             <View style={styles.authPasswordWrap}>
               <TextInput
                 style={styles.authPasswordInput}
                 value={recoveryPassword}
                 onChangeText={setRecoveryPassword}
-                placeholder="New password"
+                placeholder="At least 8 characters"
                 placeholderTextColor="#9ca3af"
                 secureTextEntry={!showPassword}
                 textContentType="newPassword"
+                autoComplete="new-password"
                 onSubmitEditing={saveRecoveryPassword}
               />
-              <Pressable
-                onPress={() => setShowPassword((p) => !p)}
-                hitSlop={8}
-              >
-                <Text style={styles.passwordToggleText}>{showPassword ? '👁' : '👁'}</Text>
+              <Pressable onPress={() => setShowPassword((p) => !p)} hitSlop={8}>
+                <Text style={styles.passwordToggleText}>{showPassword ? 'Hide' : 'Show'}</Text>
               </Pressable>
             </View>
 
@@ -2068,45 +2188,84 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.authPanel}>
+            {/* Brand */}
+            <View style={styles.authBrand}>
+              <View style={styles.authLogo}>
+                <Text style={styles.authLogoText}>✓</Text>
+              </View>
+              <Text style={styles.authBrandName}>Todo</Text>
+            </View>
+
             <Text style={styles.authTitle}>
-              {isSignIn ? 'Welcome back!' : 'Welcome!'}
+              {isSignIn ? 'Welcome back' : 'Create your account'}
+            </Text>
+            <Text style={styles.authTitleSub}>
+              {isSignIn ? 'Sign in to continue' : 'Get started — it\'s free'}
             </Text>
 
+            {/* Email */}
+            <Text style={styles.authLabel}>Email</Text>
             <TextInput
               style={[styles.authInput, !!error && styles.authInputError]}
               value={email}
               onChangeText={(v) => { setEmail(v); if (error) setError(''); }}
-              placeholder="Email"
+              placeholder="you@example.com"
               placeholderTextColor="#9ca3af"
               autoCapitalize="none"
               keyboardType="email-address"
               textContentType="emailAddress"
+              autoComplete="email"
             />
-            {!!error && (
-              <Text style={styles.authFieldError}>{error}</Text>
+
+            {/* Display name — sign-up only */}
+            {!isSignIn && (
+              <>
+                <Text style={styles.authLabel}>Your name</Text>
+                <TextInput
+                  style={styles.authInput}
+                  value={displayNameInput}
+                  onChangeText={setDisplayNameInput}
+                  placeholder="How should we call you?"
+                  placeholderTextColor="#9ca3af"
+                  autoCapitalize="words"
+                  textContentType="name"
+                  autoComplete="name"
+                />
+              </>
             )}
 
-            <View style={styles.authPasswordWrap}>
+            {/* Password */}
+            <View style={styles.authPasswordHeader}>
+              <Text style={styles.authLabel}>Password</Text>
+              {isSignIn && (
+                <Pressable onPress={sendPasswordReset} disabled={authLoading}>
+                  <Text style={styles.forgotBtnText}>Forgot password?</Text>
+                </Pressable>
+              )}
+            </View>
+            <View style={[styles.authPasswordWrap, !!error && styles.authInputError]}>
               <TextInput
                 style={styles.authPasswordInput}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Password"
+                placeholder={isSignIn ? '••••••••' : 'At least 8 characters'}
                 placeholderTextColor="#9ca3af"
                 secureTextEntry={!showPassword}
                 textContentType={isSignIn ? 'password' : 'newPassword'}
+                autoComplete={isSignIn ? 'current-password' : 'new-password'}
                 onSubmitEditing={submitAuth}
               />
-              <Pressable
-                onPress={() => setShowPassword((p) => !p)}
-                hitSlop={8}
-              >
-                <Text style={styles.passwordToggleText}>{showPassword ? '👁' : '👁'}</Text>
+              <Pressable onPress={() => setShowPassword((p) => !p)} hitSlop={8}>
+                <Text style={styles.passwordToggleText}>{showPassword ? 'Hide' : 'Show'}</Text>
               </Pressable>
             </View>
 
+            {!!error && <Text style={styles.authFieldError}>{error}</Text>}
+
             {!!message ? (
-              <Text style={styles.authConfirmMessage}>{message}</Text>
+              <View style={styles.authSuccessBox}>
+                <Text style={styles.authSuccessText}>{message}</Text>
+              </View>
             ) : (
               <Pressable
                 onPress={submitAuth}
@@ -2118,70 +2277,47 @@ export default function HomeScreen() {
                 ]}
               >
                 <Text style={styles.authSubmitBtnText}>
-                  {authLoading ? 'Please wait…' : isSignIn ? 'Log In' : 'Create Account'}
+                  {authLoading ? 'Please wait…' : isSignIn ? 'Sign In' : 'Create Account'}
                 </Text>
-              </Pressable>
-            )}
-
-            {isSignIn && (
-              <Pressable
-                onPress={sendPasswordReset}
-                disabled={authLoading}
-                style={styles.forgotBtn}
-              >
-                <Text style={styles.forgotBtnText}>Forgot Password?</Text>
               </Pressable>
             )}
 
             <View style={styles.authDivider}>
               <View style={styles.authDividerLine} />
-              <Text style={styles.authDividerText}>or</Text>
+              <Text style={styles.authDividerText}>or continue with</Text>
               <View style={styles.authDividerLine} />
             </View>
 
             <View style={styles.socialGrid}>
-              <Pressable
-                style={styles.socialGridBtn}
-                onPress={() => setMessage('Google sign-in is coming soon.')}
-              >
+              <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
                 <Text style={styles.googleG}>G</Text>
                 <Text style={styles.socialGridBtnText}>Google</Text>
               </Pressable>
-
-              <Pressable
-                style={styles.socialGridBtn}
-                onPress={() => setMessage('Apple sign-in is coming soon.')}
-              >
+              <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
                 <Text style={styles.appleIcon}></Text>
                 <Text style={styles.socialGridBtnText}>Apple</Text>
               </Pressable>
-
-              <Pressable
-                style={styles.socialGridBtn}
-                onPress={() => setMessage('GitHub sign-in is coming soon.')}
-              >
+              <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
                 <Text style={styles.githubIcon}>GH</Text>
                 <Text style={styles.socialGridBtnText}>GitHub</Text>
               </Pressable>
-
-              <Pressable
-                style={styles.socialGridBtn}
-                onPress={() => setMessage('SSO is coming soon.')}
-              >
+              <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
                 <Text style={styles.ssoIcon}>☁</Text>
                 <Text style={styles.socialGridBtnText}>SSO</Text>
               </Pressable>
             </View>
+            <Text style={styles.socialComingSoon}>OAuth providers coming soon</Text>
 
             <View style={styles.authSubtitleRow}>
               <Text style={styles.authSubtitleText}>
-                {isSignIn ? "New here? " : 'Already have an account? '}
+                {isSignIn ? 'New here? ' : 'Already have an account? '}
               </Text>
               <Pressable
                 onPress={() => {
                   setAuthMode(isSignIn ? 'signUp' : 'signIn');
                   setError('');
                   setMessage('');
+                  setDisplayNameInput('');
                 }}
               >
                 <Text style={styles.authSubtitleLink}>
@@ -2192,7 +2328,9 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.authFooter}>
-            <Text style={styles.authFooterText}>Need help?</Text>
+            <Text style={styles.authFooterText}>
+              By continuing, you agree to our Terms of Service and Privacy Policy.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -2301,6 +2439,8 @@ export default function HomeScreen() {
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
               setCalendarViewOpen(false);
+              setResourcesViewOpen(false);
+              setDashboardViewOpen(false);
             }}
             style={[styles.workspaceTab, isPersonal && !teamsViewOpen && styles.workspaceTabActive]}
           >
@@ -2317,6 +2457,8 @@ export default function HomeScreen() {
               setProjectsViewOpen(!firstProject);
               setTeamsViewOpen(false);
               setCalendarViewOpen(false);
+              setResourcesViewOpen(false);
+              setDashboardViewOpen(false);
             }}
             style={[styles.workspaceTab, (isProject || projectsViewOpen) && !teamsViewOpen && styles.workspaceTabActive]}
           >
@@ -2332,11 +2474,47 @@ export default function HomeScreen() {
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
               setCalendarViewOpen(true);
+              setResourcesViewOpen(false);
+              setDashboardViewOpen(false);
             }}
             style={[styles.workspaceTab, calendarViewOpen && styles.workspaceTabActive]}
           >
             <Text style={[styles.workspaceTabText, calendarViewOpen && styles.workspaceTabTextActive]}>
               Calendar
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              setSelectedTeamId(null);
+              setSelectedProjectId(null);
+              setProjectsViewOpen(false);
+              setTeamsViewOpen(false);
+              setCalendarViewOpen(false);
+              setResourcesViewOpen(true);
+              setDashboardViewOpen(false);
+            }}
+            style={[styles.workspaceTab, resourcesViewOpen && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabText, resourcesViewOpen && styles.workspaceTabTextActive]}>
+              Resources
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              setSelectedTeamId(null);
+              setSelectedProjectId(null);
+              setProjectsViewOpen(false);
+              setTeamsViewOpen(false);
+              setCalendarViewOpen(false);
+              setResourcesViewOpen(false);
+              setDashboardViewOpen(true);
+            }}
+            style={[styles.workspaceTab, dashboardViewOpen && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabText, dashboardViewOpen && styles.workspaceTabTextActive]}>
+              Dashboard
             </Text>
           </Pressable>
 
@@ -2520,92 +2698,465 @@ export default function HomeScreen() {
             <View style={styles.calendarViewHeader}>
               <View>
                 <Text style={styles.calendarViewEyebrow}>Calendar</Text>
-                <Text style={styles.calendarViewTitle}>{monthLabel(calendarViewMonth)}</Text>
+                <Text style={styles.calendarViewTitle}>{calendarViewTitle(calendarViewMode, calendarViewMode === 'month' ? calendarViewMonth : calendarViewSelectedDate)}</Text>
               </View>
               <View style={styles.calendarViewActions}>
                 <Pressable
-                  onPress={() => setCalendarViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  onPress={() => moveCalendarView(-1)}
                   style={styles.calendarViewNavButton}
                   accessibilityRole="button"
-                  accessibilityLabel="Previous month"
+                  accessibilityLabel={`Previous ${calendarViewMode}`}
                 >
                   <Text style={styles.calendarViewNavText}>{"<"}</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setCalendarViewMonth(new Date())}
+                  onPress={showCalendarToday}
                   style={styles.calendarViewTodayButton}
                   accessibilityRole="button"
-                  accessibilityLabel="Show current month"
+                  accessibilityLabel="Show today"
                 >
                   <Text style={styles.calendarViewTodayText}>Today</Text>
                 </Pressable>
                 <Pressable
-                  onPress={() => setCalendarViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  onPress={() => moveCalendarView(1)}
                   style={styles.calendarViewNavButton}
                   accessibilityRole="button"
-                  accessibilityLabel="Next month"
+                  accessibilityLabel={`Next ${calendarViewMode}`}
                 >
                   <Text style={styles.calendarViewNavText}>{">"}</Text>
                 </Pressable>
               </View>
             </View>
-            <View style={styles.calendarViewWeekdays}>
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                <Text key={day} style={styles.calendarViewWeekday}>{day}</Text>
-              ))}
-            </View>
-            <View style={styles.calendarViewGrid}>
-              {calendarViewDays.map((day, index) => {
-                if (!day) {
-                  return <View key={`blank-${index}`} style={[styles.calendarViewDayCell, styles.calendarViewDayBlank]} />;
-                }
-                const dateKey = formatDateValue(day);
-                const dayTodos = calendarViewTodosByDate.get(dateKey) ?? [];
-                const visibleTodos = dayTodos.slice(0, 3);
-                const hiddenCount = dayTodos.length - visibleTodos.length;
-                const isToday = isSameDate(day, now);
-                return (
-                  <View
-                    key={dateKey}
+            <View style={styles.calendarViewModeBar}>
+              {(['day', 'week', 'month'] as CalendarViewMode[]).map((mode) => (
+                <Pressable
+                  key={mode}
+                  onPress={() => {
+                    setCalendarViewMode(mode);
+                    if (mode === 'month') {
+                      setCalendarViewMonth(new Date(calendarViewSelectedDate.getFullYear(), calendarViewSelectedDate.getMonth(), 1));
+                    }
+                  }}
+                  style={[
+                    styles.calendarViewModeButton,
+                    calendarViewMode === mode && styles.calendarViewModeButtonActive,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show ${mode} calendar view`}
+                >
+                  <Text
                     style={[
-                      styles.calendarViewDayCell,
-                      isToday && styles.calendarViewDayToday,
+                      styles.calendarViewModeButtonText,
+                      calendarViewMode === mode && styles.calendarViewModeButtonTextActive,
                     ]}
                   >
-                    <Text style={[styles.calendarViewDayNumber, isToday && styles.calendarViewDayNumberToday]}>
-                      {day.getDate()}
-                    </Text>
-                    <View style={styles.calendarViewItems}>
-                      {visibleTodos.map((todo) => (
-                        <Pressable
-                          key={todo.id}
-                          onPress={() => openEditModal(todo)}
-                          style={styles.calendarViewTask}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Open task ${todo.text}`}
-                        >
-                          <View style={[styles.calendarViewPriorityDot, { backgroundColor: priorityColors[todo.priority] }]} />
+                    {mode[0].toUpperCase() + mode.slice(1)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {calendarViewMode === 'day' && (
+              <View style={[styles.calendarDayView, width < 900 && styles.calendarDayViewStacked]}>
+                <View style={styles.calendarDayAgenda}>
+                  <View style={styles.calendarDayAgendaHeader}>
+                    <Text style={styles.calendarDayAgendaTitle}>Tasks ({calendarViewSelectedDateTodos.length})</Text>
+                    <Text style={styles.calendarDayAgendaDate}>{calendarViewSelectedDateKey}</Text>
+                  </View>
+                  {calendarViewSelectedDateTodos.length === 0 ? (
+                    <Text style={styles.calendarViewEmpty}>No tasks due today.</Text>
+                  ) : (
+                    calendarViewSelectedDateTodos.map((todo) => (
+                      <Pressable
+                        key={todo.id}
+                        onPress={() => openEditModal(todo)}
+                        style={styles.calendarDayTask}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open task ${todo.text}`}
+                      >
+                        <View style={[styles.calendarViewPriorityDot, { backgroundColor: priorityColors[todo.priority] }]} />
+                        <View style={styles.calendarDayTaskBody}>
                           <Text
-                            style={[styles.calendarViewTaskText, todo.done && styles.calendarViewTaskDoneText]}
+                            style={[styles.calendarDayTaskTitle, todo.done && styles.calendarViewTaskDoneText]}
                             numberOfLines={1}
                           >
                             {todo.text}
                           </Text>
+                          {!!todo.note && (
+                            <Text style={styles.calendarDayTaskNote} numberOfLines={1}>{todo.note}</Text>
+                          )}
+                        </View>
+                      </Pressable>
+                    ))
+                  )}
+                </View>
+                <View style={[styles.calendarDayNotes, width < 900 && styles.calendarDayNotesStacked]}>
+                  <Text style={styles.calendarDayNotesTitle}>Notes</Text>
+                  <TextInput
+                    value={calendarViewSelectedDateNote}
+                    onChangeText={saveCalendarViewNote}
+                    style={styles.calendarDayNotesInput}
+                    placeholder="Notes for this day..."
+                    placeholderTextColor="#9ca3af"
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+              </View>
+            )}
+
+            {calendarViewMode === 'week' && (
+              <>
+                <View style={styles.calendarViewWeekdays}>
+                  {calendarViewWeekDays.map((day) => {
+                    const dateKey = formatDateValue(day);
+                    const isSelected = isSameDate(day, calendarViewSelectedDate);
+                    return (
+                      <Pressable
+                        key={dateKey}
+                        onPress={() => setCalendarViewSelectedDate(day)}
+                        style={[styles.calendarWeekHeaderDay, isSelected && styles.calendarWeekHeaderDaySelected]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Select ${dateKey}`}
+                      >
+                        <Text style={[styles.calendarWeekHeaderText, isSelected && styles.calendarWeekHeaderTextSelected]}>
+                          {day.toLocaleDateString(undefined, { weekday: 'short' })}
+                        </Text>
+                        <Text style={[styles.calendarWeekHeaderNumber, isSelected && styles.calendarWeekHeaderTextSelected]}>
+                          {day.getDate()}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={styles.calendarWeekGrid}>
+                  {calendarViewWeekDays.map((day) => {
+                    const dateKey = formatDateValue(day);
+                    const dayTodos = calendarViewTodosByDate.get(dateKey) ?? [];
+                    return (
+                      <View key={dateKey} style={[styles.calendarWeekDayColumn, isSameDate(day, now) && styles.calendarViewDayToday]}>
+                        {dayTodos.length === 0 ? (
+                          <Text style={styles.calendarWeekEmpty}>No tasks</Text>
+                        ) : (
+                          dayTodos.map((todo) => (
+                            <Pressable
+                              key={todo.id}
+                              onPress={() => openEditModal(todo)}
+                              style={styles.calendarViewTask}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Open task ${todo.text}`}
+                            >
+                              <View style={[styles.calendarViewPriorityDot, { backgroundColor: priorityColors[todo.priority] }]} />
+                              <Text
+                                style={[styles.calendarViewTaskText, todo.done && styles.calendarViewTaskDoneText]}
+                                numberOfLines={1}
+                              >
+                                {todo.text}
+                              </Text>
+                            </Pressable>
+                          ))
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {calendarViewMode === 'month' && (
+              <>
+                <View style={styles.calendarViewWeekdays}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <Text key={day} style={styles.calendarViewWeekday}>{day}</Text>
+                  ))}
+                </View>
+                <View style={styles.calendarViewGrid}>
+                  {calendarViewDays.map((day, index) => {
+                    if (!day) {
+                      return <View key={`blank-${index}`} style={[styles.calendarViewDayCell, styles.calendarViewDayBlank]} />;
+                    }
+                    const dateKey = formatDateValue(day);
+                    const dayTodos = calendarViewTodosByDate.get(dateKey) ?? [];
+                    const visibleTodos = dayTodos.slice(0, 3);
+                    const hiddenCount = dayTodos.length - visibleTodos.length;
+                    const isToday = isSameDate(day, now);
+                    const isSelected = isSameDate(day, calendarViewSelectedDate);
+                    return (
+                      <View
+                        key={dateKey}
+                        style={[
+                          styles.calendarViewDayCell,
+                          isToday && styles.calendarViewDayToday,
+                          isSelected && styles.calendarViewDaySelected,
+                        ]}
+                      >
+                        <Pressable
+                          onPress={() => {
+                            setCalendarViewSelectedDate(day);
+                            setCalendarViewMode('day');
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open day view for ${dateKey}`}
+                        >
+                          <Text style={[styles.calendarViewDayNumber, isToday && styles.calendarViewDayNumberToday]}>
+                            {day.getDate()}
+                          </Text>
                         </Pressable>
-                      ))}
-                      {hiddenCount > 0 && (
-                        <Text style={styles.calendarViewMoreText}>+{hiddenCount} more</Text>
-                      )}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
+                        <View style={styles.calendarViewItems}>
+                          {visibleTodos.map((todo) => (
+                            <Pressable
+                              key={todo.id}
+                              onPress={() => openEditModal(todo)}
+                              style={styles.calendarViewTask}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Open task ${todo.text}`}
+                            >
+                              <View style={[styles.calendarViewPriorityDot, { backgroundColor: priorityColors[todo.priority] }]} />
+                              <Text
+                                style={[styles.calendarViewTaskText, todo.done && styles.calendarViewTaskDoneText]}
+                                numberOfLines={1}
+                              >
+                                {todo.text}
+                              </Text>
+                            </Pressable>
+                          ))}
+                          {hiddenCount > 0 && (
+                            <Pressable
+                              onPress={() => {
+                                setCalendarViewSelectedDate(day);
+                                setCalendarViewMode('day');
+                              }}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Show ${hiddenCount} more tasks for ${dateKey}`}
+                            >
+                              <Text style={styles.calendarViewMoreText}>+{hiddenCount} more</Text>
+                            </Pressable>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
+            )}
           </View>
         </ScrollView>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && selectedTeam && (
+      {resourcesViewOpen && (() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const allTodos = [...todos, ...assignedToMe];
+        // Build per-member workload from all loaded todos
+        const memberRows = members.map((m) => {
+          const mine = allTodos.filter((t) => t.assigned_to === m.user_id && !t.done);
+          const overdue = mine.filter((t) => {
+            if (!t.due_date) return false;
+            const [y, mo, d] = t.due_date.split('-').map(Number);
+            return new Date(y, mo - 1, d) < today;
+          });
+          const dueToday = mine.filter((t) => {
+            if (!t.due_date) return false;
+            const [y, mo, d] = t.due_date.split('-').map(Number);
+            const due = new Date(y, mo - 1, d);
+            return due.getTime() === today.getTime();
+          });
+          const urgent = mine.filter((t) => t.priority === 'urgent');
+          return { member: m, active: mine.length, overdue: overdue.length, dueToday: dueToday.length, urgent: urgent.length };
+        });
+        const myId = session?.user.id;
+        const myActive = allTodos.filter((t) => t.created_by === myId && !t.done);
+        const myOverdue = myActive.filter((t) => {
+          if (!t.due_date) return false;
+          const [y, mo, d] = t.due_date.split('-').map(Number);
+          return new Date(y, mo - 1, d) < today;
+        });
+        const myDueToday = myActive.filter((t) => {
+          if (!t.due_date) return false;
+          const [y, mo, d] = t.due_date.split('-').map(Number);
+          return new Date(y, mo - 1, d).getTime() === today.getTime();
+        });
+        return (
+          <ScrollView style={styles.resourcesView} contentContainerStyle={styles.resourcesContent}>
+            <View style={styles.resourcesHeader}>
+              <Text style={styles.resourcesTitle}>Resources</Text>
+              <Text style={styles.resourcesSubtitle}>Workload overview — active assigned tasks per person</Text>
+            </View>
+
+            {/* Personal row */}
+            <View style={styles.resourceCard}>
+              <View style={styles.resourceCardHeader}>
+                <Text style={styles.resourceCardName}>{accountDisplayName}</Text>
+                <Text style={styles.resourceCardMeta}>You</Text>
+              </View>
+              <View style={styles.resourceStats}>
+                <View style={styles.resourceStat}>
+                  <Text style={styles.resourceStatValue}>{myActive.length}</Text>
+                  <Text style={styles.resourceStatLabel}>Active</Text>
+                </View>
+                <View style={[styles.resourceStat, myOverdue.length > 0 && styles.resourceStatDanger]}>
+                  <Text style={[styles.resourceStatValue, myOverdue.length > 0 && styles.resourceStatValueDanger]}>{myOverdue.length}</Text>
+                  <Text style={styles.resourceStatLabel}>Overdue</Text>
+                </View>
+                <View style={styles.resourceStat}>
+                  <Text style={styles.resourceStatValue}>{myDueToday.length}</Text>
+                  <Text style={styles.resourceStatLabel}>Due today</Text>
+                </View>
+              </View>
+            </View>
+
+            {memberRows.length > 0 && (
+              <>
+                <Text style={styles.resourcesSectionLabel}>Team Members</Text>
+                {memberRows.map(({ member, active: act, overdue: ov, dueToday: dt, urgent: urg }) => (
+                  <View key={member.user_id} style={styles.resourceCard}>
+                    <View style={styles.resourceCardHeader}>
+                      <Text style={styles.resourceCardName}>{profileDisplayName(member)}</Text>
+                      <Text style={styles.resourceCardMeta}>{member.role}</Text>
+                    </View>
+                    <View style={styles.resourceStats}>
+                      <View style={styles.resourceStat}>
+                        <Text style={styles.resourceStatValue}>{act}</Text>
+                        <Text style={styles.resourceStatLabel}>Active</Text>
+                      </View>
+                      <View style={[styles.resourceStat, ov > 0 && styles.resourceStatDanger]}>
+                        <Text style={[styles.resourceStatValue, ov > 0 && styles.resourceStatValueDanger]}>{ov}</Text>
+                        <Text style={styles.resourceStatLabel}>Overdue</Text>
+                      </View>
+                      <View style={styles.resourceStat}>
+                        <Text style={styles.resourceStatValue}>{dt}</Text>
+                        <Text style={styles.resourceStatLabel}>Due today</Text>
+                      </View>
+                      <View style={[styles.resourceStat, urg > 0 && styles.resourceStatUrgent]}>
+                        <Text style={[styles.resourceStatValue, urg > 0 && styles.resourceStatValueUrgent]}>{urg}</Text>
+                        <Text style={styles.resourceStatLabel}>Urgent</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </>
+            )}
+
+            {memberRows.length === 0 && (
+              <View style={styles.resourcesEmpty}>
+                <Text style={styles.resourcesEmptyText}>No team selected. Open a team workspace to see member workloads.</Text>
+              </View>
+            )}
+          </ScrollView>
+        );
+      })()}
+
+      {dashboardViewOpen && (() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(today);
+        weekEnd.setDate(today.getDate() + 7);
+        const allTodos = [...todos, ...assignedToMe];
+        const activeTodos = allTodos.filter((t) => !t.done);
+        const overdueTodos = activeTodos.filter((t) => {
+          if (!t.due_date) return false;
+          const [y, mo, d] = t.due_date.split('-').map(Number);
+          return new Date(y, mo - 1, d) < today;
+        });
+        const dueTodayTodos = activeTodos.filter((t) => {
+          if (!t.due_date) return false;
+          const [y, mo, d] = t.due_date.split('-').map(Number);
+          return new Date(y, mo - 1, d).getTime() === today.getTime();
+        });
+        const dueThisWeekTodos = activeTodos.filter((t) => {
+          if (!t.due_date) return false;
+          const [y, mo, d] = t.due_date.split('-').map(Number);
+          const due = new Date(y, mo - 1, d);
+          return due > today && due <= weekEnd;
+        });
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - 7);
+        const completedThisWeek = allTodos.filter((t) => {
+          if (!t.done || !t.completed_at) return false;
+          return new Date(t.completed_at) >= weekStart;
+        });
+        const urgentTodos = activeTodos.filter((t) => t.priority === 'urgent');
+
+        const statCards = [
+          { label: 'Active', value: activeTodos.length, color: '#6366f1', bg: '#eef2ff' },
+          { label: 'Overdue', value: overdueTodos.length, color: overdueTodos.length > 0 ? '#dc2626' : '#6b7280', bg: overdueTodos.length > 0 ? '#fef2f2' : '#f3f4f6' },
+          { label: 'Due Today', value: dueTodayTodos.length, color: dueTodayTodos.length > 0 ? '#d97706' : '#6b7280', bg: dueTodayTodos.length > 0 ? '#fef3c7' : '#f3f4f6' },
+          { label: 'Due This Week', value: dueThisWeekTodos.length, color: '#4338ca', bg: '#eef2ff' },
+          { label: 'Done This Week', value: completedThisWeek.length, color: '#16a34a', bg: '#f0fdf4' },
+          { label: 'Urgent', value: urgentTodos.length, color: urgentTodos.length > 0 ? '#ef4444' : '#6b7280', bg: urgentTodos.length > 0 ? '#fef2f2' : '#f3f4f6' },
+        ];
+        return (
+          <ScrollView style={styles.dashboardView} contentContainerStyle={styles.dashboardContent}>
+            <View style={styles.dashboardHeader}>
+              <Text style={styles.dashboardTitle}>Dashboard</Text>
+              <Text style={styles.dashboardSubtitle}>
+                {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </View>
+
+            <View style={styles.dashboardStatGrid}>
+              {statCards.map((card) => (
+                <View key={card.label} style={[styles.dashboardStatCard, { backgroundColor: card.bg }]}>
+                  <Text style={[styles.dashboardStatValue, { color: card.color }]}>{card.value}</Text>
+                  <Text style={styles.dashboardStatLabel}>{card.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {members.length > 0 && (
+              <>
+                <Text style={styles.dashboardSectionTitle}>Team Workload</Text>
+                <View style={styles.dashboardMemberGrid}>
+                  {members.map((m) => {
+                    const mActive = allTodos.filter((t) => t.assigned_to === m.user_id && !t.done).length;
+                    const mOverdue = allTodos.filter((t) => {
+                      if (t.assigned_to !== m.user_id || t.done || !t.due_date) return false;
+                      const [y, mo, d] = t.due_date.split('-').map(Number);
+                      return new Date(y, mo - 1, d) < today;
+                    }).length;
+                    return (
+                      <View key={m.user_id} style={styles.dashboardMemberCard}>
+                        <Text style={styles.dashboardMemberName} numberOfLines={1}>{profileDisplayName(m)}</Text>
+                        <Text style={styles.dashboardMemberStats}>
+                          {mActive} active{mOverdue > 0 ? ` · ${mOverdue} overdue` : ''}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {overdueTodos.length > 0 && (
+              <>
+                <Text style={styles.dashboardSectionTitle}>Overdue</Text>
+                {overdueTodos.slice(0, 5).map((todo) => (
+                  <Pressable key={todo.id} onPress={() => openEditModal(todo)} style={styles.dashboardTodoRow}>
+                    <View style={[styles.dashboardTodoPriority, { backgroundColor: todo.priority === 'urgent' ? '#ef4444' : todo.priority === 'high' ? '#f59e0b' : '#9ca3af' }]} />
+                    <Text style={styles.dashboardTodoText} numberOfLines={1}>{todo.text}</Text>
+                    {todo.due_date && <Text style={styles.dashboardTodoDue}>{todo.due_date}</Text>}
+                  </Pressable>
+                ))}
+                {overdueTodos.length > 5 && <Text style={styles.dashboardMoreText}>+{overdueTodos.length - 5} more</Text>}
+              </>
+            )}
+
+            {dueTodayTodos.length > 0 && (
+              <>
+                <Text style={styles.dashboardSectionTitle}>Due Today</Text>
+                {dueTodayTodos.map((todo) => (
+                  <Pressable key={todo.id} onPress={() => openEditModal(todo)} style={styles.dashboardTodoRow}>
+                    <View style={[styles.dashboardTodoPriority, { backgroundColor: todo.priority === 'urgent' ? '#ef4444' : todo.priority === 'high' ? '#f59e0b' : '#60a5fa' }]} />
+                    <Text style={styles.dashboardTodoText} numberOfLines={1}>{todo.text}</Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
+          </ScrollView>
+        );
+      })()}
+
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && selectedTeam && (
         <View style={styles.memberPanel}>
           <Text style={styles.panelTitle}>{selectedTeam.name}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.memberList}>
@@ -2636,7 +3187,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && isProject && nextMilestone && (
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && nextMilestone && (
         <View style={[styles.milestoneBanner, nextMilestone.daysLeft < 0 && styles.milestoneBannerOverdue]}>
           <Text style={styles.milestoneBannerText}>
             ◆ {nextMilestone.text}
@@ -2649,7 +3200,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && isProject && (
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectSwitchBar}>
           <Text style={styles.projectSwitchLabel}>Project</Text>
           <ScrollView
@@ -2695,7 +3246,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && isProject && (
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectViewModeBar}>
           {(['plan', 'kanban'] as ProjectViewMode[]).map((mode) => (
             <Pressable
@@ -2721,9 +3272,9 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && (isProject ? (
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && (isProject ? (
         projectViewMode === 'plan' ? (
-        <KanbanDragProvider onMove={moveProjectTodo}>
+        <KanbanDragProvider onMove={(todoId, targetPhaseId, _targetWorkflowStatus, overTodoId) => movePlanTodo(todoId, targetPhaseId, overTodoId)}>
           {/* Backlog strip — one-line capture bar; tasks land here by default */}
           {(() => {
             const backlogTodos = todos.filter((t) => !t.phase_id);
@@ -2944,7 +3495,9 @@ export default function HomeScreen() {
           </ScrollView>
         </KanbanDragProvider>
         ) : (
-          <KanbanDragProvider onMove={moveProjectTodo}>
+          <KanbanDragProvider onMove={(todoId, _targetPhaseId, targetWorkflowStatus, overTodoId) => {
+            if (targetWorkflowStatus) moveWorkflowTodo(todoId, targetWorkflowStatus as WorkflowLaneKey, overTodoId);
+          }}>
             <ScrollView
               horizontal
               style={styles.kanban}
@@ -2958,35 +3511,31 @@ export default function HomeScreen() {
                     key: 'backlog',
                     title: workflowColumnLabels.backlog,
                     phaseId: null,
-                    done: false,
-                    items: sortTodos(todos.filter((todo) =>
-                      workflowStageForTodo(todo, workflowPhaseTargets) === 'backlog'
+                    workflowStatus: 'backlog' as WorkflowLaneKey,
+                    items: sortWorkflowTodos(todos.filter((todo) =>
+                      workflowStageForTodo(todo) === 'backlog'
                     )),
                   },
                   {
                     key: 'doing',
                     title: workflowColumnLabels.doing,
-                    phaseId: workflowPhaseTargets.doingPhaseId,
-                    done: false,
-                    items: workflowPhaseTargets.doingPhaseId
-                      ? sortTodos(todos.filter((todo) => workflowStageForTodo(todo, workflowPhaseTargets) === 'doing'))
-                      : [],
+                    phaseId: null,
+                    workflowStatus: 'doing' as WorkflowLaneKey,
+                    items: sortWorkflowTodos(todos.filter((todo) => workflowStageForTodo(todo) === 'doing')),
                   },
                   {
                     key: 'review',
                     title: workflowColumnLabels.review,
-                    phaseId: workflowPhaseTargets.reviewPhaseId,
-                    done: false,
-                    items: workflowPhaseTargets.reviewPhaseId
-                      ? sortTodos(todos.filter((todo) => workflowStageForTodo(todo, workflowPhaseTargets) === 'review'))
-                      : [],
+                    phaseId: null,
+                    workflowStatus: 'review' as WorkflowLaneKey,
+                    items: sortWorkflowTodos(todos.filter((todo) => workflowStageForTodo(todo) === 'review')),
                   },
                   {
                     key: 'done',
                     title: workflowColumnLabels.done,
                     phaseId: null,
-                    done: true,
-                    items: sortTodos(todos.filter((todo) => workflowStageForTodo(todo, workflowPhaseTargets) === 'done')),
+                    workflowStatus: 'done' as WorkflowLaneKey,
+                    items: sortWorkflowTodos(todos.filter((todo) => workflowStageForTodo(todo) === 'done')),
                   },
                 ];
 
@@ -2995,16 +3544,16 @@ export default function HomeScreen() {
                     <View style={styles.kanbanColHeader}>
                       <View style={[
                         styles.kanbanStatusDot,
-                        { backgroundColor: lane.done ? '#16a34a' : lane.key === 'doing' ? '#6366f1' : lane.key === 'review' ? '#f59e0b' : '#9ca3af' },
+                        { backgroundColor: lane.key === 'done' ? '#16a34a' : lane.key === 'doing' ? '#6366f1' : lane.key === 'review' ? '#f59e0b' : '#9ca3af' },
                       ]} />
                       <View style={styles.kanbanColMeta}>
                         <Text style={styles.kanbanColTitle}>{lane.title}</Text>
                         <Text style={styles.kanbanColDateRange}>
                           {lane.key === 'backlog'
-                            ? 'Unplanned'
+                            ? 'Ready for work'
                             : lane.key === 'done'
                               ? 'Completed'
-                              : (phases.find((phase) => phase.id === lane.phaseId)?.name ?? 'No plan column')}
+                              : 'Workflow state'}
                         </Text>
                       </View>
                       <View style={styles.kanbanCountBadge}>
@@ -3024,11 +3573,11 @@ export default function HomeScreen() {
                       <KanbanDropLane
                         id={`workflow-lane-${lane.key}`}
                         phaseId={lane.phaseId}
-                        done={lane.done}
+                        workflowStatus={lane.workflowStatus}
                         itemIds={lane.items.map((todo) => todo.id)}
                       >
                         {lane.items.map((todo) => (
-                          <KanbanDragItem key={todo.id} id={todo.id} phaseId={todo.phase_id} done={todo.done}>
+                          <KanbanDragItem key={todo.id} id={todo.id} phaseId={null} workflowStatus={workflowStageForTodo(todo)}>
                             <KanbanCard todo={todo}
                               assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
                               onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
@@ -4363,18 +4912,88 @@ const styles = StyleSheet.create({
   authPanel: {
     flex: 1,
     width: '100%',
-    maxWidth: 440,
+    maxWidth: 420,
     alignSelf: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 64,
+    paddingHorizontal: 28,
+    paddingTop: 56,
     paddingBottom: 24,
   },
+  authBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+    gap: 10,
+  },
+  authLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#6366f1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authLogoText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  authBrandName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+  },
   authTitle: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  authTitleSub: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginBottom: 28,
+  },
+  authLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 6,
+    marginTop: 14,
+  },
+  authPasswordHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    marginTop: 14,
+  },
+  authSuccessBox: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#86efac',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 14,
+  },
+  authSuccessText: {
+    color: '#16a34a',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  socialGridBtnSoon: {
+    opacity: 0.5,
+  },
+  socialComingSoon: {
+    fontSize: 11,
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 4,
   },
   authSubtitleRow: {
     flexDirection: 'row',
@@ -4462,7 +5081,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   authConfirmMessage: {
-    color: '#dc2626',
+    color: '#16a34a',
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
@@ -4986,6 +5605,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  calendarViewModeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff',
+  },
+  calendarViewModeButton: {
+    minHeight: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  calendarViewModeButtonActive: {
+    borderColor: '#111827',
+    backgroundColor: '#111827',
+  },
+  calendarViewModeButtonText: {
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  calendarViewModeButtonTextActive: {
+    color: '#fff',
+  },
   calendarViewWeekdays: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -5019,6 +5670,10 @@ const styles = StyleSheet.create({
   },
   calendarViewDayToday: {
     backgroundColor: '#eef2ff',
+  },
+  calendarViewDaySelected: {
+    borderColor: '#6366f1',
+    borderWidth: 1,
   },
   calendarViewDayNumber: {
     color: '#6b7280',
@@ -5060,6 +5715,139 @@ const styles = StyleSheet.create({
   },
   calendarViewMoreText: {
     color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  calendarDayView: {
+    flexDirection: 'row',
+    minHeight: 520,
+  },
+  calendarDayViewStacked: {
+    flexDirection: 'column',
+  },
+  calendarDayAgenda: {
+    flex: 1,
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
+    minWidth: 0,
+  },
+  calendarDayAgendaHeader: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  calendarDayAgendaTitle: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  calendarDayAgendaDate: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  calendarViewEmpty: {
+    color: '#9ca3af',
+    fontSize: 15,
+    fontWeight: '600',
+    padding: 16,
+  },
+  calendarDayTask: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  calendarDayTaskBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  calendarDayTaskTitle: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  calendarDayTaskNote: {
+    color: '#6b7280',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  calendarDayNotes: {
+    width: 340,
+    padding: 14,
+    backgroundColor: '#fff',
+  },
+  calendarDayNotesStacked: {
+    width: '100%',
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  calendarDayNotesTitle: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  calendarDayNotesInput: {
+    minHeight: 420,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 12,
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '500',
+    backgroundColor: '#f9fafb',
+  },
+  calendarWeekHeaderDay: {
+    width: '14.2857%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 2,
+  },
+  calendarWeekHeaderDaySelected: {
+    backgroundColor: '#eef2ff',
+  },
+  calendarWeekHeaderText: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  calendarWeekHeaderNumber: {
+    color: '#374151',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  calendarWeekHeaderTextSelected: {
+    color: '#4338ca',
+  },
+  calendarWeekGrid: {
+    flexDirection: 'row',
+    minHeight: 520,
+  },
+  calendarWeekDayColumn: {
+    width: '14.2857%',
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
+    padding: 8,
+    gap: 6,
+  },
+  calendarWeekEmpty: {
+    color: '#d1d5db',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -6605,5 +7393,215 @@ const styles = StyleSheet.create({
   priorityPickerLabel: {
     fontSize: 11,
     fontWeight: '600',
+  },
+
+  // ── Resources view ────────────────────────────────────────────────
+  resourcesView: {
+    flex: 1,
+  },
+  resourcesContent: {
+    padding: 24,
+    maxWidth: 860,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  resourcesHeader: {
+    marginBottom: 24,
+  },
+  resourcesTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  resourcesSubtitle: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  resourcesSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  resourceCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 16,
+    marginBottom: 10,
+  },
+  resourceCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  resourceCardName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  resourceCardMeta: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textTransform: 'capitalize',
+  },
+  resourceStats: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  resourceStat: {
+    minWidth: 64,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  resourceStatDanger: {
+    backgroundColor: '#fef2f2',
+  },
+  resourceStatUrgent: {
+    backgroundColor: '#fef2f2',
+  },
+  resourceStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  resourceStatValueDanger: {
+    color: '#dc2626',
+  },
+  resourceStatValueUrgent: {
+    color: '#ef4444',
+  },
+  resourceStatLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  resourcesEmpty: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  resourcesEmptyText: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+  },
+
+  // ── Dashboard view ────────────────────────────────────────────────
+  dashboardView: {
+    flex: 1,
+  },
+  dashboardContent: {
+    padding: 24,
+    maxWidth: 860,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  dashboardHeader: {
+    marginBottom: 24,
+  },
+  dashboardTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  dashboardSubtitle: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  dashboardStatGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 24,
+  },
+  dashboardStatCard: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+    minWidth: 100,
+  },
+  dashboardStatValue: {
+    fontSize: 32,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  dashboardStatLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  dashboardSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+    letterSpacing: 0.3,
+    marginBottom: 10,
+    marginTop: 8,
+  },
+  dashboardMemberGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+  },
+  dashboardMemberCard: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    minWidth: 120,
+  },
+  dashboardMemberName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  dashboardMemberStats: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  dashboardTodoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    gap: 10,
+  },
+  dashboardTodoPriority: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  dashboardTodoText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+  },
+  dashboardTodoDue: {
+    fontSize: 12,
+    color: '#dc2626',
+  },
+  dashboardMoreText: {
+    fontSize: 12,
+    color: '#9ca3af',
+    paddingVertical: 8,
   },
 });
