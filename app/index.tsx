@@ -1505,14 +1505,13 @@ export default function HomeScreen() {
     const text = input.trim();
     if (!text || !session) return;
     const assignedTo = selectedTeamId && !isProject ? newTodoAssignee : null;
-    const projectId = isPersonal ? newTodoProjectId : selectedProjectId;
 
     const { data, error: insertError } = await supabase
       .from('todos')
       .insert({
         text,
         team_id: isProject ? null : selectedTeamId,
-        project_id: projectId,
+        project_id: selectedProjectId,
         created_by: session.user.id,
         assigned_to: assignedTo,
         assigned_at: assignedTo ? new Date().toISOString() : null,
