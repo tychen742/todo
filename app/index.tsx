@@ -26,6 +26,8 @@ type Todo = {
   id: string;
   text: string;
   done: boolean;
+  scheduled_start_at: string | null;
+  started_work_at: string | null;
   assigned_to: string | null;
   created_by: string | null;
   priority: Priority;
@@ -119,7 +121,7 @@ const defaultWorkflowColumnLabels: Record<WorkflowLaneKey, string> = {
   done: 'Done',
 };
 
-const todoSelectColumns = 'id, text, done, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, workflow_position, is_milestone, project_id, phase_id, workflow_status, team_id, estimate';
+const todoSelectColumns = 'id, text, done, scheduled_start_at, started_work_at, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, workflow_position, is_milestone, project_id, phase_id, workflow_status, team_id, estimate';
 
 function workflowStageForTodo(todo: Pick<Todo, 'done' | 'workflow_status'>): WorkflowLaneKey {
   if (todo.done) return 'done';
@@ -169,6 +171,26 @@ function parseDateValue(value: string | null) {
 
   if (Number.isNaN(date.getTime())) return null;
   return date;
+}
+
+function toDateTimeInputValue(value: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function fromDateTimeInputValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
 }
 
 function monthLabel(date: Date) {
@@ -473,6 +495,7 @@ export default function HomeScreen() {
   const [memberEmail, setMemberEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [newTodoAssignee, setNewTodoAssignee] = useState<string | null>(null);
+  const [newTodoProjectId, setNewTodoProjectId] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState('');
   const [dueTodo, setDueTodo] = useState<Todo | null>(null);
@@ -483,6 +506,7 @@ export default function HomeScreen() {
   const [editDraftDueDateMonth, setEditDraftDueDateMonth] = useState(() => new Date());
   const [editDraftPriority, setEditDraftPriority] = useState<Priority>('normal');
   const [editDraftEstimate, setEditDraftEstimate] = useState('');
+  const [editDraftScheduledStartAt, setEditDraftScheduledStartAt] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -497,6 +521,14 @@ export default function HomeScreen() {
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [density, setDensity] = useState<Density>('cozy');
   const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [renamingTeam, setRenamingTeam] = useState<Team | null>(null);
+  const [renameTeamName, setRenameTeamName] = useState('');
+  const [renamingOrg, setRenamingOrg] = useState<Organization | null>(null);
+  const [renameOrgName, setRenameOrgName] = useState('');
+  const [renamingProject, setRenamingProject] = useState<Project | null>(null);
+  const [renameProjectName, setRenameProjectName] = useState('');
+  const [editingDisplayName, setEditingDisplayName] = useState(false);
+  const [editDisplayNameValue, setEditDisplayNameValue] = useState('');
 
   const rowPV = densityPV[density];
   const rowH = densityRowH[density];
@@ -507,9 +539,10 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    const uid = session?.user.id;
     let cancelled = false;
-    const storageKey = selectedProjectId
-      ? `todo:workflow-column-labels:${selectedProjectId}`
+    const storageKey = uid && selectedProjectId
+      ? `todo:workflow-column-labels:${uid}:${selectedProjectId}`
       : null;
 
     (storageKey ? AsyncStorage.getItem(storageKey) : Promise.resolve(null))
@@ -528,11 +561,16 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedProjectId]);
+  }, [selectedProjectId, session]);
 
   useEffect(() => {
+    const uid = session?.user.id;
     let cancelled = false;
-    AsyncStorage.getItem('todo:calendar-notes')
+    if (!uid) {
+      setCalendarViewNotes({});
+      return;
+    }
+    AsyncStorage.getItem(`todo:calendar-notes:${uid}`)
       .then((value) => {
         if (cancelled || !value) return;
         setCalendarViewNotes(JSON.parse(value) as Record<string, string>);
@@ -543,7 +581,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [session]);
 
   const isProject = selectedProjectId !== null;
   const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
@@ -587,11 +625,13 @@ export default function HomeScreen() {
   }
 
   function saveCalendarViewNote(value: string) {
+    if (!session) return;
+    const uid = session.user.id;
     const dateKey = calendarViewSelectedDateKey;
     const nextNotes = { ...calendarViewNotes, [dateKey]: value };
     if (!value.trim()) delete nextNotes[dateKey];
     setCalendarViewNotes(nextNotes);
-    AsyncStorage.setItem('todo:calendar-notes', JSON.stringify(nextNotes)).catch(() => {
+    AsyncStorage.setItem(`todo:calendar-notes:${uid}`, JSON.stringify(nextNotes)).catch(() => {
       setError('Could not save calendar note.');
     });
   }
@@ -661,6 +701,9 @@ export default function HomeScreen() {
     : emailDisplayName(session?.user.email);
   const currentOrgRole = orgModalId
     ? (orgModalMembers.find((m) => m.user_id === session?.user.id)?.role ?? null)
+    : null;
+  const currentTeamRole = selectedTeamId
+    ? (members.find((m) => m.user_id === session?.user.id)?.role ?? null)
     : null;
 
   const ensureProfile = useCallback(async (currentSession: Session) => {
@@ -737,7 +780,18 @@ export default function HomeScreen() {
       .select('id, name, team_id, archived_at')
       .is('archived_at', null)
       .order('created_at', { ascending: true });
-    if (!err) setProjects(data ?? []);
+    if (err) return;
+
+    if ((data ?? []).length === 0) {
+      const { data: seeded } = await supabase
+        .from('projects')
+        .insert({ name: 'Individual' })
+        .select('id, name, team_id, archived_at')
+        .single();
+      setProjects(seeded ? [seeded as Project] : []);
+    } else {
+      setProjects(data as Project[]);
+    }
   }, [session]);
 
   const loadPhases = useCallback(async () => {
@@ -1113,6 +1167,52 @@ export default function HomeScreen() {
     setProfile((prev) => prev ? { ...prev, status } : prev);
   }
 
+  async function saveDisplayName() {
+    if (!session) return;
+    const name = editDisplayNameValue.trim();
+    const { error: err } = await supabase.from('profiles').update({ display_name: name || null }).eq('id', session.user.id);
+    if (err) { setError(err.message); return; }
+    setProfile((prev) => prev ? { ...prev, display_name: name || null } : prev);
+    setEditingDisplayName(false);
+    setError('');
+  }
+
+  async function renameTeam() {
+    if (!renamingTeam) return;
+    const name = renameTeamName.trim();
+    if (!name) return;
+    const { error: err } = await supabase.from('teams').update({ name }).eq('id', renamingTeam.id);
+    if (err) { setError(err.message); return; }
+    setTeams((prev) => prev.map((t) => t.id === renamingTeam.id ? { ...t, name } : t));
+    setRenamingTeam(null);
+    setRenameTeamName('');
+    setError('');
+  }
+
+  async function renameOrg() {
+    if (!renamingOrg) return;
+    const name = renameOrgName.trim();
+    if (!name) return;
+    const { error: err } = await supabase.from('organizations').update({ name }).eq('id', renamingOrg.id);
+    if (err) { setError(err.message); return; }
+    setOrganizations((prev) => prev.map((o) => o.id === renamingOrg.id ? { ...o, name } : o));
+    setRenamingOrg(null);
+    setRenameOrgName('');
+    setError('');
+  }
+
+  async function renameProject() {
+    if (!renamingProject) return;
+    const name = renameProjectName.trim();
+    if (!name) return;
+    const { error: err } = await supabase.from('projects').update({ name }).eq('id', renamingProject.id);
+    if (err) { setError(err.message); return; }
+    setProjects((prev) => prev.map((p) => p.id === renamingProject.id ? { ...p, name } : p));
+    setRenamingProject(null);
+    setRenameProjectName('');
+    setError('');
+  }
+
   function choosePlannedUserFeature(label: string) {
     setMessage(`${label} is planned.`);
     setError('');
@@ -1405,13 +1505,14 @@ export default function HomeScreen() {
     const text = input.trim();
     if (!text || !session) return;
     const assignedTo = selectedTeamId && !isProject ? newTodoAssignee : null;
+    const projectId = isPersonal ? newTodoProjectId : selectedProjectId;
 
     const { data, error: insertError } = await supabase
       .from('todos')
       .insert({
         text,
         team_id: isProject ? null : selectedTeamId,
-        project_id: selectedProjectId,
+        project_id: projectId,
         created_by: session.user.id,
         assigned_to: assignedTo,
         assigned_at: assignedTo ? new Date().toISOString() : null,
@@ -1492,13 +1593,14 @@ export default function HomeScreen() {
     const todo = assignedToMe.find((item) => item.id === id);
     if (!todo) return;
     const accepted_at = new Date().toISOString();
+    const started_work_at = accepted_at;
 
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ accepted_at })
+      .update({ accepted_at, started_work_at })
       .eq('id', id);
     if (updateError) { setError(updateError.message); return; }
-    const acceptedTodo = { ...todo, accepted_at };
+    const acceptedTodo = { ...todo, accepted_at, started_work_at };
     setAssignedToMe(prev => prev.filter(t => t.id !== id));
     setTodos((prev) => sortTodos([acceptedTodo, ...prev.filter((item) => item.id !== id)]));
     showToast('Moved from Inbox to Todos');
@@ -1641,6 +1743,7 @@ export default function HomeScreen() {
     setEditDraftDueDate(todo.due_date);
     setEditDraftPriority(todo.priority);
     setEditDraftEstimate(todo.estimate ?? '');
+    setEditDraftScheduledStartAt(toDateTimeInputValue(todo.scheduled_start_at));
     const due = parseDateValue(todo.due_date);
     setEditDraftDueDateMonth(due ? new Date(due.getFullYear(), due.getMonth(), 1) : new Date());
   }
@@ -1657,10 +1760,15 @@ export default function HomeScreen() {
     const note = editDraftNote.trim() || null;
     const phase_id = isProject ? editDraftPhaseId : editTodo.phase_id;
     const estimate = editDraftEstimate.trim() || null;
+    const scheduledStartAt = fromDateTimeInputValue(editDraftScheduledStartAt);
+    if (scheduledStartAt === undefined) {
+      setError('Scheduled start must be a valid date/time.');
+      return;
+    }
 
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ text, note, phase_id, due_date: editDraftDueDate, priority: editDraftPriority, estimate })
+      .update({ text, note, phase_id, due_date: editDraftDueDate, priority: editDraftPriority, estimate, scheduled_start_at: scheduledStartAt })
       .eq('id', editTodo.id);
 
     if (updateError) {
@@ -1671,7 +1779,16 @@ export default function HomeScreen() {
     setTodos((prev) =>
       prev.map((item) =>
         item.id === editTodo.id
-          ? { ...item, text, note, phase_id: phase_id ?? null, due_date: editDraftDueDate, priority: editDraftPriority, estimate }
+          ? {
+              ...item,
+              text,
+              note,
+              phase_id: phase_id ?? null,
+              due_date: editDraftDueDate,
+              priority: editDraftPriority,
+              estimate,
+              scheduled_start_at: scheduledStartAt,
+            }
           : item
       )
     );
@@ -1691,6 +1808,31 @@ export default function HomeScreen() {
     if (todo) setArchivedTodos((prev) => [{ ...todo, archived_at }, ...prev]);
     if (editTodo?.id === id) closeEditModal();
     setError('');
+  }
+
+  async function startWorkOnTodo(todo: Todo) {
+    if (todo.started_work_at) return;
+    const nowIso = new Date().toISOString();
+    const shouldMoveToDoing = !!todo.project_id && todo.workflow_status === 'backlog' && !todo.done;
+    const updates = {
+      started_work_at: nowIso,
+      accepted_at: todo.accepted_at ?? nowIso,
+      workflow_status: shouldMoveToDoing ? ('doing' as WorkflowLaneKey) : todo.workflow_status,
+      workflow_position: shouldMoveToDoing ? null : todo.workflow_position,
+    };
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update(updates)
+      .eq('id', todo.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setTodos((prev) => prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item)));
+    setError('');
+    showToast(shouldMoveToDoing ? 'Work started · moved to Doing' : 'Work started');
   }
 
   async function unarchiveTodo(id: string) {
@@ -1981,10 +2123,13 @@ export default function HomeScreen() {
       [renamingWorkflowLane]: name,
     };
     setWorkflowColumnLabels(labels);
-    await AsyncStorage.setItem(
-      `todo:workflow-column-labels:${selectedProjectId}`,
-      JSON.stringify(labels)
-    );
+    const uid = session?.user.id;
+    if (uid) {
+      await AsyncStorage.setItem(
+        `todo:workflow-column-labels:${uid}:${selectedProjectId}`,
+        JSON.stringify(labels)
+      );
+    }
     closeRenameWorkflowLane();
   }
 
@@ -2638,24 +2783,33 @@ export default function HomeScreen() {
           {projects.map((project) => {
             const linkedTeam = project.team_id ? teams.find((t) => t.id === project.team_id) : null;
             return (
-              <Pressable
-                key={project.id}
-                style={styles.projectCard}
-                onPress={() => {
-                  setSelectedProjectId(project.id);
-                  setSelectedTeamId(null);
-                  setProjectsViewOpen(false);
-                  setTeamsViewOpen(false);
-                  setCalendarViewOpen(false);
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Open project ${project.name}`}
-              >
-                <Text style={styles.projectCardName} numberOfLines={1}>{project.name}</Text>
-                <Text style={styles.projectCardMeta} numberOfLines={1}>
-                  {linkedTeam ? linkedTeam.name : 'No team linked'}
-                </Text>
-              </Pressable>
+              <View key={project.id} style={styles.projectCard}>
+                <Pressable
+                  onPress={() => {
+                    setSelectedProjectId(project.id);
+                    setSelectedTeamId(null);
+                    setProjectsViewOpen(false);
+                    setTeamsViewOpen(false);
+                    setCalendarViewOpen(false);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open project ${project.name}`}
+                >
+                  <Text style={styles.projectCardName} numberOfLines={1}>{project.name}</Text>
+                  <Text style={styles.projectCardMeta} numberOfLines={1}>
+                    {linkedTeam ? linkedTeam.name : 'No team linked'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => { setRenamingProject(project); setRenameProjectName(project.name); }}
+                  style={{ marginTop: 10 }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rename project ${project.name}`}
+                >
+                  <Text style={{ fontSize: 11, color: '#6366f1', fontWeight: '600' }}>Rename</Text>
+                </Pressable>
+              </View>
             );
           })}
           <Pressable
@@ -3136,7 +3290,14 @@ export default function HomeScreen() {
 
       {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && selectedTeam && (
         <View style={styles.memberPanel}>
-          <Text style={styles.panelTitle}>{selectedTeam.name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={styles.panelTitle}>{selectedTeam.name}</Text>
+            {currentTeamRole && ['owner', 'admin'].includes(currentTeamRole) && (
+              <Pressable onPress={() => { setRenamingTeam(selectedTeam); setRenameTeamName(selectedTeam.name); }} hitSlop={8}>
+                <Text style={{ fontSize: 12, color: '#6366f1', fontWeight: '600' }}>Rename</Text>
+              </Pressable>
+            )}
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.memberList}>
             {members.map((member) => (
               <Text key={member.user_id} style={styles.memberChip}>
@@ -3221,6 +3382,30 @@ export default function HomeScreen() {
               <Text style={styles.projectSwitchAddButtonText}>+</Text>
             </Pressable>
           </ScrollView>
+        </View>
+      )}
+
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
+        <View style={styles.projectHeaderBar}>
+          <View style={styles.projectHeaderTextWrap}>
+            <Text style={styles.projectHeaderLabel}>Project</Text>
+            <Text style={styles.projectHeaderTitle} numberOfLines={1}>
+              {selectedProject?.name ?? 'Project'}
+            </Text>
+          </View>
+          {selectedProject && (
+            <Pressable
+              onPress={() => {
+                setRenamingProject(selectedProject);
+                setRenameProjectName(selectedProject.name);
+              }}
+              style={({ pressed }) => [styles.projectHeaderRenameButton, pressed && styles.btnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`Rename project ${selectedProject.name}`}
+            >
+              <Text style={styles.projectHeaderRenameButtonText}>Rename</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -3584,6 +3769,7 @@ export default function HomeScreen() {
                 onSubmitEditing={addTodo}
                 returnKeyType="done"
               />
+
               {selectedTeam && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
                   <Pressable
@@ -3644,6 +3830,8 @@ export default function HomeScreen() {
                     return (
                       <TodoItem
                         text={todo.text} done={todo.done} priority={todo.priority}
+                        scheduledStartAt={todo.scheduled_start_at}
+                        startedWorkAt={todo.started_work_at}
                         dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
                         assignedAt={todo.assigned_at ?? undefined}
                         assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
@@ -3652,6 +3840,7 @@ export default function HomeScreen() {
                         assignerName={assigner?.name}
                         onToggle={() => toggle(todo.id)}
                         onOpenEdit={() => openEditModal(todo)}
+                        onStartWork={() => startWorkOnTodo(todo)}
                         onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                         onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
                         onArchive={() => archiveTodo(todo.id)}
@@ -3718,6 +3907,8 @@ export default function HomeScreen() {
                       return (
                         <TodoItem
                           key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
+                          scheduledStartAt={todo.scheduled_start_at}
+                          startedWorkAt={todo.started_work_at}
                           dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
                           assignedAt={todo.assigned_at ?? undefined}
                           assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
@@ -3726,6 +3917,7 @@ export default function HomeScreen() {
                           assignerName={assigner?.name}
                           onToggle={() => toggle(todo.id)}
                           onOpenEdit={() => openEditModal(todo)}
+                          onStartWork={() => startWorkOnTodo(todo)}
                           onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                           onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
                           onArchive={() => archiveTodo(todo.id)}
@@ -3993,11 +4185,12 @@ export default function HomeScreen() {
           <Pressable style={styles.navDropdownCard}>
             <Text style={styles.navDropdownName} numberOfLines={1}>{accountDisplayName}</Text>
             <Text style={styles.navDropdownEmail} numberOfLines={1}>{profile?.email ?? session.user.email}</Text>
+            <Text style={styles.navDropdownMutedText} numberOfLines={1}>{session?.user.id}</Text>
 
             <View style={styles.navDropdownDivider} />
 
-            <Pressable onPress={() => { choosePlannedUserFeature('Profile'); setNavExpanded(false); }} style={styles.navDropdownItem}>
-              <Text style={styles.navDropdownItemText}>Profile</Text>
+            <Pressable onPress={() => { setEditDisplayNameValue(profile?.display_name ?? ''); setEditingDisplayName(true); setNavExpanded(false); }} style={styles.navDropdownItem}>
+              <Text style={styles.navDropdownItemText}>Edit Display Name</Text>
             </Pressable>
             <Pressable onPress={() => setSettingsExpanded(v => !v)} style={styles.navDropdownItem}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4213,9 +4406,23 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setOrgModalId(null)}>
           <Pressable style={styles.calendarCard}>
-            <Text style={styles.editModalTitle}>
-              {organizations.find((o) => o.id === orgModalId)?.name ?? 'Organization'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <Text style={[styles.editModalTitle, { marginBottom: 0 }]}>
+                {organizations.find((o) => o.id === orgModalId)?.name ?? 'Organization'}
+              </Text>
+              {(currentOrgRole === 'owner' || currentOrgRole === 'admin') && (
+                <Pressable
+                  onPress={() => {
+                    const org = organizations.find((o) => o.id === orgModalId);
+                    if (org) { setRenamingOrg(org); setRenameOrgName(org.name); }
+                    setOrgModalId(null);
+                  }}
+                  hitSlop={8}
+                >
+                  <Text style={{ fontSize: 12, color: '#6366f1', fontWeight: '600' }}>Rename</Text>
+                </Pressable>
+              )}
+            </View>
 
             {orgModalMembers.length > 0 && (
               <View style={styles.orgMemberList}>
@@ -4522,6 +4729,21 @@ export default function HomeScreen() {
                 returnKeyType="done"
               />
 
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>Start Working</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+              <TextInput
+                style={styles.editModalInput}
+                value={editDraftScheduledStartAt}
+                onChangeText={setEditDraftScheduledStartAt}
+                placeholder="YYYY-MM-DDTHH:mm"
+                placeholderTextColor="#9ca3af"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
               {isProject && phases.length > 0 && (
                 <>
                   <Text style={styles.editModalSectionLabel}>Phase</Text>
@@ -4783,6 +5005,133 @@ export default function HomeScreen() {
                 style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
               >
                 <Text style={styles.smallBtnText}>Got it</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={editingDisplayName}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingDisplayName(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setEditingDisplayName(false)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Display Name</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={editDisplayNameValue}
+              onChangeText={setEditDisplayNameValue}
+              placeholder={emailDisplayName(session?.user.email)}
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={saveDisplayName}
+            />
+            {!!error && <Text style={[styles.error, { marginBottom: 8 }]}>{error}</Text>}
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => { setEditingDisplayName(false); setError(''); }}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={saveDisplayName} style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}>
+                <Text style={styles.smallBtnText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!renamingTeam}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenamingTeam(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setRenamingTeam(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Rename Team</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={renameTeamName}
+              onChangeText={setRenameTeamName}
+              placeholder="Team name"
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={renameTeam}
+            />
+            {!!error && <Text style={[styles.error, { marginBottom: 8 }]}>{error}</Text>}
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => { setRenamingTeam(null); setError(''); }}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={renameTeam} style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}>
+                <Text style={styles.smallBtnText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!renamingOrg}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenamingOrg(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setRenamingOrg(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Rename Organization</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={renameOrgName}
+              onChangeText={setRenameOrgName}
+              placeholder="Organization name"
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={renameOrg}
+            />
+            {!!error && <Text style={[styles.error, { marginBottom: 8 }]}>{error}</Text>}
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => { setRenamingOrg(null); setError(''); }}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={renameOrg} style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}>
+                <Text style={styles.smallBtnText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!renamingProject}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenamingProject(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setRenamingProject(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Rename Project</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={renameProjectName}
+              onChangeText={setRenameProjectName}
+              placeholder="Project name"
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={renameProject}
+            />
+            {!!error && <Text style={[styles.error, { marginBottom: 8 }]}>{error}</Text>}
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => { setRenamingProject(null); setError(''); }}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={renameProject} style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}>
+                <Text style={styles.smallBtnText}>Save</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -7066,6 +7415,47 @@ const styles = StyleSheet.create({
   },
   projectViewModeButtonTextActive: {
     color: '#fff',
+  },
+  projectHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 8,
+    backgroundColor: '#fff',
+  },
+  projectHeaderTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 12,
+  },
+  projectHeaderLabel: {
+    fontSize: 11,
+    color: '#9ca3af',
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  projectHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+    marginTop: 2,
+  },
+  projectHeaderRenameButton: {
+    minHeight: 32,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+  },
+  projectHeaderRenameButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
   },
   teamLinkRow: {
     flexDirection: 'row',

@@ -46,6 +46,7 @@ type Todo = {
   project_id: string | null;
   phase_id: string | null;
   is_milestone: boolean;
+  estimate: string | null;
 };
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
@@ -191,7 +192,7 @@ export default function ProjectScreen() {
     setLoading(true);
     const { data, error: loadErr } = await supabase
       .from('todos')
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone, estimate')
       .eq('project_id', id)
       .is('archived_at', null)
       .order('created_at', { ascending: false });
@@ -204,7 +205,7 @@ export default function ProjectScreen() {
     if (!id) return;
     const { data, error: err } = await supabase
       .from('todos')
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone, estimate')
       .eq('project_id', id)
       .not('archived_at', 'is', null)
       .order('archived_at', { ascending: false });
@@ -236,7 +237,7 @@ export default function ProjectScreen() {
     const { data, error: err } = await supabase
       .from('todos')
       .insert({ text, project_id: id, priority: 'normal' })
-      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone')
+      .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone, estimate')
       .single();
     if (err) { setError(err.message); return; }
     setInput('');

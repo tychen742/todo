@@ -7,6 +7,8 @@ type KanbanStageKey = 'backlog' | 'doing' | 'review' | 'done';
 type Props = {
   text: string;
   done: boolean;
+  scheduledStartAt?: string | null;
+  startedWorkAt?: string | null;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   dueDate?: string | null;
   note?: string | null;
@@ -24,6 +26,7 @@ type Props = {
   onAssign?: () => void;
   onPriority?: () => void;
   onDueDate?: () => void;
+  onStartWork?: () => void;
   onPhase?: () => void;
   onArchive?: () => void;
   onDrag?: () => void;
@@ -93,6 +96,8 @@ function dueDatePill(value?: string | null): DuePill | null {
 export default function TodoItem({
   text,
   done,
+  scheduledStartAt,
+  startedWorkAt,
   priority = 'normal',
   dueDate,
   note,
@@ -110,6 +115,7 @@ export default function TodoItem({
   onAssign,
   onPriority,
   onDueDate,
+  onStartWork,
   onPhase,
   onArchive,
   onDrag,
@@ -157,6 +163,18 @@ export default function TodoItem({
     return { full, relative };
   })();
 
+  const scheduledStartLabel = (() => {
+    if (!scheduledStartAt) return null;
+    const date = new Date(scheduledStartAt);
+    if (Number.isNaN(date.getTime())) return null;
+    return `Start ${date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })}`;
+  })();
+
   return (
     <View style={[styles.rowOuter, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone, (ageHovered || dueDateHovered) && styles.rowTooltipActive]}>
     <View style={[styles.row, { paddingVertical: rowPV }]}>
@@ -173,7 +191,17 @@ export default function TodoItem({
         </View>
       </Pressable>
 
-      <Pressable onPress={onOpenEdit} disabled={!onOpenEdit} style={styles.textWrap}>
+      <Pressable
+        onPress={() => {
+          if (!done && !startedWorkAt && onStartWork) {
+            onStartWork();
+            return;
+          }
+          onOpenEdit?.();
+        }}
+        disabled={!onOpenEdit && !onStartWork}
+        style={styles.textWrap}
+      >
         <View style={styles.textRow}>
           {isMilestone && <Text style={styles.milestoneIcon}>◆</Text>}
           {!!kanbanStage && (
@@ -214,6 +242,11 @@ export default function TodoItem({
         {!!note && (
           <Text style={styles.notePreview} numberOfLines={1}>
             {note}
+          </Text>
+        )}
+        {!!scheduledStartLabel && !done && (
+          <Text style={styles.startScheduleText} numberOfLines={1}>
+            {scheduledStartLabel}
           </Text>
         )}
       </Pressable>
@@ -258,6 +291,18 @@ export default function TodoItem({
         <Pressable onPress={onAssign} disabled={!onAssign} style={styles.inlineControl}>
           <Text style={styles.assignee} numberOfLines={1}>
             {assignedLabel}
+          </Text>
+        </Pressable>
+      )}
+
+      {!done && (
+        <Pressable
+          onPress={onStartWork}
+          disabled={!onStartWork || !!startedWorkAt}
+          style={styles.startWorkCol}
+        >
+          <Text style={[styles.startWorkText, startedWorkAt && styles.startWorkTextActive]} numberOfLines={1}>
+            {startedWorkAt ? 'Working' : 'Start'}
           </Text>
         </Pressable>
       )}
@@ -386,6 +431,11 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 1,
   },
+  startScheduleText: {
+    fontSize: 11,
+    color: '#4f46e5',
+    marginTop: 1,
+  },
   phaseTagWrap: {
     marginTop: 2,
     alignSelf: 'flex-start',
@@ -408,6 +458,19 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 11,
     maxWidth: 96,
+  },
+  startWorkCol: {
+    marginLeft: 8,
+    width: 56,
+    alignItems: 'flex-start',
+  },
+  startWorkText: {
+    fontSize: 11,
+    color: '#2563eb',
+    fontWeight: '600',
+  },
+  startWorkTextActive: {
+    color: '#16a34a',
   },
   dueDateCol: {
     marginLeft: 8,

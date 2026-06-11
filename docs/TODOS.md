@@ -4,6 +4,9 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Recently Completed
 
+- Default "Individual" project seeded on first sign-in: `loadProjects` checks for empty projects list and inserts a default "Individual" project so new users always have a project to route tasks to.
+- Default "Individual" project seeded on first sign-in: `loadProjects` checks for empty projects list and inserts a default "Individual" project so new users always have a project to route tasks to.
+
 - Resources tab: workspace tab showing per-member workload — active tasks, overdue, due today, urgent. Reads from existing todos and members state; no new schema needed.
 - Dashboard tab: workspace tab with a 6-stat grid (Active, Overdue, Due Today, Due This Week, Done This Week, Urgent), team member workload chips, and inline overdue/due-today task lists. Context-aware: reflects personal or team todos depending on what's loaded.
 - Auth flow improvements: app logo/brand header, display name field on sign-up (saved to `profiles.display_name`), email format validation, password length check (≥8 chars) on sign-up, "Show/Hide" password toggle, success confirmation box (green) instead of red text, password-reset screen matches new design, social OAuth buttons visually disabled with "coming soon" label, footer with terms note.
@@ -21,6 +24,8 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Teams and Organizations live under the account/admin menu.
 
 ## Personal Workspace
+
+- **Project assignment icon on task rows** — in Personal view, add a small icon/button on each todo row to assign it to a project. Tapping opens a compact picker listing existing projects. Preferred over a global pill row above the task list (removed — too prominent for an optional field). The icon should be subtle when no project is assigned and show the project name/initial when one is set.
 
 - In the Personal workspace header/toolbar, add a toggle button with tooltip "Show personal items" that filters the list to todos belonging to the user's personal account (not assigned from other workspaces, not team todos). Useful when the inbox is crowded and the user just wants to focus on their own private work.
 - The filter should be remembered per session (or persisted in user prefs). A filled/highlighted icon indicates the filter is active.

@@ -275,6 +275,8 @@ create table if not exists projects (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   description text,
+  start_date date,
+  finish_date date,
   team_id uuid references teams(id) on delete cascade,
   created_by uuid not null references profiles(id) on delete cascade default auth.uid(),
   status text not null default 'active'
@@ -282,6 +284,9 @@ create table if not exists projects (
   created_at timestamptz not null default now(),
   closed_at timestamptz
 );
+
+alter table projects add column if not exists start_date date;
+alter table projects add column if not exists finish_date date;
 
 create table if not exists project_phases (
   id uuid primary key default gen_random_uuid(),
@@ -565,6 +570,21 @@ create policy "Team members can read teams"
     created_by = auth.uid()
     or public.is_team_member(id, auth.uid())
     or (org_id is not null and public.is_org_member(org_id, auth.uid()))
+  );
+
+drop policy if exists "Team admins can update teams" on teams;
+drop policy if exists "Team owners can delete teams" on teams;
+
+create policy "Team admins can update teams"
+  on teams for update to authenticated
+  using (public.can_manage_team(id, auth.uid()))
+  with check (public.can_manage_team(id, auth.uid()));
+
+create policy "Team owners can delete teams"
+  on teams for delete to authenticated
+  using (
+    created_by = auth.uid()
+    or (org_id is not null and public.can_manage_org(org_id, auth.uid()))
   );
 
 -- Org co-members can see each other's profiles.
@@ -865,6 +885,13 @@ begin
 end $$;
 
 alter table todos add column if not exists estimate text;
+alter table todos add column if not exists scheduled_start_at timestamptz;
+alter table todos add column if not exists started_work_at timestamptz;
+
+create index if not exists todos_scheduled_start_at_idx on todos (scheduled_start_at)
+  where scheduled_start_at is not null;
+create index if not exists todos_started_work_at_idx on todos (started_work_at)
+  where started_work_at is not null;
 
 -- Atomically create a team and add the caller as owner in one transaction.
 -- Using security invoker so auth.uid() resolves to the calling user.
