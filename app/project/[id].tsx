@@ -11,7 +11,6 @@ import {
   Modal,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import { Clock } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '../../lib/supabase';
 import { DraggableList } from '../../components/DraggableList';
@@ -91,7 +90,7 @@ function monthLabel(date: Date) {
 function buildCalendarDays(monthDate: Date) {
   const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
   const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
-  const cells: Array<Date | null> = Array.from({ length: firstDay.getDay() }, () => null);
+  const cells: (Date | null)[] = Array.from({ length: firstDay.getDay() }, () => null);
   for (let day = 1; day <= daysInMonth; day += 1) {
     cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
   }
@@ -476,6 +475,7 @@ export default function ProjectScreen() {
           {sortField === 'due_date' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
         </Pressable>
         <View style={styles.sortColAgeGap} />
+        <View style={styles.sortArchiveGap} />
       </View>
 
       <DraggableList
@@ -500,6 +500,7 @@ export default function ProjectScreen() {
             onPriority={() => cyclePriority(todo)}
             onDueDate={() => openDueCalendar(todo)}
             onPhase={() => setPhasePickerTodo(todo)}
+            onArchive={() => archiveTodo(todo.id)}
             onDrag={drag}
             isDragging={isActive ?? false}
           />
@@ -538,6 +539,7 @@ export default function ProjectScreen() {
                     onPriority={() => cyclePriority(todo)}
                     onDueDate={() => openDueCalendar(todo)}
                     onPhase={() => setPhasePickerTodo(todo)}
+                    onArchive={() => archiveTodo(todo.id)}
                     reserveDragSpace={Platform.OS === 'web'}
                   />
                 ))}
@@ -895,6 +897,11 @@ const styles = StyleSheet.create({
   sortColAgeGap: {
     width: 56,
     marginLeft: 8,
+    flexShrink: 0,
+  },
+  sortArchiveGap: {
+    width: 28,
+    marginLeft: 2,
     flexShrink: 0,
   },
   sortColAdded: {

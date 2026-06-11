@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { Archive } from 'lucide-react-native';
 
 type Props = {
   text: string;
@@ -21,6 +22,7 @@ type Props = {
   onPriority?: () => void;
   onDueDate?: () => void;
   onPhase?: () => void;
+  onArchive?: () => void;
   onDrag?: () => void;
   reserveDragSpace?: boolean;
   isDragging?: boolean;
@@ -98,6 +100,7 @@ export default function TodoItem({
   onPriority,
   onDueDate,
   onPhase,
+  onArchive,
   onDrag,
   reserveDragSpace = false,
   isDragging = false,
@@ -107,6 +110,8 @@ export default function TodoItem({
   const [assignerHovered, setAssignerHovered] = useState(false);
   const [ageHovered, setAgeHovered] = useState(false);
   const [dueDateHovered, setDueDateHovered] = useState(false);
+  const [archiveHovered, setArchiveHovered] = useState(false);
+  const [now] = useState(Date.now);
 
   const duePill = dueDatePill(dueDate);
   const ageTimestamp = assignedAt ?? createdAt;
@@ -119,7 +124,7 @@ export default function TodoItem({
     if (!y || !m || !d) return null;
     const dueDay = new Date(y, m - 1, d);
     const full = dueDay.toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
-    const diffMs = dueDay.getTime() - Date.now();
+    const diffMs = dueDay.getTime() - now;
     const absDiff = Math.abs(diffMs);
     const totalHours = Math.floor(absDiff / 3600000);
     const days = Math.floor(totalHours / 24);
@@ -265,6 +270,24 @@ export default function TodoItem({
           </View>
         )}
       </Pressable>
+      {!!onArchive && (
+        <Pressable
+          onPress={onArchive}
+          onHoverIn={() => setArchiveHovered(true)}
+          onHoverOut={() => setArchiveHovered(false)}
+          style={styles.archiveAction}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Archive task"
+        >
+          <Archive size={15} strokeWidth={2.4} color="#9ca3af" />
+          {archiveHovered && Platform.OS === 'web' && (
+            <View style={styles.archiveTooltip}>
+              <Text style={styles.tooltipText}>Archive</Text>
+            </View>
+          )}
+        </Pressable>
+      )}
     </View>
     <View style={styles.rowSeparator} />
     </View>
@@ -357,6 +380,14 @@ const styles = StyleSheet.create({
     marginLeft: 2,
     width: 56,
     alignItems: 'flex-start',
+  },
+  archiveAction: {
+    width: 28,
+    height: 28,
+    marginLeft: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   pill: {
     borderRadius: 5,
@@ -492,10 +523,21 @@ const styles = StyleSheet.create({
     minWidth: 160,
     alignItems: 'flex-start',
   },
+  archiveTooltip: {
+    position: 'absolute',
+    bottom: 24,
+    right: 0,
+    backgroundColor: '#374151',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 100,
+    minWidth: 72,
+    alignItems: 'center',
+  },
   tooltipText: {
     color: '#fff',
     fontSize: 11,
     fontWeight: '600',
-    whiteSpace: 'nowrap' as any,
   },
 });

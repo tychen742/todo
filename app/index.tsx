@@ -15,9 +15,9 @@ import { DraggableList } from '../components/DraggableList';
 import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
 import type { Session } from '@supabase/supabase-js';
-import { ArrowLeft, Clock } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
-import PhaseStrip, { type Phase } from '../components/PhaseStrip';
+import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 type Todo = {
@@ -105,20 +105,6 @@ const priorityColors: Record<Priority, string> = {
   urgent: '#ef4444',
 };
 
-const assignedPriorityColors: Record<Priority, string> = {
-  low: '#d1fae5',
-  normal: '#e0e7ff',
-  high: '#fef3c7',
-  urgent: '#fee2e2',
-};
-
-const assignedPriorityTextColors: Record<Priority, string> = {
-  low: '#065f46',
-  normal: '#3730a3',
-  high: '#92400e',
-  urgent: '#991b1b',
-};
-
 function sortTodos(items: Todo[]) {
   return [...items].sort((a, b) => {
     // Urgent always floats above everything else.
@@ -165,7 +151,7 @@ function monthLabel(date: Date) {
 function buildCalendarDays(monthDate: Date) {
   const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
   const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
-  const cells: Array<Date | null> = Array.from({ length: firstDay.getDay() }, () => null);
+  const cells: (Date | null)[] = Array.from({ length: firstDay.getDay() }, () => null);
 
   for (let day = 1; day <= daysInMonth; day += 1) {
     cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
@@ -473,7 +459,6 @@ export default function HomeScreen() {
     () => new Map(members.map((member) => [member.user_id, member])),
     [members]
   );
-  const phaseById = useMemo(() => new Map(phases.map((p) => [p.id, p])), [phases]);
 
   function showToast(text: string) {
     setToast(text);
@@ -1027,7 +1012,7 @@ export default function HomeScreen() {
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .insert({ name, created_by: session.user.id, team_id: newProjectTeamId })
-      .select('id, name, team_id')
+      .select('id, name, team_id, archived_at')
       .single();
 
     if (projectError) {
@@ -2391,6 +2376,7 @@ export default function HomeScreen() {
                     {sortField === 'due_date' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
                   </Pressable>
                   <View style={styles.sortColAgeGap} />
+                  <View style={styles.sortArchiveGap} />
                 </View>
 
                 <DraggableList
@@ -2414,6 +2400,7 @@ export default function HomeScreen() {
                         onOpenEdit={() => openEditModal(todo)}
                         onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                         onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                        onArchive={() => archiveTodo(todo.id)}
                         onDrag={drag} isDragging={isActive ?? false}
                         rowPV={rowPV}
                       />
@@ -2486,6 +2473,7 @@ export default function HomeScreen() {
                           onOpenEdit={() => openEditModal(todo)}
                           onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                           onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                          onArchive={() => archiveTodo(todo.id)}
                           reserveDragSpace={Platform.OS === 'web'}
                           rowPV={rowPV}
                         />
@@ -4392,6 +4380,11 @@ const styles = StyleSheet.create({
   },
   sortColAgeGap: {
     width: 56,
+    marginLeft: 2,
+    flexShrink: 0,
+  },
+  sortArchiveGap: {
+    width: 28,
     marginLeft: 2,
     flexShrink: 0,
   },

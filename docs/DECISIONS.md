@@ -137,6 +137,20 @@ React Native `fontSize` values are density-independent points, not literal scree
 
 However, Dynamic Type (iOS) and font scaling (Android accessibility settings) are a separate concern. React Native respects the system font scale by default (`allowFontScaling` defaults to `true`). This means our `xs` (11px) items could become unreadably small if a user has reduced their system font size, or overflow their containers if enlarged. To do: audit small-text and fixed-width containers for scaling robustness before the first public release.
 
+## 2026-06-10: Use Lucide for UI Icons
+
+Decision: use `lucide-react-native` as the app's default icon library.
+
+Reason: text glyphs such as arrows, checkmarks, drag handles, and delete markers render inconsistently across web, iOS, Android, and browsers. A real icon library gives consistent stroke weight, size, alignment, and accessibility behavior.
+
+Implementation rules:
+
+- Prefer Lucide icons for action buttons, toolbar controls, row actions, and status indicators.
+- Keep icon-only controls paired with `accessibilityLabel`; add web hover tooltips when the icon meaning is not obvious.
+- Avoid introducing new Unicode glyph controls unless they are temporary placeholders.
+- Install Expo-compatible native dependencies with `npx expo install`; `react-native-svg` must stay compatible with Expo SDK 54.
+- Icon color, size, and stroke width should come from the app's design tokens once those tokens exist.
+
 ## 2026-06-08: Calendar Integrations Are Future Optional User Integrations
 
 Decision: Outlook Calendar and Google Calendar integration should be planned, but not required for core todo use.
