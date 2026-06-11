@@ -423,7 +423,7 @@ export default function ProjectScreen() {
           setAddingPhase(true);
         }}
         addDisabled={!canAddPhase}
-        addLabel={canAddPhase ? '+ Phase' : 'Max 5'}
+        addLabel={canAddPhase ? '+ Column' : 'Max 5'}
       />
 
       {nextMilestone && (
@@ -619,7 +619,7 @@ export default function ProjectScreen() {
         </Pressable>
       </Modal>
 
-      {/* Add phase */}
+      {/* Add column */}
       <Modal
         visible={addingPhase}
         transparent
@@ -628,12 +628,12 @@ export default function ProjectScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setAddingPhase(false)}>
           <Pressable style={styles.calendarCard}>
-            <Text style={styles.editModalTitle}>New Phase</Text>
+            <Text style={styles.editModalTitle}>New Column</Text>
             <TextInput
               style={styles.editModalInput}
               value={newPhaseName}
               onChangeText={setNewPhaseName}
-              placeholder="Phase name"
+              placeholder="Column name"
               placeholderTextColor="#9ca3af"
               returnKeyType="done"
               autoFocus

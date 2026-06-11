@@ -12,10 +12,12 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { DraggableList } from '../components/DraggableList';
+import { KanbanDragItem, KanbanDragProvider, KanbanDropLane } from '../components/KanbanDrag';
 import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -79,6 +81,8 @@ type Profile = {
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
 type SortField = 'text' | 'priority' | 'due_date' | 'created_at';
 type CreateTarget = 'team' | 'organization' | 'project';
+type ProjectViewMode = 'plan' | 'kanban';
+type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const defaultVisibleTaskRows = 5;
@@ -104,6 +108,45 @@ const priorityColors: Record<Priority, string> = {
   high: '#f59e0b',
   urgent: '#ef4444',
 };
+
+const defaultWorkflowColumnLabels: Record<WorkflowLaneKey, string> = {
+  backlog: 'Backlog',
+  doing: 'Doing',
+  review: 'Review',
+  done: 'Done',
+};
+
+type WorkflowPhaseTargets = {
+  doingPhaseId: string | null;
+  reviewPhaseId: string | null;
+};
+
+function resolveWorkflowPhaseTargets(phases: Phase[]): WorkflowPhaseTargets {
+  const doingPhase =
+    phases.find((phase) => /doing|execution|active/i.test(phase.name)) ??
+    phases[1] ??
+    phases[0] ??
+    null;
+  const reviewPhase =
+    phases.find((phase) => /review/i.test(phase.name)) ??
+    phases.find((phase) => phase.id !== doingPhase?.id && /test|qa|verify/i.test(phase.name)) ??
+    phases.find((phase) => phase.id !== doingPhase?.id && phase.order_index >= 2) ??
+    phases.find((phase) => phase.id !== doingPhase?.id) ??
+    null;
+  const doingPhaseId = doingPhase?.id ?? null;
+  const reviewPhaseId = reviewPhase?.id ?? null;
+  return {
+    doingPhaseId,
+    reviewPhaseId,
+  };
+}
+
+function workflowStageForTodo(todo: Pick<Todo, 'done' | 'phase_id'>, targets: WorkflowPhaseTargets): WorkflowLaneKey {
+  if (todo.done) return 'done';
+  if (todo.phase_id === targets.doingPhaseId) return 'doing';
+  if (todo.phase_id === targets.reviewPhaseId) return 'review';
+  return 'backlog';
+}
 
 function sortTodos(items: Todo[]) {
   return [...items].sort((a, b) => {
@@ -365,21 +408,32 @@ export default function HomeScreen() {
   const [createTarget, setCreateTarget] = useState<CreateTarget | null>(null);
   const [orgName, setOrgName] = useState('');
   const [teamName, setTeamName] = useState('');
+  const [newTeamOrgId, setNewTeamOrgId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('');
   const [newProjectTeamId, setNewProjectTeamId] = useState<string | null>(null);
   const [linkingProjectTeam, setLinkingProjectTeam] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
+  const [allProjectPhases, setAllProjectPhases] = useState<Phase[]>([]);
+  const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>('plan');
+  const [workflowColumnLabels, setWorkflowColumnLabels] = useState(defaultWorkflowColumnLabels);
   const [phasePickerTodo, setPhasePickerTodo] = useState<Todo | null>(null);
   const [addingPhase, setAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
+  const [renamingPhase, setRenamingPhase] = useState<Phase | null>(null);
+  const [renamePhaseName, setRenamePhaseName] = useState('');
+  const [renamingWorkflowLane, setRenamingWorkflowLane] = useState<WorkflowLaneKey | null>(null);
+  const [renameWorkflowLaneName, setRenameWorkflowLaneName] = useState('');
   const [editDraftPhaseId, setEditDraftPhaseId] = useState<string | null>(null);
   const [columnInputs, setColumnInputs] = useState<Record<string, string>>({});
   const [columnAssignees, setColumnAssignees] = useState<Record<string, string | null>>({});
   const [backlogInputVisible, setBacklogInputVisible] = useState(false);
   const [aboutVisible, setAboutVisible] = useState(false);
+  const [projectsViewOpen, setProjectsViewOpen] = useState(false);
   const [teamsViewOpen, setTeamsViewOpen] = useState(false);
+  const [calendarViewOpen, setCalendarViewOpen] = useState(false);
+  const [calendarViewMonth, setCalendarViewMonth] = useState(() => new Date());
   const [animalPickerVisible, setAnimalPickerVisible] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
@@ -419,7 +473,6 @@ export default function HomeScreen() {
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [density, setDensity] = useState<Density>('cozy');
   const [settingsExpanded, setSettingsExpanded] = useState(false);
-  const [projectsMenuOpen, setProjectsMenuOpen] = useState(false);
 
   const rowPV = densityPV[density];
   const rowH = densityRowH[density];
@@ -429,11 +482,62 @@ export default function HomeScreen() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const storageKey = selectedProjectId
+      ? `todo:workflow-column-labels:${selectedProjectId}`
+      : null;
+
+    (storageKey ? AsyncStorage.getItem(storageKey) : Promise.resolve(null))
+      .then((value) => {
+        if (cancelled) return;
+        if (!value) {
+          setWorkflowColumnLabels(defaultWorkflowColumnLabels);
+          return;
+        }
+        const labels = JSON.parse(value) as Partial<Record<WorkflowLaneKey, string>>;
+        setWorkflowColumnLabels({ ...defaultWorkflowColumnLabels, ...labels });
+      })
+      .catch(() => {
+        if (!cancelled) setWorkflowColumnLabels(defaultWorkflowColumnLabels);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProjectId]);
+
   const isProject = selectedProjectId !== null;
-  const isPersonal = selectedTeamId === null && !isProject;
+  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !calendarViewOpen;
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal && assignedToMe.length > 0;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
+  const workflowPhaseTargets = useMemo(() => resolveWorkflowPhaseTargets(phases), [phases]);
+  const workflowPhaseTargetsByProject = useMemo(() => {
+    const phasesByProject = new Map<string, Phase[]>();
+    allProjectPhases.forEach((phase) => {
+      const projectPhases = phasesByProject.get(phase.project_id) ?? [];
+      projectPhases.push(phase);
+      phasesByProject.set(phase.project_id, projectPhases);
+    });
+
+    const targetsByProject = new Map<string, WorkflowPhaseTargets>();
+    phasesByProject.forEach((projectPhases, projectId) => {
+      targetsByProject.set(
+        projectId,
+        resolveWorkflowPhaseTargets(projectPhases.sort((a, b) => a.order_index - b.order_index))
+      );
+    });
+    return targetsByProject;
+  }, [allProjectPhases]);
+
+  function todoKanbanStage(todo: Todo): { key: WorkflowLaneKey; label: string } | undefined {
+    if (!todo.project_id && !isProject) return undefined;
+    const targets = todo.project_id
+      ? (workflowPhaseTargetsByProject.get(todo.project_id) ?? workflowPhaseTargets)
+      : workflowPhaseTargets;
+    const key = workflowStageForTodo(todo, targets);
+    return { key, label: workflowColumnLabels[key] };
+  }
   const active = useMemo(() => {
     const items = todos.filter((t) => !t.done);
     if (!sortField) return items;
@@ -485,6 +589,17 @@ export default function HomeScreen() {
     return candidates[0] ?? null;
   }, [todos, isProject]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const calendarViewDays = useMemo(() => buildCalendarDays(calendarViewMonth), [calendarViewMonth]);
+  const calendarViewTodosByDate = useMemo(() => {
+    const byDate = new Map<string, Todo[]>();
+    todos.forEach((todo) => {
+      if (!todo.due_date || todo.archived_at) return;
+      const items = byDate.get(todo.due_date) ?? [];
+      items.push(todo);
+      byDate.set(todo.due_date, sortTodos(items));
+    });
+    return byDate;
+  }, [todos]);
   const assigneePickerCalendarDays = useMemo(() => buildCalendarDays(assigneePickerMonth), [assigneePickerMonth]);
   const editDraftCalendarDays = useMemo(() => buildCalendarDays(editDraftDueDateMonth), [editDraftDueDateMonth]);
   const accountDisplayName = profile
@@ -571,6 +686,16 @@ export default function HomeScreen() {
     if (!err) setProjects(data ?? []);
   }, [session]);
 
+  const loadAllProjectPhases = useCallback(async () => {
+    if (!session) return;
+    const { data, error: err } = await supabase
+      .from('project_phases')
+      .select('id, project_id, name, order_index, status, planned_start, planned_end')
+      .order('project_id', { ascending: true })
+      .order('order_index', { ascending: true });
+    if (!err) setAllProjectPhases(data ?? []);
+  }, [session]);
+
   const loadPhases = useCallback(async () => {
     if (!selectedProjectId) {
       setPhases([]);
@@ -581,7 +706,13 @@ export default function HomeScreen() {
       .select('id, project_id, name, order_index, status, planned_start, planned_end')
       .eq('project_id', selectedProjectId)
       .order('order_index', { ascending: true });
-    if (!err) setPhases(data ?? []);
+    if (!err) {
+      setPhases(data ?? []);
+      setAllProjectPhases((prev) => [
+        ...prev.filter((phase) => phase.project_id !== selectedProjectId),
+        ...(data ?? []),
+      ]);
+    }
   }, [selectedProjectId]);
 
   const loadMembers = useCallback(async () => {
@@ -747,6 +878,7 @@ export default function HomeScreen() {
       setSelectedTeamId(null);
       setSelectedProjectId(null);
       setPhases([]);
+      setAllProjectPhases([]);
       setMembers([]);
       setTodos([]);
       setError('');
@@ -765,8 +897,9 @@ export default function HomeScreen() {
       loadOrganizations();
       loadTeams();
       loadProjects();
+      loadAllProjectPhases();
     });
-  }, [ensureProfile, loadOrganizations, loadTeams, loadProjects, session]);
+  }, [ensureProfile, loadOrganizations, loadTeams, loadProjects, loadAllProjectPhases, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -934,6 +1067,11 @@ export default function HomeScreen() {
     setError('');
   }
 
+  function openCreateTeam(orgId: string | null = null) {
+    setNewTeamOrgId(orgId);
+    openCreateTarget('team');
+  }
+
   async function createTeam() {
     if (!session) return;
 
@@ -942,7 +1080,7 @@ export default function HomeScreen() {
 
     const { data: team, error: teamError } = await supabase
       .from('teams')
-      .insert({ name, created_by: session.user.id })
+      .insert({ name, created_by: session.user.id, org_id: newTeamOrgId })
       .select('id, name, org_id')
       .single();
 
@@ -965,6 +1103,7 @@ export default function HomeScreen() {
     }
 
     setTeamName('');
+    setNewTeamOrgId(null);
     setTeams((prev) => [...prev, team]);
     setSelectedTeamId(team.id);
     setCreateTarget(null);
@@ -1021,20 +1160,29 @@ export default function HomeScreen() {
     }
 
     const defaultPhases = ['Planning', 'Execution', 'Review'];
-    await Promise.all(
+    const createdPhases = await Promise.all(
       defaultPhases.map((phaseName, i) =>
-        supabase.from('project_phases').insert({
-          project_id: project.id,
-          name: phaseName,
-          order_index: i,
-          status: i === 0 ? 'active' : 'upcoming',
-        })
+        supabase
+          .from('project_phases')
+          .insert({
+            project_id: project.id,
+            name: phaseName,
+            order_index: i,
+            status: i === 0 ? 'active' : 'upcoming',
+          })
+          .select('id, project_id, name, order_index, status, planned_start, planned_end')
+          .single()
       )
     );
+    const nextPhases = createdPhases
+      .map((result) => result.data)
+      .filter((phase): phase is Phase => !!phase);
 
     setProjectName('');
     setNewProjectTeamId(null);
     setProjects((prev) => [...prev, project]);
+    setPhases(nextPhases);
+    setAllProjectPhases((prev) => [...prev, ...nextPhases]);
     setSelectedProjectId(project.id);
     setSelectedTeamId(null);
     setCreateTarget(null);
@@ -1555,6 +1703,97 @@ export default function HomeScreen() {
     }
   }
 
+  async function moveProjectTodo(todoId: string, targetPhaseId: string | null, overTodoId: string | null, targetDone = false) {
+    const movingTodo = todos.find((todo) => todo.id === todoId);
+    if (!movingTodo || movingTodo.phase_id === targetPhaseId && movingTodo.done === targetDone && overTodoId === todoId) return;
+
+    const completed_at = targetDone ? (movingTodo.completed_at ?? new Date().toISOString()) : null;
+    const resolvedTargetPhaseId = targetDone && targetPhaseId === null ? movingTodo.phase_id : targetPhaseId;
+    const sourceDone = movingTodo.done;
+    const targetLaneKey = targetDone ? 'done' : (resolvedTargetPhaseId ?? 'backlog');
+    const sourceLaneKey = sourceDone ? 'done' : (movingTodo.phase_id ?? 'backlog');
+    const affectedLaneKeys = new Set([sourceLaneKey, targetLaneKey]);
+    const nextTodos = todos.map((todo) =>
+      todo.id === todoId ? { ...todo, phase_id: resolvedTargetPhaseId, done: targetDone, completed_at } : todo
+    );
+
+    const targetItems = sortTodos(
+      nextTodos.filter((todo) =>
+        todo.id !== todoId && (
+          targetDone
+            ? todo.done
+            : !todo.done && todo.phase_id === resolvedTargetPhaseId
+        )
+      )
+    );
+    const movingNext = nextTodos.find((todo) => todo.id === todoId)!;
+    const overIndex = overTodoId ? targetItems.findIndex((todo) => todo.id === overTodoId) : -1;
+    const insertIndex = overIndex >= 0 ? overIndex : targetItems.length;
+    targetItems.splice(insertIndex, 0, movingNext);
+
+    const orderedByLane = new Map<string, Todo[]>();
+    orderedByLane.set(targetLaneKey, targetItems);
+    if (sourceLaneKey !== targetLaneKey) {
+      orderedByLane.set(
+        sourceLaneKey,
+        sortTodos(nextTodos.filter((todo) =>
+          todo.id !== todoId && (
+            sourceDone
+              ? todo.done
+              : !todo.done && todo.phase_id === movingTodo.phase_id
+          )
+        ))
+      );
+    }
+
+    const nextPositionById = new Map<string, number>();
+    for (const items of orderedByLane.values()) {
+      items.forEach((todo, index) => nextPositionById.set(todo.id, index));
+    }
+
+    setTodos((prev) =>
+      sortTodos(
+        prev.map((todo) => {
+          if (todo.id === todoId) {
+            return {
+              ...todo,
+              phase_id: resolvedTargetPhaseId,
+              done: targetDone,
+              completed_at,
+              position: nextPositionById.get(todo.id) ?? 0,
+            };
+          }
+          const laneKey = todo.done ? 'done' : (todo.phase_id ?? 'backlog');
+          if (affectedLaneKeys.has(laneKey) && nextPositionById.has(todo.id)) {
+            return { ...todo, position: nextPositionById.get(todo.id)! };
+          }
+          return todo;
+        })
+      )
+    );
+
+    const positionUpdates = Array.from(nextPositionById, ([id, position]) => ({ id, position }));
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({
+        phase_id: resolvedTargetPhaseId,
+        done: targetDone,
+        completed_at,
+        position: nextPositionById.get(todoId) ?? 0,
+      })
+      .eq('id', todoId);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    const { error: batchError } = await supabase.rpc('batch_update_todo_positions', {
+      updates: positionUpdates,
+    });
+    if (batchError) setError(batchError.message);
+    else setError('');
+  }
+
   async function toggleMilestone(todo: Todo) {
     const is_milestone = !todo.is_milestone;
     const { error: updateError } = await supabase
@@ -1574,6 +1813,7 @@ export default function HomeScreen() {
       .eq('id', phase.id);
     if (updateError) { setError(updateError.message); return; }
     setPhases((prev) => prev.map((p) => (p.id === phase.id ? { ...p, status: next } : p)));
+    setAllProjectPhases((prev) => prev.map((p) => (p.id === phase.id ? { ...p, status: next } : p)));
   }
 
   async function addPhase() {
@@ -1586,9 +1826,73 @@ export default function HomeScreen() {
       .select('id, project_id, name, order_index, status, planned_start, planned_end')
       .single();
     if (err) { setError(err.message); return; }
-    if (data) setPhases((prev) => [...prev, data as Phase]);
+    if (data) {
+      setPhases((prev) => [...prev, data as Phase]);
+      setAllProjectPhases((prev) => [...prev, data as Phase]);
+    }
     setNewPhaseName('');
     setAddingPhase(false);
+  }
+
+  function openRenamePhase(phase: Phase) {
+    setRenamingPhase(phase);
+    setRenamePhaseName(phase.name);
+  }
+
+  function closeRenamePhase() {
+    setRenamingPhase(null);
+    setRenamePhaseName('');
+  }
+
+  async function saveRenamePhase() {
+    if (!renamingPhase) return;
+    const name = renamePhaseName.trim();
+    if (!name) return;
+
+    const { error: updateError } = await supabase
+      .from('project_phases')
+      .update({ name })
+      .eq('id', renamingPhase.id);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setPhases((prev) => prev.map((phase) => (
+      phase.id === renamingPhase.id ? { ...phase, name } : phase
+    )));
+    setAllProjectPhases((prev) => prev.map((phase) => (
+      phase.id === renamingPhase.id ? { ...phase, name } : phase
+    )));
+    closeRenamePhase();
+    setError('');
+  }
+
+  function openRenameWorkflowLane(lane: WorkflowLaneKey) {
+    setRenamingWorkflowLane(lane);
+    setRenameWorkflowLaneName(workflowColumnLabels[lane]);
+  }
+
+  function closeRenameWorkflowLane() {
+    setRenamingWorkflowLane(null);
+    setRenameWorkflowLaneName('');
+  }
+
+  async function saveRenameWorkflowLane() {
+    if (!selectedProjectId || !renamingWorkflowLane) return;
+    const name = renameWorkflowLaneName.trim();
+    if (!name) return;
+
+    const labels = {
+      ...workflowColumnLabels,
+      [renamingWorkflowLane]: name,
+    };
+    setWorkflowColumnLabels(labels);
+    await AsyncStorage.setItem(
+      `todo:workflow-column-labels:${selectedProjectId}`,
+      JSON.stringify(labels)
+    );
+    closeRenameWorkflowLane();
   }
 
   async function setTodoPhase(todo: Todo, phase_id: string | null) {
@@ -1991,7 +2295,13 @@ export default function HomeScreen() {
           style={styles.workspaceTabsScroll}
         >
           <Pressable
-            onPress={() => { setSelectedTeamId(null); setSelectedProjectId(null); setTeamsViewOpen(false); setProjectsMenuOpen(false); }}
+            onPress={() => {
+              setSelectedTeamId(null);
+              setSelectedProjectId(null);
+              setProjectsViewOpen(false);
+              setTeamsViewOpen(false);
+              setCalendarViewOpen(false);
+            }}
             style={[styles.workspaceTab, isPersonal && !teamsViewOpen && styles.workspaceTabActive]}
           >
             <Text style={[styles.workspaceTabText, isPersonal && !teamsViewOpen && styles.workspaceTabTextActive]}>
@@ -2000,68 +2310,302 @@ export default function HomeScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => { setProjectsMenuOpen(true); setTeamsViewOpen(false); }}
-            style={[styles.workspaceTab, isProject && !teamsViewOpen && styles.workspaceTabActive]}
-            accessibilityRole="button"
-            accessibilityLabel="Projects"
+            onPress={() => {
+              const firstProject = projects[0] ?? null;
+              setSelectedTeamId(null);
+              setSelectedProjectId(firstProject?.id ?? null);
+              setProjectsViewOpen(!firstProject);
+              setTeamsViewOpen(false);
+              setCalendarViewOpen(false);
+            }}
+            style={[styles.workspaceTab, (isProject || projectsViewOpen) && !teamsViewOpen && styles.workspaceTabActive]}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <Text style={[styles.workspaceTabText, isProject && !teamsViewOpen && styles.workspaceTabTextActive]} numberOfLines={1}>
-                {selectedProject ? selectedProject.name : 'Projects'}
-              </Text>
-              <Text style={{ fontSize: 9, color: isProject && !teamsViewOpen ? '#4338ca' : '#9ca3af' }}>▼</Text>
-            </View>
+            <Text style={[styles.workspaceTabText, (isProject || projectsViewOpen) && !teamsViewOpen && styles.workspaceTabTextActive]}>
+              Projects
+            </Text>
           </Pressable>
+
+          <Pressable
+            onPress={() => {
+              setSelectedTeamId(null);
+              setSelectedProjectId(null);
+              setProjectsViewOpen(false);
+              setTeamsViewOpen(false);
+              setCalendarViewOpen(true);
+            }}
+            style={[styles.workspaceTab, calendarViewOpen && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabText, calendarViewOpen && styles.workspaceTabTextActive]}>
+              Calendar
+            </Text>
+          </Pressable>
+
         </ScrollView>
 
-        {/* Teams button pinned to the right */}
+        {/* Organizations button pinned to the right */}
         <Pressable
-          onPress={() => setTeamsViewOpen((v) => !v)}
+          onPress={() => {
+            setProjectsViewOpen(false);
+            setCalendarViewOpen(false);
+            setTeamsViewOpen((v) => !v);
+          }}
           style={[styles.teamsBtn, teamsViewOpen && styles.teamsBtnActive]}
         >
-          <Text style={[styles.teamsBtnText, teamsViewOpen && styles.teamsBtnTextActive]}>Teams</Text>
+          <Text style={[styles.teamsBtnText, teamsViewOpen && styles.teamsBtnTextActive]}>Organizations</Text>
         </Pressable>
       </View>
 
-      {/* Teams card grid */}
+      {/* Organizations with team tabs */}
       {teamsViewOpen && (
-        <ScrollView style={styles.teamsGrid} contentContainerStyle={styles.teamsGridContent}>
-          {teams.map((team) => {
-            const cardColor = pickAvatarColor(team.id);
-            const initial = (team.name[0] ?? 'T').toUpperCase();
+        <ScrollView style={styles.organizationsView} contentContainerStyle={styles.organizationsViewContent}>
+          {organizations.map((org) => {
+            const orgTeams = teams.filter((team) => team.org_id === org.id);
             return (
-              <Pressable
-                key={team.id}
-                style={styles.teamCard}
-                onPress={() => { setSelectedTeamId(team.id); setSelectedProjectId(null); setTeamsViewOpen(false); }}
-              >
-                <View style={[styles.teamCardBg, { backgroundColor: cardColor + '33' }]} />
-                <View style={[styles.teamCardAvatar, { backgroundColor: cardColor }]}>
-                  <Text style={styles.teamCardAvatarText}>{initial}</Text>
+              <View key={org.id} style={styles.organizationSection}>
+                <View style={styles.organizationHeader}>
+                  <Pressable onPress={() => openOrgModal(org.id)} style={styles.organizationTitleWrap}>
+                    <Text style={styles.organizationTitle} numberOfLines={1}>{org.name}</Text>
+                    <Text style={styles.organizationMeta}>
+                      {org.member_count ?? 0} member{(org.member_count ?? 0) !== 1 ? 's' : ''}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => openCreateTeam(org.id)}
+                    style={styles.organizationAddTeamButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Create team in ${org.name}`}
+                  >
+                    <Text style={styles.organizationAddTeamText}>+</Text>
+                  </Pressable>
                 </View>
-                <Text style={styles.teamCardName} numberOfLines={1}>{team.name}</Text>
-                <Text style={styles.teamCardMeta}>{team.member_count ?? 0} member{(team.member_count ?? 0) !== 1 ? 's' : ''}</Text>
-                <Pressable
-                  onPress={(e) => { e.stopPropagation?.(); setSelectedTeamId(team.id); setSelectedProjectId(null); setTeamsViewOpen(false); }}
-                  style={styles.teamCardAddBtn}
-                  hitSlop={8}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.organizationTeamTabs}
                 >
-                  <Text style={styles.teamCardAddBtnText}>+</Text>
-                </Pressable>
-              </Pressable>
+                  {orgTeams.length === 0 ? (
+                    <Pressable onPress={() => openCreateTeam(org.id)} style={styles.organizationEmptyTeamTab}>
+                      <Text style={styles.organizationEmptyTeamText}>No teams yet</Text>
+                    </Pressable>
+                  ) : (
+                    orgTeams.map((team) => (
+                      <Pressable
+                        key={team.id}
+                        onPress={() => {
+                          setSelectedTeamId(team.id);
+                          setSelectedProjectId(null);
+                          setTeamsViewOpen(false);
+                          setCalendarViewOpen(false);
+                        }}
+                        style={[styles.organizationTeamTab, selectedTeamId === team.id && styles.organizationTeamTabActive]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open team ${team.name}`}
+                      >
+                        <Text
+                          style={[styles.organizationTeamTabText, selectedTeamId === team.id && styles.organizationTeamTabTextActive]}
+                          numberOfLines={1}
+                        >
+                          {team.name}
+                        </Text>
+                        <Text style={styles.organizationTeamMeta}>
+                          {team.member_count ?? 0}
+                        </Text>
+                      </Pressable>
+                    ))
+                  )}
+                </ScrollView>
+              </View>
             );
           })}
+
+          {teams.some((team) => !team.org_id) && (
+            <View style={styles.organizationSection}>
+              <View style={styles.organizationHeader}>
+                <View style={styles.organizationTitleWrap}>
+                  <Text style={styles.organizationTitle}>Ungrouped Teams</Text>
+                  <Text style={styles.organizationMeta}>No organization</Text>
+                </View>
+                <Pressable
+                  onPress={() => openCreateTeam(null)}
+                  style={styles.organizationAddTeamButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create ungrouped team"
+                >
+                  <Text style={styles.organizationAddTeamText}>+</Text>
+                </Pressable>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.organizationTeamTabs}
+              >
+                {teams.filter((team) => !team.org_id).map((team) => (
+                  <Pressable
+                    key={team.id}
+                    onPress={() => {
+                      setSelectedTeamId(team.id);
+                      setSelectedProjectId(null);
+                      setTeamsViewOpen(false);
+                      setCalendarViewOpen(false);
+                    }}
+                    style={[styles.organizationTeamTab, selectedTeamId === team.id && styles.organizationTeamTabActive]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open team ${team.name}`}
+                  >
+                    <Text
+                      style={[styles.organizationTeamTabText, selectedTeamId === team.id && styles.organizationTeamTabTextActive]}
+                      numberOfLines={1}
+                    >
+                      {team.name}
+                    </Text>
+                    <Text style={styles.organizationTeamMeta}>{team.member_count ?? 0}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           <Pressable
-            onPress={() => { setTeamsViewOpen(false); openCreateTarget('team'); }}
-            style={styles.teamCardNew}
+            onPress={() => openCreateTarget('organization')}
+            style={styles.organizationCardNew}
+            accessibilityRole="button"
+            accessibilityLabel="Create organization"
           >
-            <Text style={styles.teamCardNewIcon}>+</Text>
-            <Text style={styles.teamCardNewText}>New Team</Text>
+            <Text style={styles.organizationCardNewIcon}>+</Text>
+            <Text style={styles.organizationCardNewText}>New Organization</Text>
           </Pressable>
         </ScrollView>
       )}
 
-      {selectedTeam && (
+      {projectsViewOpen && (
+        <ScrollView style={styles.projectsGrid} contentContainerStyle={styles.projectsGridContent}>
+          {projects.map((project) => {
+            const linkedTeam = project.team_id ? teams.find((t) => t.id === project.team_id) : null;
+            return (
+              <Pressable
+                key={project.id}
+                style={styles.projectCard}
+                onPress={() => {
+                  setSelectedProjectId(project.id);
+                  setSelectedTeamId(null);
+                  setProjectsViewOpen(false);
+                  setTeamsViewOpen(false);
+                  setCalendarViewOpen(false);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Open project ${project.name}`}
+              >
+                <Text style={styles.projectCardName} numberOfLines={1}>{project.name}</Text>
+                <Text style={styles.projectCardMeta} numberOfLines={1}>
+                  {linkedTeam ? linkedTeam.name : 'No team linked'}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Pressable
+            onPress={() => { setTeamsViewOpen(false); setCalendarViewOpen(false); openCreateTarget('project'); }}
+            style={styles.projectCardNew}
+            accessibilityRole="button"
+            accessibilityLabel="Create project"
+          >
+            <Text style={styles.projectCardNewIcon}>+</Text>
+            <Text style={styles.projectCardNewText}>New Project</Text>
+          </Pressable>
+        </ScrollView>
+      )}
+
+      {calendarViewOpen && (
+        <ScrollView style={styles.calendarView} contentContainerStyle={styles.calendarViewContent}>
+          <View style={styles.calendarViewPanel}>
+            <View style={styles.calendarViewHeader}>
+              <View>
+                <Text style={styles.calendarViewEyebrow}>Calendar</Text>
+                <Text style={styles.calendarViewTitle}>{monthLabel(calendarViewMonth)}</Text>
+              </View>
+              <View style={styles.calendarViewActions}>
+                <Pressable
+                  onPress={() => setCalendarViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  style={styles.calendarViewNavButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Previous month"
+                >
+                  <Text style={styles.calendarViewNavText}>{"<"}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setCalendarViewMonth(new Date())}
+                  style={styles.calendarViewTodayButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Show current month"
+                >
+                  <Text style={styles.calendarViewTodayText}>Today</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setCalendarViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  style={styles.calendarViewNavButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Next month"
+                >
+                  <Text style={styles.calendarViewNavText}>{">"}</Text>
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.calendarViewWeekdays}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <Text key={day} style={styles.calendarViewWeekday}>{day}</Text>
+              ))}
+            </View>
+            <View style={styles.calendarViewGrid}>
+              {calendarViewDays.map((day, index) => {
+                if (!day) {
+                  return <View key={`blank-${index}`} style={[styles.calendarViewDayCell, styles.calendarViewDayBlank]} />;
+                }
+                const dateKey = formatDateValue(day);
+                const dayTodos = calendarViewTodosByDate.get(dateKey) ?? [];
+                const visibleTodos = dayTodos.slice(0, 3);
+                const hiddenCount = dayTodos.length - visibleTodos.length;
+                const isToday = isSameDate(day, now);
+                return (
+                  <View
+                    key={dateKey}
+                    style={[
+                      styles.calendarViewDayCell,
+                      isToday && styles.calendarViewDayToday,
+                    ]}
+                  >
+                    <Text style={[styles.calendarViewDayNumber, isToday && styles.calendarViewDayNumberToday]}>
+                      {day.getDate()}
+                    </Text>
+                    <View style={styles.calendarViewItems}>
+                      {visibleTodos.map((todo) => (
+                        <Pressable
+                          key={todo.id}
+                          onPress={() => openEditModal(todo)}
+                          style={styles.calendarViewTask}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open task ${todo.text}`}
+                        >
+                          <View style={[styles.calendarViewPriorityDot, { backgroundColor: priorityColors[todo.priority] }]} />
+                          <Text
+                            style={[styles.calendarViewTaskText, todo.done && styles.calendarViewTaskDoneText]}
+                            numberOfLines={1}
+                          >
+                            {todo.text}
+                          </Text>
+                        </Pressable>
+                      ))}
+                      {hiddenCount > 0 && (
+                        <Text style={styles.calendarViewMoreText}>+{hiddenCount} more</Text>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </ScrollView>
+      )}
+
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && selectedTeam && (
         <View style={styles.memberPanel}>
           <Text style={styles.panelTitle}>{selectedTeam.name}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.memberList}>
@@ -2092,7 +2636,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {isProject && nextMilestone && (
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && isProject && nextMilestone && (
         <View style={[styles.milestoneBanner, nextMilestone.daysLeft < 0 && styles.milestoneBannerOverdue]}>
           <Text style={styles.milestoneBannerText}>
             ◆ {nextMilestone.text}
@@ -2105,29 +2649,85 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {isProject && (() => {
-        const linkedTeam = selectedProject?.team_id
-          ? teams.find((t) => t.id === selectedProject.team_id)
-          : null;
-        return (
-          <Pressable onPress={() => setLinkingProjectTeam(true)} style={styles.projectTeamBar}>
-            <Text style={styles.projectTeamBarLabel}>Team</Text>
-            {linkedTeam ? (
-              <Text style={styles.projectTeamBarValue}>{linkedTeam.name}</Text>
-            ) : (
-              <Text style={styles.projectTeamBarEmpty}>No team linked — tap to link</Text>
-            )}
-            <Text style={styles.projectTeamBarCaret}>›</Text>
-          </Pressable>
-        );
-      })()}
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && isProject && (
+        <View style={styles.projectSwitchBar}>
+          <Text style={styles.projectSwitchLabel}>Project</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.projectSwitchList}
+            style={styles.projectSwitchScroll}
+          >
+            {projects.map((project) => (
+              <Pressable
+                key={project.id}
+                onPress={() => {
+                  setSelectedProjectId(project.id);
+                  setSelectedTeamId(null);
+                }}
+                style={[
+                  styles.projectSwitchButton,
+                  selectedProjectId === project.id && styles.projectSwitchButtonActive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Open project ${project.name}`}
+              >
+                <Text
+                  style={[
+                    styles.projectSwitchButtonText,
+                    selectedProjectId === project.id && styles.projectSwitchButtonTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {project.name}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => openCreateTarget('project')}
+              style={styles.projectSwitchAddButton}
+              accessibilityRole="button"
+              accessibilityLabel="Create project"
+            >
+              <Text style={styles.projectSwitchAddButtonText}>+</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      )}
 
-      {isProject ? (
-        <>
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && isProject && (
+        <View style={styles.projectViewModeBar}>
+          {(['plan', 'kanban'] as ProjectViewMode[]).map((mode) => (
+            <Pressable
+              key={mode}
+              onPress={() => setProjectViewMode(mode)}
+              style={[
+                styles.projectViewModeButton,
+                projectViewMode === mode && styles.projectViewModeButtonActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Show ${mode} view`}
+            >
+              <Text
+                style={[
+                  styles.projectViewModeButtonText,
+                  projectViewMode === mode && styles.projectViewModeButtonTextActive,
+                ]}
+              >
+                {mode === 'plan' ? 'Plan' : 'Kanban'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && (isProject ? (
+        projectViewMode === 'plan' ? (
+        <KanbanDragProvider onMove={moveProjectTodo}>
           {/* Backlog strip — one-line capture bar; tasks land here by default */}
           {(() => {
             const backlogTodos = todos.filter((t) => !t.phase_id);
-            const backlogActive = backlogTodos.filter((t) => !t.done);
+            const backlogActive = sortTodos(backlogTodos.filter((t) => !t.done));
             return (
               <View style={styles.backlogStrip}>
                 <Text style={styles.backlogLabel}>Backlog</Text>
@@ -2142,16 +2742,24 @@ export default function HomeScreen() {
                   style={styles.backlogItemsScroll}
                   contentContainerStyle={styles.backlogItemsContent}
                 >
-                  {backlogActive.map((todo) => (
-                    <Pressable
-                      key={todo.id}
-                      onPress={() => openEditModal(todo)}
-                      style={[styles.backlogChip, todo.is_milestone && styles.backlogChipMilestone]}
-                    >
-                      {todo.is_milestone && <Text style={styles.backlogMilestoneIcon}>◆</Text>}
-                      <Text style={styles.backlogChipText} numberOfLines={1}>{todo.text}</Text>
-                    </Pressable>
-                  ))}
+                  <KanbanDropLane
+                    id="kanban-lane-backlog"
+                    phaseId={null}
+                    itemIds={backlogActive.map((todo) => todo.id)}
+                    orientation="horizontal"
+                  >
+                    {backlogActive.map((todo) => (
+                      <KanbanDragItem key={todo.id} id={todo.id} phaseId={null}>
+                        <Pressable
+                          onPress={() => openEditModal(todo)}
+                          style={[styles.backlogChip, todo.is_milestone && styles.backlogChipMilestone]}
+                        >
+                          {todo.is_milestone && <Text style={styles.backlogMilestoneIcon}>◆</Text>}
+                          <Text style={styles.backlogChipText} numberOfLines={1}>{todo.text}</Text>
+                        </Pressable>
+                      </KanbanDragItem>
+                    ))}
+                  </KanbanDropLane>
                 </ScrollView>
                 {backlogInputVisible ? (
                   <View>
@@ -2224,8 +2832,8 @@ export default function HomeScreen() {
           >
             {!!error && <Text style={[styles.error, { alignSelf: 'flex-start' }]}>{error}</Text>}
             {phases.map((phase) => {
-              const colActive = todos.filter((t) => !t.done && t.phase_id === phase.id);
-              const colDone = todos.filter((t) => t.done && t.phase_id === phase.id);
+              const colActive = sortTodos(todos.filter((t) => !t.done && t.phase_id === phase.id));
+              const colDone = sortTodos(todos.filter((t) => t.done && t.phase_id === phase.id));
               const dotColor = phase.status === 'active' ? '#6366f1' : phase.status === 'completed' ? '#16a34a' : '#9ca3af';
               const dateRange = formatPhaseDateRange(phase.planned_start, phase.planned_end);
               return (
@@ -2243,6 +2851,15 @@ export default function HomeScreen() {
                         <Text style={styles.kanbanCountText}>{colActive.length}</Text>
                       </View>
                     )}
+                    <Pressable
+                      onPress={() => openRenamePhase(phase)}
+                      style={styles.kanbanColMenuButton}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Rename ${phase.name} column`}
+                    >
+                      <MoreHorizontal size={16} color="#9ca3af" />
+                    </Pressable>
                   </View>
                   <View style={styles.kanbanColInput}>
                     <TextInput
@@ -2287,13 +2904,21 @@ export default function HomeScreen() {
                     </View>
                   )}
                   <ScrollView style={styles.kanbanColBody} showsVerticalScrollIndicator={false}>
-                    {colActive.map((todo) => (
-                      <KanbanCard key={todo.id} todo={todo}
-                        assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
-                        onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
-                        onEdit={() => openEditModal(todo)}
-                        onCycleAssignee={() => openAssigneePicker(todo)} />
-                    ))}
+                    <KanbanDropLane
+                      id={`kanban-lane-${phase.id}`}
+                      phaseId={phase.id}
+                      itemIds={colActive.map((todo) => todo.id)}
+                    >
+                      {colActive.map((todo) => (
+                        <KanbanDragItem key={todo.id} id={todo.id} phaseId={phase.id}>
+                          <KanbanCard todo={todo}
+                            assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
+                            onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
+                            onEdit={() => openEditModal(todo)}
+                            onCycleAssignee={() => openAssigneePicker(todo)} />
+                        </KanbanDragItem>
+                      ))}
+                    </KanbanDropLane>
                     {colDone.length > 0 && <>
                       <View style={styles.sectionDivider}>
                         <View style={styles.sectionDividerLine} />
@@ -2314,10 +2939,111 @@ export default function HomeScreen() {
             })}
             <Pressable onPress={() => setAddingPhase(true)} style={styles.kanbanAddCol}>
               <Text style={styles.kanbanAddColIcon}>+</Text>
-              <Text style={styles.kanbanAddColText}>Add Phase</Text>
+              <Text style={styles.kanbanAddColText}>Add Column</Text>
             </Pressable>
           </ScrollView>
-        </>
+        </KanbanDragProvider>
+        ) : (
+          <KanbanDragProvider onMove={moveProjectTodo}>
+            <ScrollView
+              horizontal
+              style={styles.kanban}
+              contentContainerStyle={styles.kanbanContent}
+              showsHorizontalScrollIndicator={false}
+            >
+              {!!error && <Text style={[styles.error, { alignSelf: 'flex-start' }]}>{error}</Text>}
+              {(() => {
+                const lanes = [
+                  {
+                    key: 'backlog',
+                    title: workflowColumnLabels.backlog,
+                    phaseId: null,
+                    done: false,
+                    items: sortTodos(todos.filter((todo) =>
+                      workflowStageForTodo(todo, workflowPhaseTargets) === 'backlog'
+                    )),
+                  },
+                  {
+                    key: 'doing',
+                    title: workflowColumnLabels.doing,
+                    phaseId: workflowPhaseTargets.doingPhaseId,
+                    done: false,
+                    items: workflowPhaseTargets.doingPhaseId
+                      ? sortTodos(todos.filter((todo) => workflowStageForTodo(todo, workflowPhaseTargets) === 'doing'))
+                      : [],
+                  },
+                  {
+                    key: 'review',
+                    title: workflowColumnLabels.review,
+                    phaseId: workflowPhaseTargets.reviewPhaseId,
+                    done: false,
+                    items: workflowPhaseTargets.reviewPhaseId
+                      ? sortTodos(todos.filter((todo) => workflowStageForTodo(todo, workflowPhaseTargets) === 'review'))
+                      : [],
+                  },
+                  {
+                    key: 'done',
+                    title: workflowColumnLabels.done,
+                    phaseId: null,
+                    done: true,
+                    items: sortTodos(todos.filter((todo) => workflowStageForTodo(todo, workflowPhaseTargets) === 'done')),
+                  },
+                ];
+
+                return lanes.map((lane) => (
+                  <View key={lane.key} style={styles.kanbanCol}>
+                    <View style={styles.kanbanColHeader}>
+                      <View style={[
+                        styles.kanbanStatusDot,
+                        { backgroundColor: lane.done ? '#16a34a' : lane.key === 'doing' ? '#6366f1' : lane.key === 'review' ? '#f59e0b' : '#9ca3af' },
+                      ]} />
+                      <View style={styles.kanbanColMeta}>
+                        <Text style={styles.kanbanColTitle}>{lane.title}</Text>
+                        <Text style={styles.kanbanColDateRange}>
+                          {lane.key === 'backlog'
+                            ? 'Unplanned'
+                            : lane.key === 'done'
+                              ? 'Completed'
+                              : (phases.find((phase) => phase.id === lane.phaseId)?.name ?? 'No plan column')}
+                        </Text>
+                      </View>
+                      <View style={styles.kanbanCountBadge}>
+                        <Text style={styles.kanbanCountText}>{lane.items.length}</Text>
+                      </View>
+                      <Pressable
+                        onPress={() => openRenameWorkflowLane(lane.key as WorkflowLaneKey)}
+                        style={styles.kanbanColMenuButton}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Rename ${lane.title} column`}
+                      >
+                        <MoreHorizontal size={16} color="#9ca3af" />
+                      </Pressable>
+                    </View>
+                    <ScrollView style={styles.kanbanColBody} showsVerticalScrollIndicator={false}>
+                      <KanbanDropLane
+                        id={`workflow-lane-${lane.key}`}
+                        phaseId={lane.phaseId}
+                        done={lane.done}
+                        itemIds={lane.items.map((todo) => todo.id)}
+                      >
+                        {lane.items.map((todo) => (
+                          <KanbanDragItem key={todo.id} id={todo.id} phaseId={todo.phase_id} done={todo.done}>
+                            <KanbanCard todo={todo}
+                              assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
+                              onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
+                              onEdit={() => openEditModal(todo)}
+                              onCycleAssignee={() => openAssigneePicker(todo)} />
+                          </KanbanDragItem>
+                        ))}
+                      </KanbanDropLane>
+                    </ScrollView>
+                  </View>
+                ));
+              })()}
+            </ScrollView>
+          </KanbanDragProvider>
+        )
       ) : (
         <>
           <View style={styles.inputBar}>
@@ -2394,6 +3120,7 @@ export default function HomeScreen() {
                         dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
                         assignedAt={todo.assigned_at ?? undefined}
                         assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                        kanbanStage={todoKanbanStage(todo)}
                         assignerInitials={assigner?.initials} assignerColor={assigner?.color}
                         assignerName={assigner?.name}
                         onToggle={() => toggle(todo.id)}
@@ -2467,6 +3194,7 @@ export default function HomeScreen() {
                           dueDate={todo.due_date} note={todo.note} createdAt={todo.created_at}
                           assignedAt={todo.assigned_at ?? undefined}
                           assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
+                          kanbanStage={todoKanbanStage(todo)}
                           assignerInitials={assigner?.initials} assignerColor={assigner?.color}
                           assignerName={assigner?.name}
                           onToggle={() => toggle(todo.id)}
@@ -2495,7 +3223,7 @@ export default function HomeScreen() {
             )}
           </View>
         </>
-      )}
+      ))}
 
       {!!toast && (
         <View pointerEvents="none" style={styles.toast}>
@@ -2793,12 +3521,12 @@ export default function HomeScreen() {
             <View style={styles.navDropdownSection}>
               <View style={styles.navDropdownSectionHeader}>
                 <Text style={styles.navDropdownSectionTitle}>Teams</Text>
-                <Pressable onPress={() => { openCreateTarget('team'); setNavExpanded(false); }} hitSlop={8}>
+                <Pressable onPress={() => { openCreateTeam(null); setNavExpanded(false); }} hitSlop={8}>
                   <Text style={styles.navDropdownSectionAction}>+</Text>
                 </Pressable>
               </View>
               {teams.length === 0 ? (
-                <Pressable onPress={() => { openCreateTarget('team'); setNavExpanded(false); }} style={styles.navDropdownItem}>
+                <Pressable onPress={() => { openCreateTeam(null); setNavExpanded(false); }} style={styles.navDropdownItem}>
                   <Text style={styles.navDropdownMutedText}>No teams yet</Text>
                 </Pressable>
               ) : (
@@ -2823,37 +3551,6 @@ export default function HomeScreen() {
 
             <Pressable onPress={signOut} style={styles.navDropdownItem}>
               <Text style={styles.navDropdownSignOutText}>Log Out</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-      <Modal
-        visible={projectsMenuOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setProjectsMenuOpen(false)}
-      >
-        <Pressable style={styles.navDropdownBackdrop} onPress={() => setProjectsMenuOpen(false)}>
-          <Pressable style={styles.projectsDropdownCard}>
-            <Text style={styles.projectsDropdownTitle}>PROJECTS</Text>
-            {projects.map((project) => (
-              <Pressable
-                key={project.id}
-                style={styles.navDropdownItem}
-                onPress={() => { setSelectedProjectId(project.id); setSelectedTeamId(null); setProjectsMenuOpen(false); }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={{ fontSize: 11, color: '#6366f1', width: 12 }}>{selectedProjectId === project.id ? '✓' : ''}</Text>
-                  <Text style={[styles.navDropdownItemText, selectedProjectId === project.id && styles.navDropdownItemTextActive]} numberOfLines={1}>{project.name}</Text>
-                </View>
-              </Pressable>
-            ))}
-            {projects.length === 0 && (
-              <Text style={[styles.navDropdownMutedText, { paddingHorizontal: 14, paddingVertical: 6 }]}>No projects yet</Text>
-            )}
-            <View style={styles.navDropdownDivider} />
-            <Pressable style={styles.navDropdownItem} onPress={() => { setProjectsMenuOpen(false); openCreateTarget('project'); }}>
-              <Text style={styles.navDropdownSectionAction}>+ New Project</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -3127,11 +3824,16 @@ export default function HomeScreen() {
         visible={createTarget === 'team'}
         transparent
         animationType="fade"
-        onRequestClose={() => setCreateTarget(null)}
+        onRequestClose={() => { setCreateTarget(null); setNewTeamOrgId(null); }}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setCreateTarget(null)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => { setCreateTarget(null); setNewTeamOrgId(null); }}>
           <Pressable style={styles.calendarCard}>
             <Text style={styles.editModalTitle}>New Team</Text>
+            <Text style={styles.editModalSectionLabel}>
+              {newTeamOrgId
+                ? `Organization: ${organizations.find((org) => org.id === newTeamOrgId)?.name ?? 'Selected'}`
+                : 'No organization'}
+            </Text>
             <TextInput
               style={styles.editModalInput}
               value={teamName}
@@ -3147,6 +3849,7 @@ export default function HomeScreen() {
                 onPress={() => {
                   setCreateTarget(null);
                   setTeamName('');
+                  setNewTeamOrgId(null);
                 }}
               >
                 <Text style={styles.calendarCancelText}>Cancel</Text>
@@ -3382,6 +4085,74 @@ export default function HomeScreen() {
       </Modal>
 
       <Modal
+        visible={!!renamingPhase}
+        transparent
+        animationType="fade"
+        onRequestClose={closeRenamePhase}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={closeRenamePhase}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Rename Column</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={renamePhaseName}
+              onChangeText={setRenamePhaseName}
+              placeholder="Column name"
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={saveRenamePhase}
+            />
+            <View style={styles.editModalActions}>
+              <Pressable onPress={closeRenamePhase}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={saveRenamePhase}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!renamingWorkflowLane}
+        transparent
+        animationType="fade"
+        onRequestClose={closeRenameWorkflowLane}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={closeRenameWorkflowLane}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Rename Kanban Column</Text>
+            <TextInput
+              style={styles.editModalInput}
+              value={renameWorkflowLaneName}
+              onChangeText={setRenameWorkflowLaneName}
+              placeholder="Column name"
+              placeholderTextColor="#9ca3af"
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={saveRenameWorkflowLane}
+            />
+            <View style={styles.editModalActions}>
+              <Pressable onPress={closeRenameWorkflowLane}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={saveRenameWorkflowLane}
+                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+              >
+                <Text style={styles.smallBtnText}>Save</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={addingPhase}
         transparent
         animationType="fade"
@@ -3389,12 +4160,12 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setAddingPhase(false)}>
           <Pressable style={styles.calendarCard}>
-            <Text style={styles.editModalTitle}>New Phase</Text>
+            <Text style={styles.editModalTitle}>New Column</Text>
             <TextInput
               style={styles.editModalInput}
               value={newPhaseName}
               onChangeText={setNewPhaseName}
-              placeholder="Phase name"
+              placeholder="Column name"
               placeholderTextColor="#9ca3af"
               autoFocus
               onSubmitEditing={addPhase}
@@ -3962,6 +4733,336 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  organizationsView: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  organizationsViewContent: {
+    padding: 16,
+    gap: 12,
+  },
+  organizationSection: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    padding: 12,
+  },
+  organizationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  organizationTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  organizationTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  organizationMeta: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9ca3af',
+    marginTop: 2,
+  },
+  organizationAddTeamButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    flexShrink: 0,
+  },
+  organizationAddTeamText: {
+    color: '#6366f1',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+  organizationTeamTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 2,
+  },
+  organizationTeamTab: {
+    minHeight: 36,
+    maxWidth: 190,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  organizationTeamTabActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  organizationTeamTabText: {
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '700',
+    minWidth: 0,
+  },
+  organizationTeamTabTextActive: {
+    color: '#4338ca',
+  },
+  organizationTeamMeta: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  organizationEmptyTeamTab: {
+    minHeight: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d1d5db',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    justifyContent: 'center',
+  },
+  organizationEmptyTeamText: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  organizationCardNew: {
+    minHeight: 72,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  organizationCardNewIcon: {
+    fontSize: 22,
+    color: '#6366f1',
+    fontWeight: '300',
+    lineHeight: 26,
+  },
+  organizationCardNewText: {
+    color: '#6366f1',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  projectsGrid: {
+    flex: 1,
+  },
+  projectsGridContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 16,
+    gap: 12,
+  },
+  projectCard: {
+    width: 220,
+    minHeight: 108,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 14,
+    justifyContent: 'center',
+  },
+  projectCardName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  projectCardMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  projectCardNew: {
+    width: 220,
+    minHeight: 108,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  projectCardNewIcon: {
+    fontSize: 24,
+    color: '#6366f1',
+    fontWeight: '300',
+    lineHeight: 30,
+  },
+  projectCardNewText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6366f1',
+  },
+  calendarView: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  calendarViewContent: {
+    padding: 16,
+  },
+  calendarViewPanel: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  calendarViewHeader: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  calendarViewEyebrow: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  calendarViewTitle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  calendarViewActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  calendarViewNavButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  calendarViewNavText: {
+    color: '#374151',
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  calendarViewTodayButton: {
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+  },
+  calendarViewTodayText: {
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  calendarViewWeekdays: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  calendarViewWeekday: {
+    width: '14.2857%',
+    paddingVertical: 8,
+    textAlign: 'center',
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  calendarViewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarViewDayCell: {
+    width: '14.2857%',
+    minHeight: 116,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 8,
+    backgroundColor: '#fff',
+  },
+  calendarViewDayBlank: {
+    backgroundColor: '#f9fafb',
+  },
+  calendarViewDayToday: {
+    backgroundColor: '#eef2ff',
+  },
+  calendarViewDayNumber: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  calendarViewDayNumberToday: {
+    color: '#4338ca',
+  },
+  calendarViewItems: {
+    gap: 5,
+  },
+  calendarViewTask: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 6,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 6,
+  },
+  calendarViewPriorityDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    flexShrink: 0,
+  },
+  calendarViewTaskText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  calendarViewTaskDoneText: {
+    color: '#9ca3af',
+    textDecorationLine: 'line-through',
+  },
+  calendarViewMoreText: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   teamCard: {
     width: 200,
     borderRadius: 14,
@@ -4514,30 +5615,6 @@ const styles = StyleSheet.create({
   navDropdownBackdrop: {
     flex: 1,
   },
-  projectsDropdownCard: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 160 : 120,
-    left: 100,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e5e7eb',
-    paddingVertical: 8,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  projectsDropdownTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#9ca3af',
-    letterSpacing: 0.3,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-  },
   navDropdownCard: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 112 : 72,
@@ -4819,6 +5896,15 @@ const styles = StyleSheet.create({
   },
   kanbanColMeta: {
     flex: 1,
+    minWidth: 0,
+  },
+  kanbanColMenuButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   kanbanColTitle: {
     fontSize: 13,
@@ -5120,36 +6206,100 @@ const styles = StyleSheet.create({
     fontSize: 26,
     lineHeight: 32,
   },
-  projectTeamBar: {
+  projectSwitchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
-    gap: 6,
+    gap: 8,
   },
-  projectTeamBarLabel: {
+  projectSwitchLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: '#9ca3af',
     textTransform: 'uppercase',
-    width: 36,
+    width: 48,
   },
-  projectTeamBarValue: {
+  projectSwitchScroll: {
     flex: 1,
+    minWidth: 0,
+  },
+  projectSwitchList: {
+    gap: 8,
+    paddingRight: 2,
+  },
+  projectSwitchButton: {
+    minHeight: 32,
+    maxWidth: 180,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    justifyContent: 'center',
+  },
+  projectSwitchButtonActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#6366f1',
+  },
+  projectSwitchButtonText: {
     fontSize: 13,
     fontWeight: '600',
+    color: '#374151',
+  },
+  projectSwitchButtonTextActive: {
     color: '#4338ca',
   },
-  projectTeamBarEmpty: {
-    flex: 1,
-    fontSize: 13,
-    color: '#9ca3af',
+  projectSwitchAddButton: {
+    width: 32,
+    minHeight: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  projectTeamBarCaret: {
-    fontSize: 15,
-    color: '#d1d5db',
+  projectSwitchAddButtonText: {
+    color: '#6366f1',
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  projectViewModeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    gap: 8,
+  },
+  projectViewModeButton: {
+    minHeight: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    justifyContent: 'center',
+  },
+  projectViewModeButtonActive: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+  projectViewModeButtonText: {
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  projectViewModeButtonTextActive: {
+    color: '#fff',
   },
   teamLinkRow: {
     flexDirection: 'row',

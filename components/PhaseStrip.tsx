@@ -44,7 +44,7 @@ export default function PhaseStrip({
   onCycleStatus,
   onAdd,
   addDisabled = false,
-  addLabel = '+ Phase',
+  addLabel = '+ Column',
 }: Props) {
   return (
     <ScrollView

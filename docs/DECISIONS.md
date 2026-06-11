@@ -151,6 +151,79 @@ Implementation rules:
 - Install Expo-compatible native dependencies with `npx expo install`; `react-native-svg` must stay compatible with Expo SDK 54.
 - Icon color, size, and stroke width should come from the app's design tokens once those tokens exist.
 
+## 2026-06-10: Todo Rows Show Kanban Stage
+
+Decision: normal TASK list rows should show a compact Kanban-stage icon when the task belongs to a project workflow.
+
+Reason: accepted project tasks can appear in a user's personal todo list, so the row must reveal whether the task is in Backlog, Doing, Review, or Done without forcing the user to open the project board.
+
+Implementation rules:
+
+- Resolve stage from the same Kanban mapping used by the board: Backlog, Doing, Review, Done.
+- Use Lucide icons, not text glyphs, for the stage indicator.
+- Keep the indicator compact enough to preserve one-line task titles.
+- Provide an accessibility label and a web hover tooltip with the stage name.
+- Store no duplicate stage value on `todos`; derive it from `done`, `phase_id`, and project phase configuration.
+
+## 2026-06-10: Icon and Avatar Size Scale
+
+Decision: icons and avatars use a fixed size scale. New UI should choose from these sizes instead of introducing one-off dimensions.
+
+### Icon Sizes
+
+| Token | Size | Used for |
+|-------|------|----------|
+| `icon.xs` | 11 | Icons inside tiny row controls, such as Inbox move-to-todos |
+| `icon.sm` | 15 | Secondary row actions, such as Archive |
+| `icon.md` | 18 | Standard buttons, dense toolbar controls, status indicators |
+| `icon.lg` | 22 | Primary navigation actions and larger workspace controls |
+| `icon.xl` | 26 | Display-only icons, avatar picker cells, auth/onboarding emphasis |
+
+Icon containers are separate from icon glyph size:
+
+| Token | Size | Used for |
+|-------|------|----------|
+| `iconButton.xs` | 18 x 18 | Dense row controls embedded in task rows |
+| `iconButton.sm` | 28 x 28 | Secondary row actions and compact panel controls |
+| `iconButton.md` | 36 x 36 | Standard toolbar buttons |
+| `iconButton.lg` | 44 x 44 | Touch-primary controls and mobile-friendly actions |
+
+Rules:
+
+- Lucide `size` uses the icon token; the `Pressable` or visual container uses the icon-button token.
+- Use `strokeWidth: 2.4` for ordinary icons and `2.75` for tiny icons that need extra optical weight.
+- Icon-only controls must have `accessibilityLabel`.
+- If an icon is inside a colored filled circle/square, the icon should normally be white.
+- Do not use text glyphs for icons unless they are temporary placeholders awaiting Lucide replacement.
+
+### Avatar Sizes
+
+| Token | Size | Used for |
+|-------|------|----------|
+| `avatar.xs` | 18 x 18 | Inline row attribution, assignee/assigner markers |
+| `avatar.sm` | 28 x 28 | Compact lists, dropdown rows, member chips |
+| `avatar.md` | 36 x 36 | Header/account controls and normal profile surfaces |
+| `avatar.lg` | 44 x 44 | Mobile-friendly profile/account controls |
+| `avatar.xl` | 64 x 64 | Onboarding/profile editing and avatar picker previews |
+
+Avatar text sizes:
+
+| Avatar | Initials text |
+|--------|---------------|
+| `avatar.xs` | 9 |
+| `avatar.sm` | 11 |
+| `avatar.md` | 13 |
+| `avatar.lg` | 15 |
+| `avatar.xl` | 22 |
+
+Rules:
+
+- Avatars are circular, so `borderRadius` is always half the avatar size.
+- Display priority remains: profile photo > animal emoji > initials fallback.
+- Initials should be one or two characters, uppercase, centered, and never wrap.
+- Do not use animal emoji at `avatar.xs`; use initials or photo because emoji becomes visually noisy at row scale.
+- Row avatars should not change row height; choose `avatar.xs` or adjust the whole row size through density tokens.
+
 ## 2026-06-08: Calendar Integrations Are Future Optional User Integrations
 
 Decision: Outlook Calendar and Google Calendar integration should be planned, but not required for core todo use.

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
-import { Archive } from 'lucide-react-native';
+import { Archive, CircleCheck, Eye, SquareKanban, SquarePlay } from 'lucide-react-native';
+
+type KanbanStageKey = 'backlog' | 'doing' | 'review' | 'done';
 
 type Props = {
   text: string;
@@ -12,6 +14,7 @@ type Props = {
   assignedAt?: string;
   assignedLabel?: string;
   phaseLabel?: string;
+  kanbanStage?: { key: KanbanStageKey; label: string };
   isMilestone?: boolean;
   assignerInitials?: string;
   assignerColor?: string;
@@ -41,6 +44,13 @@ const priorityColors = {
   normal: '#60a5fa',
   high: '#f59e0b',
   urgent: '#ef4444',
+};
+
+const kanbanStageColors: Record<KanbanStageKey, string> = {
+  backlog: '#9ca3af',
+  doing: '#6366f1',
+  review: '#f59e0b',
+  done: '#16a34a',
 };
 
 function agePill(value?: string): { label: string; days: number; hours: number } | null {
@@ -90,6 +100,7 @@ export default function TodoItem({
   assignedAt,
   assignedLabel,
   phaseLabel,
+  kanbanStage,
   isMilestone = false,
   assignerInitials,
   assignerColor,
@@ -111,12 +122,18 @@ export default function TodoItem({
   const [ageHovered, setAgeHovered] = useState(false);
   const [dueDateHovered, setDueDateHovered] = useState(false);
   const [archiveHovered, setArchiveHovered] = useState(false);
+  const [kanbanStageHovered, setKanbanStageHovered] = useState(false);
   const [now] = useState(Date.now);
 
   const duePill = dueDatePill(dueDate);
   const ageTimestamp = assignedAt ?? createdAt;
   const ageLabel = assignedAt ? 'Assigned' : 'Created';
   const age = agePill(ageTimestamp);
+  const KanbanStageIcon =
+    kanbanStage?.key === 'doing' ? SquarePlay :
+    kanbanStage?.key === 'review' ? Eye :
+    kanbanStage?.key === 'done' ? CircleCheck :
+    SquareKanban;
 
   const dueDateTooltip = (() => {
     if (!dueDate) return null;
@@ -159,6 +176,27 @@ export default function TodoItem({
       <Pressable onPress={onOpenEdit} disabled={!onOpenEdit} style={styles.textWrap}>
         <View style={styles.textRow}>
           {isMilestone && <Text style={styles.milestoneIcon}>◆</Text>}
+          {!!kanbanStage && (
+            <Pressable
+              onHoverIn={() => setKanbanStageHovered(true)}
+              onHoverOut={() => setKanbanStageHovered(false)}
+              style={styles.kanbanStageIconWrap}
+              hitSlop={4}
+              accessibilityRole="image"
+              accessibilityLabel={`Kanban stage: ${kanbanStage.label}`}
+            >
+              <KanbanStageIcon
+                size={15}
+                strokeWidth={2.5}
+                color={kanbanStageColors[kanbanStage.key]}
+              />
+              {kanbanStageHovered && Platform.OS === 'web' && (
+                <View style={styles.kanbanStageTooltip}>
+                  <Text style={styles.tooltipText}>Kanban: {kanbanStage.label}</Text>
+                </View>
+              )}
+            </Pressable>
+          )}
           <Text
             style={[styles.text, done && styles.textDone, isMilestone && !done && styles.textMilestone]}
             numberOfLines={1}
@@ -443,6 +481,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#d97706',
   },
+  kanbanStageIconWrap: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    flexShrink: 0,
+  },
   textMilestone: {
     fontWeight: '600',
     color: '#92400e',
@@ -533,6 +579,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     zIndex: 100,
     minWidth: 72,
+    alignItems: 'center',
+  },
+  kanbanStageTooltip: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    backgroundColor: '#374151',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 100,
+    minWidth: 110,
     alignItems: 'center',
   },
   tooltipText: {
