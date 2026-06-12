@@ -513,6 +513,7 @@ export default function HomeScreen() {
   const [editDraftPriority, setEditDraftPriority] = useState<Priority>('normal');
   const [editDraftEstimate, setEditDraftEstimate] = useState('');
   const [editDraftScheduledStartAt, setEditDraftScheduledStartAt] = useState('');
+  const [editDraftProjectId, setEditDraftProjectId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -888,7 +889,7 @@ export default function HomeScreen() {
         query = query.eq('team_id', selectedTeamId).is('project_id', null);
       } else if (session) {
         query = query.or(
-          `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
+          `and(team_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
         );
       }
     }
@@ -932,7 +933,7 @@ export default function HomeScreen() {
       query = query.eq('team_id', selectedTeamId).is('project_id', null);
     } else if (session) {
       query = query.or(
-        `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id})`
+        `and(team_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id})`
       );
     }
 
@@ -1745,6 +1746,7 @@ export default function HomeScreen() {
     setEditDraftText(todo.text);
     setEditDraftNote(todo.note ?? '');
     setEditDraftPhaseId(todo.phase_id ?? null);
+    setEditDraftProjectId(todo.project_id ?? null);
     setEditDraftDueDate(todo.due_date);
     setEditDraftPriority(todo.priority);
     setEditDraftEstimate(todo.estimate ?? '');
@@ -1763,7 +1765,11 @@ export default function HomeScreen() {
     if (!text) return;
 
     const note = editDraftNote.trim() || null;
-    const phase_id = isProject ? editDraftPhaseId : editTodo.phase_id;
+    const project_id = isProject ? editTodo.project_id : editDraftProjectId;
+    const projectChanged = project_id !== editTodo.project_id;
+    const phase_id = isProject
+      ? editDraftPhaseId
+      : projectChanged ? null : editTodo.phase_id;
     const estimate = editDraftEstimate.trim() || null;
     const scheduledStartAt = fromDateTimeInputValue(editDraftScheduledStartAt);
     if (scheduledStartAt === undefined) {
@@ -1773,7 +1779,7 @@ export default function HomeScreen() {
 
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ text, note, phase_id, due_date: editDraftDueDate, priority: editDraftPriority, estimate, scheduled_start_at: scheduledStartAt })
+      .update({ text, note, phase_id, project_id, due_date: editDraftDueDate, priority: editDraftPriority, estimate, scheduled_start_at: scheduledStartAt })
       .eq('id', editTodo.id);
 
     if (updateError) {
@@ -1789,6 +1795,7 @@ export default function HomeScreen() {
               text,
               note,
               phase_id: phase_id ?? null,
+              project_id: project_id ?? null,
               due_date: editDraftDueDate,
               priority: editDraftPriority,
               estimate,
@@ -4748,6 +4755,37 @@ export default function HomeScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+
+              {!isProject && projects.filter(p => !p.archived_at).length > 0 && (
+                <>
+                  <View style={styles.pickerSectionDivider}>
+                    <View style={styles.pickerSectionLine} />
+                    <Text style={styles.pickerSectionLabel}>Project</Text>
+                    <View style={styles.pickerSectionLine} />
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                    <Pressable
+                      onPress={() => setEditDraftProjectId(null)}
+                      style={[styles.phasePill, !editDraftProjectId && styles.phasePillActive]}
+                    >
+                      <Text style={[styles.phasePillText, !editDraftProjectId && styles.phasePillTextActive]}>
+                        None
+                      </Text>
+                    </Pressable>
+                    {projects.filter(p => !p.archived_at).map((project) => (
+                      <Pressable
+                        key={project.id}
+                        onPress={() => setEditDraftProjectId(project.id)}
+                        style={[styles.phasePill, editDraftProjectId === project.id && styles.phasePillActive]}
+                      >
+                        <Text style={[styles.phasePillText, editDraftProjectId === project.id && styles.phasePillTextActive]}>
+                          {project.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
 
               {isProject && phases.length > 0 && (
                 <>
