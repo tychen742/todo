@@ -2580,7 +2580,7 @@ export default function HomeScreen() {
             style={[styles.workspaceTab, isPersonal && !teamsViewOpen && styles.workspaceTabActive]}
           >
             <Text style={[styles.workspaceTabText, isPersonal && !teamsViewOpen && styles.workspaceTabTextActive]}>
-              Personal
+              Workspace
             </Text>
           </Pressable>
 
@@ -2653,19 +2653,18 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
 
-        </ScrollView>
+          <Pressable
+            onPress={() => {
+              setProjectsViewOpen(false);
+              setCalendarViewOpen(false);
+              setTeamsViewOpen((v) => !v);
+            }}
+            style={[styles.workspaceTab, teamsViewOpen && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabText, teamsViewOpen && styles.workspaceTabTextActive]}>People</Text>
+          </Pressable>
 
-        {/* Organizations button pinned to the right */}
-        <Pressable
-          onPress={() => {
-            setProjectsViewOpen(false);
-            setCalendarViewOpen(false);
-            setTeamsViewOpen((v) => !v);
-          }}
-          style={[styles.teamsBtn, teamsViewOpen && styles.teamsBtnActive]}
-        >
-          <Text style={[styles.teamsBtnText, teamsViewOpen && styles.teamsBtnTextActive]}>Organizations</Text>
-        </Pressable>
+        </ScrollView>
       </View>
 
       {/* Organizations with team tabs */}
@@ -3353,7 +3352,6 @@ export default function HomeScreen() {
 
       {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectSwitchBar}>
-          <Text style={styles.projectSwitchLabel}>Project</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -3397,29 +3395,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
-        <View style={styles.projectHeaderBar}>
-          <View style={styles.projectHeaderTextWrap}>
-            <Text style={styles.projectHeaderLabel}>Project</Text>
-            <Text style={styles.projectHeaderTitle} numberOfLines={1}>
-              {selectedProject?.name ?? 'Project'}
-            </Text>
-          </View>
-          {selectedProject && (
-            <Pressable
-              onPress={() => {
-                setRenamingProject(selectedProject);
-                setRenameProjectName(selectedProject.name);
-              }}
-              style={({ pressed }) => [styles.projectHeaderRenameButton, pressed && styles.btnPressed]}
-              accessibilityRole="button"
-              accessibilityLabel={`Rename project ${selectedProject.name}`}
-            >
-              <Text style={styles.projectHeaderRenameButtonText}>Rename</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
 
       {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectViewModeBar}>
