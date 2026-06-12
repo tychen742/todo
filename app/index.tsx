@@ -303,9 +303,9 @@ type KanbanCardTodo = {
   due_date: string | null; note: string | null; is_milestone: boolean;
   assigned_to: string | null;
 };
-function KanbanCard({ todo, assigneeLabel, onToggle, onDelete, onEdit, onCycleAssignee }: {
+function KanbanCard({ todo, assigneeEmail, onToggle, onDelete, onEdit, onCycleAssignee }: {
   todo: KanbanCardTodo;
-  assigneeLabel: string | null;
+  assigneeEmail: string | null;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: () => void;
@@ -318,6 +318,10 @@ function KanbanCard({ todo, assigneeLabel, onToggle, onDelete, onEdit, onCycleAs
   const dueLabel = todo.due_date ? kanbanDueLabel(todo.due_date) : null;
   const overdue = dueLabel?.includes('overdue') ?? false;
   const hasAssignee = !!todo.assigned_to;
+  const avatarColor = assigneeEmail ? pickAvatarColor(assigneeEmail) : undefined;
+  const initials = assigneeEmail
+    ? assigneeEmail.split('@')[0].split(/[._-]/).filter(p => p).map(p => p[0]).join('').toUpperCase().slice(0, 2) || '?'
+    : '?';
   return (
     <View style={[kcs.card, todo.is_milestone && kcs.cardMilestone]}>
       <Pressable onPress={onToggle} hitSlop={8} style={kcs.checkbox}>
@@ -335,12 +339,15 @@ function KanbanCard({ todo, assigneeLabel, onToggle, onDelete, onEdit, onCycleAs
           {dueLabel && <Text style={[kcs.due, overdue && kcs.dueOverdue]}>{dueLabel}</Text>}
           <Pressable
             onPress={(e) => { e.stopPropagation?.(); onCycleAssignee(); }}
-            style={[kcs.assigneePill, hasAssignee && kcs.assigneePillAssigned]}
             hitSlop={6}
           >
-            <Text style={[kcs.assigneeText, hasAssignee && kcs.assigneeTextAssigned]} numberOfLines={1}>
-              {assigneeLabel ?? 'Assign'}
-            </Text>
+            {hasAssignee && avatarColor ? (
+              <View style={[kcs.assigneeAvatar, { backgroundColor: avatarColor }]}>
+                <Text style={kcs.assigneeAvatarText}>{initials}</Text>
+              </View>
+            ) : (
+              <Text style={kcs.assigneePlaceholder}>+</Text>
+            )}
           </Pressable>
         </View>
       </Pressable>
@@ -368,10 +375,9 @@ const kcs = StyleSheet.create({
   due: { fontSize: 11, color: '#4338ca', fontWeight: '600' },
   dueOverdue: { color: '#b91c1c' },
   del: { fontSize: 11, color: '#d1d5db', paddingLeft: 4 },
-  assigneePill: { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#f3f4f6', borderWidth: 1, borderColor: '#e5e7eb', maxWidth: 100 },
-  assigneePillAssigned: { backgroundColor: '#ede9fe', borderColor: '#c4b5fd' },
-  assigneeText: { fontSize: 11, color: '#9ca3af', fontWeight: '600' },
-  assigneeTextAssigned: { color: '#6d28d9' },
+  assigneeAvatar: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  assigneeAvatarText: { fontSize: 9, fontWeight: '700', color: '#fff' },
+  assigneePlaceholder: { fontSize: 16, color: '#d1d5db', fontWeight: '600' },
 });
 
 const AVATAR_COLORS = ['#e74c3c', '#e67e22', '#16a34a', '#2563eb', '#7c3aed', '#db2777', '#0891b2', '#d97706'];
@@ -3625,7 +3631,7 @@ export default function HomeScreen() {
                       {colActive.map((todo) => (
                         <KanbanDragItem key={todo.id} id={todo.id} phaseId={phase.id}>
                           <KanbanCard todo={todo}
-                            assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
+                            assigneeEmail={members.length > 0 && todo.assigned_to ? memberById.get(todo.assigned_to)?.email ?? null : null}
                             onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
                             onEdit={() => openEditModal(todo)}
                             onCycleAssignee={() => openAssigneePicker(todo)} />
@@ -3640,7 +3646,7 @@ export default function HomeScreen() {
                       </View>
                       {colDone.map((todo) => (
                         <KanbanCard key={todo.id} todo={todo}
-                          assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
+                          assigneeEmail={members.length > 0 && todo.assigned_to ? memberById.get(todo.assigned_to)?.email ?? null : null}
                           onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
                           onEdit={() => openEditModal(todo)}
                           onCycleAssignee={() => openAssigneePicker(todo)} />
@@ -3741,7 +3747,7 @@ export default function HomeScreen() {
                         {lane.items.map((todo) => (
                           <KanbanDragItem key={todo.id} id={todo.id} phaseId={null} workflowStatus={workflowStageForTodo(todo)}>
                             <KanbanCard todo={todo}
-                              assigneeLabel={members.length > 0 ? (todo.assigned_to ? assigneeLabel(todo.assigned_to) : 'Assign') : null}
+                              assigneeEmail={members.length > 0 && todo.assigned_to ? memberById.get(todo.assigned_to)?.email ?? null : null}
                               onToggle={() => toggle(todo.id)} onDelete={() => archiveTodo(todo.id)}
                               onEdit={() => openEditModal(todo)}
                               onCycleAssignee={() => openAssigneePicker(todo)} />
