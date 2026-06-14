@@ -925,7 +925,7 @@ export default function HomeScreen() {
         query = query.eq('team_id', selectedTeamId).is('project_id', null);
       } else if (session) {
         query = query.or(
-          `and(team_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
+          `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
         );
       }
     }
@@ -969,7 +969,7 @@ export default function HomeScreen() {
       query = query.eq('team_id', selectedTeamId).is('project_id', null);
     } else if (session) {
       query = query.or(
-        `and(team_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id})`
+        `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id})`
       );
     }
 

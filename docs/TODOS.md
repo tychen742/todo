@@ -149,7 +149,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Project Management
 
-- **Show unassigned project tasks in Workspace (config option)** — project owners should be able to opt-in to seeing the unassigned tasks they created in a project on their Workspace todo list, displayed greyed out to signal they still need to be assigned. Current behavior: project tasks only appear in Workspace if `assigned_to = me` (accepted) or `created_by = me` with `team_id = null`. The greyed-out unassigned view is a per-user toggle, not a default, to avoid cluttering the Workspace with every project task. Save preference in user settings.
+- **Show unassigned project tasks in Workspace (config option)** — project owners should be able to opt-in to seeing the unassigned tasks they created in a project on their Workspace todo list, displayed greyed out to signal they still need to be assigned. **Current behavior (decided):** project tasks never appear in Workspace unless `assigned_to = me AND accepted_at is not null`. Only pure personal todos (`team_id = null, project_id = null, created_by = me`) appear by default. The greyed-out unassigned view is a future per-user toggle, not a default. Save preference in user settings.
 
 - Add projects as bounded work that can end or close. ✓ Done.
 - Add project-scoped todos. ✓ Done.
@@ -217,7 +217,6 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Add built-in skins/themes (e.g. light, dark, high-contrast, color accents) for users to choose from without requiring custom branding.
 - Keep theme selection as a personal preference; team or company branding can override or extend it.
 - **Display Density** — add a density picker (Compact / Cozy / Roomy) similar to Outlook's Display Density menu. Controls `paddingVertical` on all rows and section headers. Compact: 4px vertical. Cozy: 7px (current default). Roomy: 12px. The chosen value replaces the `micro` spacing token at runtime and applies uniformly to every row in every pane (tasks, completed, inbox). Persist the selection in user prefs. Show a checkmark next to the active choice like Outlook does.
-
 
 this is a good UI element to have.
 ![alt text](image.png)
