@@ -942,3 +942,93 @@ begin
     where o.id = v_org_id;
 end;
 $$;
+
+-- ============================================================
+-- Project members: explicit per-project membership with roles.
+-- ============================================================
+
+create table if not exists project_members (
+  project_id uuid not null references projects(id) on delete cascade,
+  user_id    uuid not null references profiles(id) on delete cascade,
+  role       text not null default 'member'
+    check (role in ('owner', 'member')),
+  created_at timestamptz not null default now(),
+  primary key (project_id, user_id)
+);
+
+create index if not exists project_members_project_id_idx on project_members (project_id);
+create index if not exists project_members_user_id_idx    on project_members (user_id);
+
+alter table project_members enable row level security;
+
+-- Security-definer helper to avoid RLS recursion when policies reference project_members.
+create or replace function public.is_project_member(p_project_id uuid, p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from project_members
+    where project_id = p_project_id and user_id = p_user_id
+  );
+$$;
+
+drop policy if exists "Project members can read project membership" on project_members;
+create policy "Project members can read project membership"
+  on project_members for select to authenticated
+  using (
+    exists (
+      select 1 from projects p
+      where p.id = project_members.project_id
+        and (
+          p.created_by = auth.uid()
+          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+          or public.is_project_member(p.id, auth.uid())
+        )
+    )
+  );
+
+drop policy if exists "Project owners can manage project membership" on project_members;
+create policy "Project owners can manage project membership"
+  on project_members for all to authenticated
+  using (
+    exists (
+      select 1 from projects p
+      where p.id = project_members.project_id
+        and (
+          p.created_by = auth.uid()
+          or public.is_project_member(p.id, auth.uid())
+        )
+    )
+  )
+  with check (
+    exists (
+      select 1 from projects p
+      where p.id = project_members.project_id
+        and (
+          p.created_by = auth.uid()
+          or public.is_project_member(p.id, auth.uid())
+        )
+    )
+  );
+
+-- Auto-insert the project creator as owner whenever a project row is inserted.
+create or replace function public.handle_new_project()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into project_members (project_id, user_id, role)
+  values (new.id, new.created_by, 'owner')
+  on conflict (project_id, user_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_project_created on projects;
+create trigger on_project_created
+  after insert on projects
+  for each row execute procedure public.handle_new_project();

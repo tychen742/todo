@@ -819,46 +819,79 @@ export default function HomeScreen() {
   }, [selectedProjectId]);
 
   const loadMembers = useCallback(async () => {
-    // Resolve the team to load members from: direct team selection or the project's linked team.
-    const teamId = selectedTeamId ?? (
-      selectedProjectId
-        ? (projects.find((p) => p.id === selectedProjectId)?.team_id ?? null)
-        : null
-    );
-    if (!teamId) {
-      setMembers([]);
-      setNewTodoAssignee(null);
+    if (selectedProjectId) {
+      // Load explicit project members.
+      const { data: pmData, error: pmError } = await supabase
+        .from('project_members')
+        .select('user_id, role')
+        .eq('project_id', selectedProjectId);
+      if (pmError) { setError(pmError.message); return; }
+
+      // Also union team members if the project is linked to a team.
+      const project = projects.find((p) => p.id === selectedProjectId);
+      const teamId = project?.team_id ?? null;
+      let teamMemberships: { user_id: string; role: string }[] = [];
+      if (teamId) {
+        const { data: tmData } = await supabase
+          .from('team_members')
+          .select('user_id, role')
+          .eq('team_id', teamId);
+        teamMemberships = tmData ?? [];
+      }
+
+      // Deduplicate; project_members role takes precedence.
+      const roleMap = new Map<string, string>();
+      teamMemberships.forEach((m) => roleMap.set(m.user_id, m.role));
+      (pmData ?? []).forEach((m) => roleMap.set(m.user_id, m.role));
+
+      const ids = [...roleMap.keys()];
+      if (ids.length === 0) { setMembers([]); setNewTodoAssignee(null); return; }
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, display_name')
+        .in('id', ids);
+      if (profileError) { setError(profileError.message); return; }
+
+      const profilesById = new Map((profileData ?? []).map((p) => [p.id, p]));
+      const nextMembers: Member[] = ids
+        .filter((id) => profilesById.has(id))
+        .map((id) => ({
+          user_id: id,
+          role: roleMap.get(id) ?? 'member',
+          email: profilesById.get(id)!.email,
+          display_name: profilesById.get(id)!.display_name ?? null,
+        }));
+
+      setMembers(nextMembers);
+      setNewTodoAssignee((current) => {
+        if (current && nextMembers.some((m) => m.user_id === current)) return current;
+        return session?.user.id ?? nextMembers[0]?.user_id ?? null;
+      });
+      setError('');
       return;
     }
+
+    // Team-only context (no project selected).
+    const teamId = selectedTeamId;
+    if (!teamId) { setMembers([]); setNewTodoAssignee(null); return; }
 
     const { data: membershipData, error: membershipError } = await supabase
       .from('team_members')
       .select('user_id, role')
       .eq('team_id', teamId)
       .order('created_at', { ascending: true });
-
-    if (membershipError) {
-      setError(membershipError.message);
-      return;
-    }
+    if (membershipError) { setError(membershipError.message); return; }
 
     const memberships = membershipData ?? [];
     const ids = memberships.map((member) => member.user_id);
-    if (ids.length === 0) {
-      setMembers([]);
-      setNewTodoAssignee(null);
-      return;
-    }
+    if (ids.length === 0) { setMembers([]); setNewTodoAssignee(null); return; }
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('id, email, display_name')
       .in('id', ids);
-
-    if (profileError) {
-      setError(profileError.message);
-      return;
-    }
+    if (profileError) { setError(profileError.message); return; }
 
     const profilesById = new Map((profileData ?? []).map((profile) => [profile.id, profile]));
     const nextMembers = memberships.map((member) => ({
@@ -870,9 +903,7 @@ export default function HomeScreen() {
 
     setMembers(nextMembers);
     setNewTodoAssignee((current) => {
-      if (current && nextMembers.some((member) => member.user_id === current)) {
-        return current;
-      }
+      if (current && nextMembers.some((member) => member.user_id === current)) return current;
       return session?.user.id ?? nextMembers[0]?.user_id ?? null;
     });
     setError('');
@@ -1318,6 +1349,14 @@ export default function HomeScreen() {
       .map((result) => result.data)
       .filter((phase): phase is Phase => !!phase);
 
+    // Auto-add the creator to the linked team so they can assign tasks.
+    if (newProjectTeamId) {
+      await supabase
+        .from('team_members')
+        .insert({ team_id: newProjectTeamId, user_id: session.user.id, role: 'member' })
+        .select();
+    }
+
     setProjectName('');
     setNewProjectTeamId(null);
     setProjects((prev) => [...prev, project]);
@@ -1330,12 +1369,21 @@ export default function HomeScreen() {
   }
 
   async function linkProjectTeam(teamId: string | null) {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId || !session) return;
     const { error } = await supabase
       .from('projects')
       .update({ team_id: teamId })
       .eq('id', selectedProjectId);
     if (error) { setError(error.message); return; }
+
+    // Auto-add the project owner to the linked team so they can assign tasks.
+    if (teamId) {
+      await supabase
+        .from('team_members')
+        .insert({ team_id: teamId, user_id: session.user.id, role: 'member' })
+        .select();
+    }
+
     setProjects((prev) =>
       prev.map((p) => p.id === selectedProjectId ? { ...p, team_id: teamId } : p)
     );
@@ -3402,27 +3450,46 @@ export default function HomeScreen() {
 
       {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectViewModeBar}>
-          {(['plan', 'kanban'] as ProjectViewMode[]).map((mode) => (
-            <Pressable
-              key={mode}
-              onPress={() => setProjectViewMode(mode)}
-              style={[
-                styles.projectViewModeButton,
-                projectViewMode === mode && styles.projectViewModeButtonActive,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`Show ${mode} view`}
-            >
-              <Text
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {(['plan', 'kanban'] as ProjectViewMode[]).map((mode) => (
+              <Pressable
+                key={mode}
+                onPress={() => setProjectViewMode(mode)}
                 style={[
-                  styles.projectViewModeButtonText,
-                  projectViewMode === mode && styles.projectViewModeButtonTextActive,
+                  styles.projectViewModeButton,
+                  projectViewMode === mode && styles.projectViewModeButtonActive,
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${mode} view`}
               >
-                {mode === 'plan' ? 'Plan' : 'Kanban'}
-              </Text>
-            </Pressable>
-          ))}
+                <Text
+                  style={[
+                    styles.projectViewModeButtonText,
+                    projectViewMode === mode && styles.projectViewModeButtonTextActive,
+                  ]}
+                >
+                  {mode === 'plan' ? 'Plan' : 'Kanban'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {members.length > 0 && (
+            <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+              {members.map((m) => {
+                const name = profileDisplayName(m);
+                const initials = (name[0] ?? '?').toUpperCase();
+                const color = pickAvatarColor(m.email);
+                return (
+                  <InboxAssignerAvatar
+                    key={m.user_id}
+                    initials={initials}
+                    color={color}
+                    tooltip={name}
+                  />
+                );
+              })}
+            </View>
+          )}
         </View>
       )}
 
@@ -3490,34 +3557,6 @@ export default function HomeScreen() {
                         <Text style={styles.backlogCancelText}>✕</Text>
                       </Pressable>
                     </View>
-                    {members.length > 0 && (
-                      <View style={styles.colAssigneeRow}>
-                        {members.map((m) => {
-                          const selected = columnAssignees['backlog'] === m.user_id;
-                          const name = profileDisplayName(m);
-                          return (
-                            <Pressable
-                              key={m.user_id}
-                              onPress={() => setColumnAssignees((prev) => ({
-                                ...prev,
-                                backlog: selected ? null : m.user_id,
-                              }))}
-                              style={[styles.colAssigneeAvatar, { backgroundColor: pickAvatarColor(m.email) }, selected && styles.colAssigneeAvatarSelected]}
-                              hitSlop={4}
-                            >
-                              <Text style={styles.colAssigneeInitial}>
-                                {(name[0] ?? '?').toUpperCase()}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                        {columnAssignees['backlog'] && (
-                          <Text style={styles.colAssigneeName} numberOfLines={1}>
-                            {profileDisplayName(members.find((m) => m.user_id === columnAssignees['backlog'])!)}
-                          </Text>
-                        )}
-                      </View>
-                    )}
                   </View>
                 ) : (
                   <Pressable onPress={() => setBacklogInputVisible(true)} style={styles.backlogAddBtn}>
@@ -3580,34 +3619,6 @@ export default function HomeScreen() {
                       <Text style={styles.kanbanAddBtnText}>+</Text>
                     </Pressable>
                   </View>
-                  {members.length > 0 && (
-                    <View style={styles.colAssigneeRow}>
-                      {members.map((m) => {
-                        const selected = columnAssignees[phase.id] === m.user_id;
-                        const name = profileDisplayName(m);
-                        return (
-                          <Pressable
-                            key={m.user_id}
-                            onPress={() => setColumnAssignees((prev) => ({
-                              ...prev,
-                              [phase.id]: selected ? null : m.user_id,
-                            }))}
-                            style={[styles.colAssigneeAvatar, { backgroundColor: pickAvatarColor(m.email) }, selected && styles.colAssigneeAvatarSelected]}
-                            hitSlop={4}
-                          >
-                            <Text style={styles.colAssigneeInitial}>
-                              {(name[0] ?? '?').toUpperCase()}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                      {columnAssignees[phase.id] && (
-                        <Text style={styles.colAssigneeName} numberOfLines={1}>
-                          {profileDisplayName(members.find((m) => m.user_id === columnAssignees[phase.id])!)}
-                        </Text>
-                      )}
-                    </View>
-                  )}
                   <ScrollView style={styles.kanbanColBody} showsVerticalScrollIndicator={false}>
                     <KanbanDropLane
                       id={`kanban-lane-${phase.id}`}
@@ -7409,12 +7420,12 @@ const styles = StyleSheet.create({
   projectViewModeBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#fff',
-    gap: 8,
   },
   projectViewModeButton: {
     minHeight: 32,

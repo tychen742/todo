@@ -149,6 +149,8 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Project Management
 
+- **Show unassigned project tasks in Workspace (config option)** — project owners should be able to opt-in to seeing the unassigned tasks they created in a project on their Workspace todo list, displayed greyed out to signal they still need to be assigned. Current behavior: project tasks only appear in Workspace if `assigned_to = me` (accepted) or `created_by = me` with `team_id = null`. The greyed-out unassigned view is a per-user toggle, not a default, to avoid cluttering the Workspace with every project task. Save preference in user settings.
+
 - Add projects as bounded work that can end or close. ✓ Done.
 - Add project-scoped todos. ✓ Done.
 - Add project phases for lifecycle planning. ✓ Done.
