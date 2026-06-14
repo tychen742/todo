@@ -518,6 +518,7 @@ export default function HomeScreen() {
   const [editDraftEstimate, setEditDraftEstimate] = useState('');
   const [editDraftScheduledStartAt, setEditDraftScheduledStartAt] = useState('');
   const [editDraftProjectId, setEditDraftProjectId] = useState<string | null>(null);
+  const [editDraftAssignedTo, setEditDraftAssignedTo] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [displayNameInput, setDisplayNameInput] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -1793,18 +1794,53 @@ export default function HomeScreen() {
     setError('');
   }
 
-  function openEditModal(todo: Todo) {
+  async function openEditModal(todo: Todo) {
     setEditTodo(todo);
     setEditDraftText(todo.text);
     setEditDraftNote(todo.note ?? '');
     setEditDraftPhaseId(todo.phase_id ?? null);
     setEditDraftProjectId(todo.project_id ?? null);
+    setEditDraftAssignedTo(todo.assigned_to ?? null);
     setEditDraftDueDate(todo.due_date);
     setEditDraftPriority(todo.priority);
     setEditDraftEstimate(todo.estimate ?? '');
     setEditDraftScheduledStartAt(toDateTimeInputValue(todo.scheduled_start_at));
     const due = parseDateValue(todo.due_date);
     setEditDraftDueDateMonth(due ? new Date(due.getFullYear(), due.getMonth(), 1) : new Date());
+
+    // Load members for this todo's project/team if not already in that context.
+    const needsProjectMembers = todo.project_id && todo.project_id !== selectedProjectId;
+    const needsTeamMembers = !todo.project_id && todo.team_id && todo.team_id !== selectedTeamId;
+    if (needsProjectMembers || needsTeamMembers) {
+      const roleMap = new Map<string, string>();
+      if (todo.project_id) {
+        const { data: pmData } = await supabase
+          .from('project_members').select('user_id, role').eq('project_id', todo.project_id);
+        (pmData ?? []).forEach((m) => roleMap.set(m.user_id, m.role));
+        const proj = projects.find((p) => p.id === todo.project_id);
+        if (proj?.team_id) {
+          const { data: tmData } = await supabase
+            .from('team_members').select('user_id, role').eq('team_id', proj.team_id);
+          (tmData ?? []).forEach((m) => { if (!roleMap.has(m.user_id)) roleMap.set(m.user_id, m.role); });
+        }
+      } else if (todo.team_id) {
+        const { data: tmData } = await supabase
+          .from('team_members').select('user_id, role').eq('team_id', todo.team_id);
+        (tmData ?? []).forEach((m) => roleMap.set(m.user_id, m.role));
+      }
+      const ids = [...roleMap.keys()];
+      if (ids.length > 0) {
+        const { data: profileData } = await supabase
+          .from('profiles').select('id, email, display_name').in('id', ids);
+        const profilesById = new Map((profileData ?? []).map((p) => [p.id, p]));
+        setMembers(ids.filter((id) => profilesById.has(id)).map((id) => ({
+          user_id: id,
+          role: roleMap.get(id) ?? 'member',
+          email: profilesById.get(id)!.email,
+          display_name: profilesById.get(id)!.display_name ?? null,
+        })));
+      }
+    }
   }
 
   function closeEditModal() {
@@ -1829,9 +1865,16 @@ export default function HomeScreen() {
       return;
     }
 
+    const assigneeChanged = editDraftAssignedTo !== editTodo.assigned_to;
+    const assigned_to = editDraftAssignedTo;
+    const assigned_at = assigneeChanged
+      ? (assigned_to ? new Date().toISOString() : null)
+      : editTodo.assigned_at;
+    const accepted_at = assigneeChanged ? null : editTodo.accepted_at;
+
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ text, note, phase_id, project_id, due_date: editDraftDueDate, priority: editDraftPriority, estimate, scheduled_start_at: scheduledStartAt })
+      .update({ text, note, phase_id, project_id, due_date: editDraftDueDate, priority: editDraftPriority, estimate, scheduled_start_at: scheduledStartAt, assigned_to, assigned_at, accepted_at })
       .eq('id', editTodo.id);
 
     if (updateError) {
@@ -1852,6 +1895,9 @@ export default function HomeScreen() {
               priority: editDraftPriority,
               estimate,
               scheduled_start_at: scheduledStartAt,
+              assigned_to,
+              assigned_at: assigned_at ?? null,
+              accepted_at: accepted_at ?? null,
             }
           : item
       )
@@ -4777,26 +4823,30 @@ export default function HomeScreen() {
                 </>
               )}
 
-              {isProject && phases.length > 0 && (
+              {members.length > 0 && (
                 <>
-                  <Text style={styles.editModalSectionLabel}>Phase</Text>
+                  <View style={styles.pickerSectionDivider}>
+                    <View style={styles.pickerSectionLine} />
+                    <Text style={styles.pickerSectionLabel}>Assign to</Text>
+                    <View style={styles.pickerSectionLine} />
+                  </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
                     <Pressable
-                      onPress={() => setEditDraftPhaseId(null)}
-                      style={[styles.phasePill, !editDraftPhaseId && styles.phasePillActive]}
+                      onPress={() => setEditDraftAssignedTo(null)}
+                      style={[styles.phasePill, !editDraftAssignedTo && styles.phasePillActive]}
                     >
-                      <Text style={[styles.phasePillText, !editDraftPhaseId && styles.phasePillTextActive]}>
+                      <Text style={[styles.phasePillText, !editDraftAssignedTo && styles.phasePillTextActive]}>
                         None
                       </Text>
                     </Pressable>
-                    {phases.map((phase) => (
+                    {members.map((m) => (
                       <Pressable
-                        key={phase.id}
-                        onPress={() => setEditDraftPhaseId(phase.id)}
-                        style={[styles.phasePill, editDraftPhaseId === phase.id && styles.phasePillActive]}
+                        key={m.user_id}
+                        onPress={() => setEditDraftAssignedTo(m.user_id)}
+                        style={[styles.phasePill, editDraftAssignedTo === m.user_id && styles.phasePillActive]}
                       >
-                        <Text style={[styles.phasePillText, editDraftPhaseId === phase.id && styles.phasePillTextActive]}>
-                          {phase.name}
+                        <Text style={[styles.phasePillText, editDraftAssignedTo === m.user_id && styles.phasePillTextActive]}>
+                          {profileDisplayName(m)}
                         </Text>
                       </Pressable>
                     ))}
