@@ -333,13 +333,10 @@ function KanbanCard({ todo, assigneeEmail, onToggle, onDelete, onEdit, onCycleAs
         <View style={kcs.titleRow}>
           {todo.is_milestone && <Text style={kcs.milestoneIcon}>◆</Text>}
           <Text style={[kcs.text, todo.done && kcs.textDone]} numberOfLines={2}>{todo.text}</Text>
-        </View>
-        <View style={kcs.meta}>
-          {priorityStyle && <Text style={[kcs.badge, priorityStyle]}>{todo.priority}</Text>}
-          {dueLabel && <Text style={[kcs.due, overdue && kcs.dueOverdue]}>{dueLabel}</Text>}
           <Pressable
             onPress={(e) => { e.stopPropagation?.(); onCycleAssignee(); }}
             hitSlop={6}
+            style={kcs.assigneeInline}
           >
             {hasAssignee && avatarColor ? (
               <View style={[kcs.assigneeAvatar, { backgroundColor: avatarColor }]}>
@@ -350,6 +347,12 @@ function KanbanCard({ todo, assigneeEmail, onToggle, onDelete, onEdit, onCycleAs
             )}
           </Pressable>
         </View>
+        {(priorityStyle || dueLabel) && (
+          <View style={kcs.meta}>
+            {priorityStyle && <Text style={[kcs.badge, priorityStyle]}>{todo.priority}</Text>}
+            {dueLabel && <Text style={[kcs.due, overdue && kcs.dueOverdue]}>{dueLabel}</Text>}
+          </View>
+        )}
       </Pressable>
       <Pressable onPress={onDelete} hitSlop={8}><Text style={kcs.del}>✕</Text></Pressable>
     </View>
@@ -363,9 +366,10 @@ const kcs = StyleSheet.create({
   boxDone: { backgroundColor: '#9ca3af', borderColor: '#9ca3af' },
   checkmark: { color: '#fff', fontSize: 11, fontWeight: '700' },
   body: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
-  milestoneIcon: { fontSize: 9, color: '#d97706', marginTop: 3, flexShrink: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  milestoneIcon: { fontSize: 9, color: '#d97706', flexShrink: 0 },
   text: { flex: 1, fontSize: 13, color: '#111827', lineHeight: 18 },
+  assigneeInline: { flexShrink: 0 },
   textDone: { textDecorationLine: 'line-through', color: '#9ca3af' },
   meta: { flexDirection: 'row', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' },
   badge: { fontSize: 11, borderRadius: 4, overflow: 'hidden', paddingHorizontal: 5, paddingVertical: 2, fontWeight: '600' },
