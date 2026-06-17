@@ -693,6 +693,32 @@ as $$
   limit 1;
 $$;
 
+create or replace function public.search_profiles(p_query text, p_limit integer default 8)
+returns table(id uuid, email text, display_name text)
+language sql
+stable
+as $$
+  with params as (
+    select btrim(coalesce(p_query, '')) as q
+  )
+  select p.id, p.email, p.display_name
+  from profiles p
+  cross join params
+  where params.q <> ''
+    and (
+      p.email ilike '%' || params.q || '%'
+      or coalesce(p.display_name, '') ilike '%' || params.q || '%'
+    )
+  order by
+    case
+      when coalesce(p.display_name, '') ilike params.q || '%' then 0
+      when p.email ilike params.q || '%' then 1
+      else 2
+    end,
+    coalesce(p.display_name, p.email)
+  limit greatest(1, least(coalesce(p_limit, 8), 20));
+$$;
+
 -- Batch-update todo positions in a single round trip after a drag reorder.
 -- Accepts a JSON array of {id, position} objects and updates each row,
 -- respecting the same access rules as the todos UPDATE policy.

@@ -83,6 +83,8 @@ type Profile = {
   status: string | null;
 };
 
+type ProfileSummary = Pick<Profile, 'id' | 'email' | 'display_name'>;
+
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
 type SortField = 'text' | 'priority' | 'due_date' | 'created_at';
 type CreateTarget = 'team' | 'organization' | 'project';
@@ -470,6 +472,8 @@ export default function HomeScreen() {
   const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>('plan');
   const [workflowColumnLabels, setWorkflowColumnLabels] = useState(defaultWorkflowColumnLabels);
   const [projectAccessQuery, setProjectAccessQuery] = useState('');
+  const [projectAccessPeople, setProjectAccessPeople] = useState<ProfileSummary[]>([]);
+  const [projectAccessSearchLoading, setProjectAccessSearchLoading] = useState(false);
   const [projectAccessBusy, setProjectAccessBusy] = useState(false);
   const [phasePickerTodo, setPhasePickerTodo] = useState<Todo | null>(null);
   const [addingPhase, setAddingPhase] = useState(false);
@@ -648,6 +652,49 @@ export default function HomeScreen() {
       .filter((team) => !query || team.name.toLowerCase().includes(query))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [projectAccessQuery, teams]);
+  const projectAccessPeopleVisible = useMemo(
+    () => projectAccessPeople.filter((person) => !memberById.has(person.id)),
+    [memberById, projectAccessPeople]
+  );
+
+  useEffect(() => {
+    if (!linkingProjectTeam) {
+      setProjectAccessPeople([]);
+      setProjectAccessSearchLoading(false);
+      return;
+    }
+
+    const query = projectAccessQuery.trim();
+    if (!query) {
+      setProjectAccessPeople([]);
+      setProjectAccessSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setProjectAccessSearchLoading(true);
+
+    const timeout = setTimeout(async () => {
+      const { data, error } = await supabase.rpc('search_profiles', {
+        p_query: query,
+        p_limit: 8,
+      });
+      if (cancelled) return;
+      if (error) {
+        setProjectAccessSearchLoading(false);
+        setError(error.message);
+        return;
+      }
+
+      setProjectAccessPeople((data ?? []) as ProfileSummary[]);
+      setProjectAccessSearchLoading(false);
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [linkingProjectTeam, projectAccessQuery]);
 
   function showToast(text: string) {
     setToast(text);
@@ -1415,7 +1462,9 @@ export default function HomeScreen() {
 
   function openProjectAccessModal() {
     setProjectAccessQuery('');
+    setProjectAccessPeople([]);
     setProjectAccessBusy(false);
+    setProjectAccessSearchLoading(false);
     setError('');
     setLinkingProjectTeam(true);
   }
@@ -1423,48 +1472,69 @@ export default function HomeScreen() {
   function closeProjectAccessModal() {
     setLinkingProjectTeam(false);
     setProjectAccessQuery('');
+    setProjectAccessPeople([]);
     setProjectAccessBusy(false);
+    setProjectAccessSearchLoading(false);
     setError('');
   }
 
-  async function addProjectMemberByEmail(rawEmail: string) {
-    if (!selectedProjectId) return;
-    const normalizedEmail = rawEmail.trim().toLowerCase();
-    if (!normalizedEmail) return;
-
-    setProjectAccessBusy(true);
-    const { data: rows, error: profileError } = await supabase
-      .rpc('find_profile_by_email', { p_email: normalizedEmail });
-    if (profileError) {
-      setProjectAccessBusy(false);
-      setError(profileError.message);
-      return;
-    }
-
-    const profileRow = rows?.[0] ?? null;
-    if (!profileRow) {
-      setProjectAccessBusy(false);
-      setError('No account found for that email. They must sign in at least once before you can add them.');
-      return;
-    }
+  async function addProjectMember(profile: ProfileSummary) {
+    if (!selectedProjectId) return false;
 
     const { error: insertError } = await supabase
       .from('project_members')
       .upsert({
         project_id: selectedProjectId,
-        user_id: profileRow.id,
+        user_id: profile.id,
         role: 'member',
       });
 
-    setProjectAccessBusy(false);
     if (insertError) {
       setError(insertError.message);
-      return;
+      return false;
     }
 
     setProjectAccessQuery('');
-    closeProjectAccessModal();
-    loadMembers();
+    setProjectAccessPeople([]);
+    await loadMembers();
+    showToast(`${profileDisplayName(profile)} added to project.`);
+    return true;
+  }
+
+  async function addProjectMemberByProfile(profile: ProfileSummary) {
+    if (!selectedProjectId || projectAccessBusy) return;
+    setProjectAccessBusy(true);
+    try {
+      await addProjectMember(profile);
+    } finally {
+      setProjectAccessBusy(false);
+    }
+  }
+
+  async function addProjectMemberByEmail(rawEmail: string) {
+    if (!selectedProjectId || projectAccessBusy) return;
+    const normalizedEmail = rawEmail.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    setProjectAccessBusy(true);
+    try {
+      const { data: rows, error: profileError } = await supabase
+        .rpc('find_profile_by_email', { p_email: normalizedEmail });
+      if (profileError) {
+        setError(profileError.message);
+        return;
+      }
+
+      const profileRow = rows?.[0] ?? null;
+      if (!profileRow) {
+        setError('No account found for that email. They must sign in at least once before you can add them.');
+        return;
+      }
+
+      await addProjectMember(profileRow);
+    } finally {
+      setProjectAccessBusy(false);
+    }
   }
 
   function openCreateTarget(target: CreateTarget) {
@@ -4637,27 +4707,74 @@ export default function HomeScreen() {
           <Pressable style={styles.calendarCard}>
             <Text style={styles.editModalTitle}>Project access</Text>
             <Text style={styles.editModalSectionLabel}>
-              Add a team to share its members, or add a person directly by email.
+              Add a team to share its members, or search people and add them directly.
             </Text>
 
             <TextInput
               style={styles.editModalInput}
               value={projectAccessQuery}
               onChangeText={(v) => { setProjectAccessQuery(v); if (error) setError(''); }}
-              placeholder="Search teams or type email"
+              placeholder="Search people or teams"
               placeholderTextColor="#9ca3af"
               autoCapitalize="none"
-              keyboardType="email-address"
-              returnKeyType="done"
+              keyboardType="default"
+              returnKeyType="search"
               autoFocus
               onSubmitEditing={() => {
                 const value = projectAccessQuery.trim();
                 if (!value) return;
+                if (projectAccessPeopleVisible.length === 1) {
+                  addProjectMemberByProfile(projectAccessPeopleVisible[0]);
+                  return;
+                }
                 if (value.includes('@')) {
                   addProjectMemberByEmail(value);
                 }
               }}
             />
+
+            <View style={styles.projectAccessSection}>
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>People</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+
+              {!projectAccessQuery.trim() ? (
+                <Text style={styles.editModalSectionLabel}>
+                  Type a name or email to search people.
+                </Text>
+              ) : projectAccessSearchLoading ? (
+                <Text style={styles.editModalSectionLabel}>
+                  Searching people...
+                </Text>
+              ) : projectAccessPeopleVisible.length > 0 ? projectAccessPeopleVisible.map((person) => {
+                const name = profileDisplayName(person);
+                const initials = (name[0] ?? '?').toUpperCase();
+                const color = pickAvatarColor(person.email);
+                return (
+                  <Pressable
+                    key={person.id}
+                    onPress={() => addProjectMemberByProfile(person)}
+                    disabled={projectAccessBusy}
+                    style={[styles.teamLinkRow, projectAccessBusy && styles.manageMemberActionDisabled]}
+                  >
+                    <View style={[styles.teamLinkDot, { backgroundColor: color }]}>
+                      <Text style={styles.teamLinkDotText}>{initials}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.teamLinkRowText} numberOfLines={1}>{name}</Text>
+                      <Text style={styles.teamLinkMeta}>{person.email}</Text>
+                    </View>
+                    <Text style={styles.projectAccessAddGlyph}>+</Text>
+                  </Pressable>
+                );
+              }) : (
+                <Text style={styles.editModalSectionLabel}>
+                  No people match this search.
+                </Text>
+              )}
+            </View>
 
             <View style={styles.projectAccessSection}>
               <View style={styles.pickerSectionDivider}>
@@ -4696,7 +4813,7 @@ export default function HomeScreen() {
             <View style={styles.projectAccessSection}>
               <View style={styles.pickerSectionDivider}>
                 <View style={styles.pickerSectionLine} />
-                <Text style={styles.pickerSectionLabel}>Member</Text>
+                <Text style={styles.pickerSectionLabel}>Email fallback</Text>
                 <View style={styles.pickerSectionLine} />
               </View>
               <Pressable
@@ -7885,6 +8002,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6b7280',
     marginTop: 2,
+  },
+  projectAccessAddGlyph: {
+    fontSize: 20,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#6366f1',
+    flexShrink: 0,
   },
   manageMemberActionDanger: {
     color: '#dc2626',

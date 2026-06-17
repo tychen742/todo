@@ -19,6 +19,8 @@ Application profile for each Supabase Auth user.
 - `display_name`
 - `created_at`
 
+The project access modal uses a `search_profiles` RPC to typeahead people by display name or email. The RPC still respects `profiles` RLS, so it only returns people the signed-in user is allowed to see.
+
 ### `teams`
 
 Ongoing team workspaces.
@@ -192,3 +194,5 @@ Expected fields:
 - `created_at`
 
 Project membership should include the creator as owner so the project view can show the owner in the header and expose them as an assignee candidate for project-scoped todos.
+
+The project header `+` action opens a project-access modal where the creator/owner can add team scope or add individual people from the typeahead search.
