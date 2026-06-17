@@ -181,6 +181,12 @@ Implementation rules:
 - The Done Kanban lane sets `done = true` and `completed_at`; moving out of Done clears completion.
 - Task rows can show both concepts: phase/context and workflow-state icon.
 
+## 2026-06-16: Project Creator Is the Visible Owner
+
+Decision: the user who creates a project is its owner, and the project view should surface that owner name in the Plan/Kanban header area.
+
+Reason: project-scoped task assignment works better when ownership is explicit in the UI. The owner is already the canonical default assignee candidate for project work, so the project header should make that relationship visible instead of hiding it behind avatars only.
+
 ## 2026-06-10: Icon and Avatar Size Scale
 
 Decision: icons and avatars use a fixed size scale. New UI should choose from these sizes instead of introducing one-off dimensions.

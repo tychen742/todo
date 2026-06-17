@@ -187,6 +187,8 @@ Expected fields:
 - `team_id`
 - `name`
 - `status`
-- `created_by`
+- `created_by` - the creator is the project owner
 - `closed_at`
 - `created_at`
+
+Project membership should include the creator as owner so the project view can show the owner in the header and expose them as an assignee candidate for project-scoped todos.

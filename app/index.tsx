@@ -65,6 +65,7 @@ type Project = {
   id: string;
   name: string;
   team_id: string | null;
+  created_by: string;
   archived_at: string | null;
 };
 
@@ -631,6 +632,14 @@ export default function HomeScreen() {
     () => new Map(members.map((member) => [member.user_id, member])),
     [members]
   );
+  const selectedProjectOwner = useMemo(() => {
+    if (!selectedProject?.created_by) return null;
+    return memberById.get(selectedProject.created_by) ?? null;
+  }, [memberById, selectedProject?.created_by]);
+  const projectMemberAvatars = useMemo(() => {
+    if (!selectedProject?.created_by) return members;
+    return members.filter((member) => member.user_id !== selectedProject.created_by);
+  }, [members, selectedProject?.created_by]);
 
   function showToast(text: string) {
     setToast(text);
@@ -789,7 +798,7 @@ export default function HomeScreen() {
     if (!session) return;
     const { data, error: err } = await supabase
       .from('projects')
-      .select('id, name, team_id, archived_at')
+      .select('id, name, team_id, created_by, archived_at')
       .is('archived_at', null)
       .order('created_at', { ascending: true });
     if (err) return;
@@ -798,7 +807,7 @@ export default function HomeScreen() {
       const { data: seeded } = await supabase
         .from('projects')
         .insert({ name: 'Individual' })
-        .select('id, name, team_id, archived_at')
+        .select('id, name, team_id, created_by, archived_at')
         .single();
       setProjects(seeded ? [seeded as Project] : []);
     } else {
@@ -844,6 +853,10 @@ export default function HomeScreen() {
       const roleMap = new Map<string, string>();
       teamMemberships.forEach((m) => roleMap.set(m.user_id, m.role));
       (pmData ?? []).forEach((m) => roleMap.set(m.user_id, m.role));
+      const ownerId = selectedProject?.created_by ?? null;
+      if (ownerId) {
+        roleMap.set(ownerId, 'owner');
+      }
 
       const ids = [...roleMap.keys()];
       if (ids.length === 0) { setMembers([]); setNewTodoAssignee(null); return; }
@@ -908,7 +921,7 @@ export default function HomeScreen() {
       return session?.user.id ?? nextMembers[0]?.user_id ?? null;
     });
     setError('');
-  }, [selectedTeamId, selectedProjectId, projects, session]);
+  }, [selectedTeamId, selectedProjectId, selectedProject?.created_by, projects, session]);
 
   const loadTodos = useCallback(async () => {
     setLoading(true);
@@ -1323,7 +1336,7 @@ export default function HomeScreen() {
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .insert({ name, created_by: session.user.id, team_id: newProjectTeamId })
-      .select('id, name, team_id, archived_at')
+      .select('id, name, team_id, created_by, archived_at')
       .single();
 
     if (projectError) {
@@ -3519,23 +3532,40 @@ export default function HomeScreen() {
               </Pressable>
             ))}
           </View>
-          {members.length > 0 && (
-            <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-              {members.map((m) => {
-                const name = profileDisplayName(m);
-                const initials = (name[0] ?? '?').toUpperCase();
-                const color = pickAvatarColor(m.email);
-                return (
-                  <InboxAssignerAvatar
-                    key={m.user_id}
-                    initials={initials}
-                    color={color}
-                    tooltip={name}
-                  />
-                );
-              })}
-            </View>
-          )}
+          <View style={styles.projectViewModeMeta}>
+            {selectedProjectOwner && (
+              <View style={styles.projectOwnerBadge}>
+                <InboxAssignerAvatar
+                  initials={(profileDisplayName(selectedProjectOwner)[0] ?? '?').toUpperCase()}
+                  color={pickAvatarColor(selectedProjectOwner.email)}
+                  tooltip={`Project owner: ${profileDisplayName(selectedProjectOwner)}`}
+                />
+                <View style={styles.projectOwnerBadgeText}>
+                  <Text style={styles.projectOwnerBadgeLabel}>Owner</Text>
+                  <Text style={styles.projectOwnerBadgeName} numberOfLines={1}>
+                    {profileDisplayName(selectedProjectOwner)}
+                  </Text>
+                </View>
+              </View>
+            )}
+            {projectMemberAvatars.length > 0 && (
+              <View style={styles.projectMemberAvatarRow}>
+                {projectMemberAvatars.map((m) => {
+                  const name = profileDisplayName(m);
+                  const initials = (name[0] ?? '?').toUpperCase();
+                  const color = pickAvatarColor(m.email);
+                  return (
+                    <InboxAssignerAvatar
+                      key={m.user_id}
+                      initials={initials}
+                      color={color}
+                      tooltip={name}
+                    />
+                  );
+                })}
+              </View>
+            )}
+          </View>
         </View>
       )}
 
@@ -7476,6 +7506,50 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#fff',
+  },
+  projectViewModeMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  projectOwnerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    backgroundColor: '#eff6ff',
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  projectOwnerBadgeText: {
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  projectOwnerBadgeLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    color: '#2563eb',
+    textTransform: 'uppercase',
+    lineHeight: 12,
+  },
+  projectOwnerBadgeName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1e3a8a',
+    lineHeight: 16,
+  },
+  projectMemberAvatarRow: {
+    flexDirection: 'row',
+    gap: 4,
+    alignItems: 'center',
+    flexShrink: 0,
   },
   projectViewModeButton: {
     minHeight: 32,
