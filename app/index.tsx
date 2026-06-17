@@ -283,9 +283,17 @@ function kanbanDueLabel(value: string): string {
   if (delta === 0) return 'Today';
   if (delta === 1) return 'Tomorrow';
   if (delta === -1) return 'Yesterday';
-  if (delta < 0) return `${-delta}d overdue`;
+  if (delta < 0) return `-${-delta}d`;
   if (delta <= 7) return `${delta}d`;
   return due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function isKanbanDueOverdue(value: string): boolean {
+  const [y, m, d] = value.split('-').map(Number);
+  const due = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((due.getTime() - today.getTime()) / 86400000) < 0;
 }
 
 function formatPhaseDateRange(start: string | null, end: string | null): string {
@@ -317,14 +325,14 @@ function KanbanCard({ todo, assigneeEmail, onToggle, onDelete, onEdit, onCycleAs
     todo.priority === 'high'   ? kcs.priority_high :
     todo.priority === 'low'    ? kcs.priority_low : undefined;
   const dueLabel = todo.due_date ? kanbanDueLabel(todo.due_date) : null;
-  const overdue = dueLabel?.includes('overdue') ?? false;
+  const overdue = todo.due_date ? isKanbanDueOverdue(todo.due_date) : false;
   const hasAssignee = !!todo.assigned_to;
   const avatarColor = assigneeEmail ? pickAvatarColor(assigneeEmail) : undefined;
   const initials = assigneeEmail
     ? assigneeEmail.split('@')[0].split(/[._-]/).filter(p => p).map(p => p[0]).join('').toUpperCase().slice(0, 2) || '?'
     : '?';
   return (
-    <View style={[kcs.card, todo.is_milestone && kcs.cardMilestone]}>
+    <View style={[kcs.card, todo.is_milestone && kcs.cardMilestone, overdue && kcs.cardOverdue]}>
       <Pressable onPress={onToggle} hitSlop={8} style={kcs.checkbox}>
         <View style={[kcs.box, todo.done && kcs.boxDone]}>
           {todo.done && <Text style={kcs.checkmark}>✓</Text>}
@@ -362,6 +370,7 @@ function KanbanCard({ todo, assigneeEmail, onToggle, onDelete, onEdit, onCycleAs
 const kcs = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', padding: 10, marginHorizontal: 8, marginBottom: 6, gap: 8 },
   cardMilestone: { backgroundColor: '#fefce8', borderColor: '#fde68a' },
+  cardOverdue: { backgroundColor: '#fef2f2', borderColor: '#fca5a5' },
   checkbox: { paddingTop: 1 },
   box: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#6366f1', alignItems: 'center', justifyContent: 'center' },
   boxDone: { backgroundColor: '#9ca3af', borderColor: '#9ca3af' },
