@@ -208,6 +208,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Let the assigner choose later whether an assignment also requests acknowledgement or uses email/text delivery.
 - Use acknowledgements to confirm that an assignee has accepted important work.
 - Decide later whether discussion belongs directly on todos/projects, in team channels, or both.
+- Later: if someone outside the shared org/team needs access to a project, allow the inviter to start a chat-based invitation instead of email.
 
 ## Customization
 

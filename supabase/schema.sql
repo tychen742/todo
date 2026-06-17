@@ -1000,6 +1000,22 @@ as $$
   );
 $$;
 
+create or replace function public.can_manage_project(p_project_id uuid, p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from projects p
+    where p.id = p_project_id
+      and (
+        p.created_by = p_user_id
+        or public.is_project_member(p.id, p_user_id)
+      )
+  );
+$$;
+
 drop policy if exists "Project members can read project membership" on project_members;
 create policy "Project members can read project membership"
   on project_members for select to authenticated
@@ -1019,25 +1035,152 @@ drop policy if exists "Project owners can manage project membership" on project_
 create policy "Project owners can manage project membership"
   on project_members for all to authenticated
   using (
-    exists (
-      select 1 from projects p
-      where p.id = project_members.project_id
-        and (
-          p.created_by = auth.uid()
-          or public.is_project_member(p.id, auth.uid())
-        )
-    )
+    public.can_manage_project(project_members.project_id, auth.uid())
   )
   with check (
-    exists (
-      select 1 from projects p
-      where p.id = project_members.project_id
-        and (
-          p.created_by = auth.uid()
-          or public.is_project_member(p.id, auth.uid())
-        )
-    )
+    public.can_manage_project(project_members.project_id, auth.uid())
   );
+
+create table if not exists project_invitations (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  email text not null,
+  invited_by uuid not null references profiles(id) on delete cascade,
+  token uuid not null default gen_random_uuid(),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'expired', 'revoked')),
+  created_at timestamptz not null default now(),
+  accepted_at timestamptz
+);
+
+create unique index if not exists project_invitations_project_email_unique
+  on project_invitations (project_id, email);
+create unique index if not exists project_invitations_token_unique
+  on project_invitations (token);
+create index if not exists project_invitations_project_id_idx on project_invitations (project_id);
+create index if not exists project_invitations_email_idx on project_invitations (email);
+
+alter table project_invitations enable row level security;
+
+drop policy if exists "Project managers can read project invitations" on project_invitations;
+drop policy if exists "Project managers can create project invitations" on project_invitations;
+drop policy if exists "Project managers can update project invitations" on project_invitations;
+
+create policy "Project managers can read project invitations"
+  on project_invitations for select to authenticated
+  using (public.can_manage_project(project_id, auth.uid()));
+
+create policy "Project managers can create project invitations"
+  on project_invitations for insert to authenticated
+  with check (public.can_manage_project(project_id, auth.uid()) and invited_by = auth.uid());
+
+create policy "Project managers can update project invitations"
+  on project_invitations for update to authenticated
+  using (public.can_manage_project(project_id, auth.uid()))
+  with check (public.can_manage_project(project_id, auth.uid()));
+
+create or replace function public.create_project_invitation(p_project_id uuid, p_email text)
+returns table(token uuid, email text, project_id uuid, status text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(btrim(coalesce(p_email, '')));
+begin
+  if v_email = '' then
+    raise exception 'Email is required';
+  end if;
+
+  if not public.can_manage_project(p_project_id, auth.uid()) then
+    raise exception 'Not authorized to invite people to this project';
+  end if;
+
+  return query
+    insert into project_invitations (project_id, email, invited_by, token, status, accepted_at)
+    values (p_project_id, v_email, auth.uid(), gen_random_uuid(), 'pending', null)
+    on conflict (project_id, email)
+    do update set
+      invited_by = excluded.invited_by,
+      token = excluded.token,
+      status = 'pending',
+      accepted_at = null,
+      created_at = now()
+    returning project_invitations.token, project_invitations.email, project_invitations.project_id, project_invitations.status;
+end;
+$$;
+
+create or replace function public.get_project_invitation_by_token(p_token uuid)
+returns table(project_id uuid, project_name text, email text, status text, invited_by_email text, invited_by_display_name text)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    i.project_id,
+    p.name as project_name,
+    i.email,
+    i.status,
+    inviter.email as invited_by_email,
+    inviter.display_name as invited_by_display_name
+  from project_invitations i
+  join projects p on p.id = i.project_id
+  left join profiles inviter on inviter.id = i.invited_by
+  where i.token = p_token
+  limit 1;
+$$;
+
+create or replace function public.accept_project_invitation(p_token uuid)
+returns table(project_id uuid, email text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_invitation project_invitations%rowtype;
+  v_current_email text;
+begin
+  if auth.uid() is null then
+    raise exception 'You must sign in to accept a project invitation';
+  end if;
+
+  select * into v_invitation
+  from project_invitations
+  where token = p_token
+  limit 1;
+
+  if not found then
+    raise exception 'Invitation not found';
+  end if;
+
+  if v_invitation.status <> 'pending' then
+    raise exception 'Invitation is no longer pending';
+  end if;
+
+  select lower(email) into v_current_email
+  from profiles
+  where id = auth.uid();
+
+  if v_current_email is null then
+    raise exception 'Create a member account in TODO.prj before joining this project';
+  end if;
+
+  if v_current_email <> v_invitation.email then
+    raise exception 'Sign in with the invited email address to accept this project invitation';
+  end if;
+
+  insert into project_members (project_id, user_id, role)
+  values (v_invitation.project_id, auth.uid(), 'member')
+  on conflict (project_id, user_id) do nothing;
+
+  update project_invitations
+  set status = 'accepted',
+      accepted_at = now()
+  where token = p_token;
+
+  return query
+    select v_invitation.project_id, v_invitation.email;
+end;
+$$;
 
 -- Auto-insert the project creator as owner whenever a project row is inserted.
 create or replace function public.handle_new_project()

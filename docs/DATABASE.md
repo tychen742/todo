@@ -195,4 +195,23 @@ Expected fields:
 
 Project membership should include the creator as owner so the project view can show the owner in the header and expose them as an assignee candidate for project-scoped todos.
 
-The project header `+` action opens a project-access modal where the creator/owner can add team scope or add individual people from the typeahead search.
+The project header `+` action opens a project-access modal where the creator/owner can add team scope, add visible people directly, or invite a person by email.
+
+### `project_invitations`
+
+Pending or accepted invitations for project access.
+
+- `id`
+- `project_id`
+- `email`
+- `invited_by`
+- `token`
+- `status`
+- `created_at`
+- `accepted_at`
+
+Invitation behavior:
+
+- If the email belongs to a visible team/org member, the modal shows that person directly and adds them as a project member.
+- If the email is not visible, the modal creates a pending invitation record and opens a precomposed email draft that links to the invite acceptance page.
+- The invite landing page requires the recipient to sign in with the invited email address before acceptance.

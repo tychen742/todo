@@ -24,6 +24,19 @@ Decision: team invitations are part of Team Management, with dependency on User 
 
 Reason: the invitation targets a team membership, but acceptance is resolved through user identity and email.
 
+## 2026-06-16: Project Sharing Follows Parent Scope, Then Individual Selection
+
+Decision: a project may be shared through its parent team or organization, and the project owner or manager may also select specific visible members from that shared scope.
+
+Reason: broad sharing and targeted sharing solve different collaboration needs. Whole-team or whole-org access is useful for broad projects, while selecting specific members avoids exposing project context to everyone in the parent group. If the person is not visible through a shared team/org, the project invite falls back to a direct email invitation.
+
+**Acceptance rules:**
+
+- Team invitations are accepted by a team owner or admin.
+- Org invitations are accepted by an org owner or admin.
+- Project invitations for visible team/org members can become direct project membership.
+- Project invitations for non-visible people use a direct email invite and a later accept flow.
+
 ## 2026-06-08: Supabase RLS Is the Primary Access Boundary
 
 Decision: access rules are enforced in Supabase Row Level Security.

@@ -52,6 +52,8 @@ The app should stay free for personal and small-team use. Paid value should come
 - Reminders and notification support.
 - Outlook Calendar and Google Calendar integration.
 - Personal messaging and team chat.
+- Project invitations sent through in-app chat or direct message for people outside your shared org/team.
+- Project sharing with parent team/org plus selection of specific visible members from that scope.
 - Default assignment notifications, with read state and acknowledgement responses for project-management workflows.
 - Custom logos, colors, and workspace appearance for users, teams, and companies.
 - Activity history and audit trail.

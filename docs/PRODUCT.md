@@ -64,6 +64,21 @@ This model keeps teams clean (no bloat from one-off contributors) while supporti
 
 Team invitations belong primarily to Team Management, but depend on User Management because invitations are resolved by email when a user signs up or signs in.
 
+## Project Sharing and Invitations
+
+Projects should support two sharing levels:
+
+- **Shared scope**: the project is shared with a parent team or organization.
+- **Selected people**: the project owner or project manager can choose specific visible members from that shared scope.
+
+Rules:
+
+- If the parent scope is a team, the team owner or admin should be able to accept the project share for that team.
+- If the parent scope is an organization, the org owner or admin should be able to accept the project share for that org.
+- Once shared, the project owner or manager may select specific members from the visible team/org roster.
+- If a person is not visible through the shared team/org, the project should fall back to a direct email invitation.
+- Direct email invitations should use a later accept flow and should not pretend the person is already in the visible roster.
+
 ## Product Rules
 
 - Personal todos should work without creating a team.

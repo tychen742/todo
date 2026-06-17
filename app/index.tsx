@@ -8,6 +8,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Linking,
   Modal,
   useWindowDimensions,
 } from 'react-native';
@@ -15,6 +16,7 @@ import { DraggableList } from '../components/DraggableList';
 import { KanbanDragItem, KanbanDragProvider, KanbanDropLane } from '../components/KanbanDrag';
 import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
+import { createURL } from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
@@ -268,12 +270,23 @@ function profileDisplayName(profile: Pick<Profile, 'email' | 'display_name'>) {
   return profile.display_name?.trim() || emailDisplayName(profile.email);
 }
 
+function isValidEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function authRedirectUrl() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') {
     return undefined;
   }
 
   return window.location.origin;
+}
+
+function projectInviteUrl(token: string) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.origin}/invite/${token}`;
+  }
+  return createURL(`invite/${token}`);
 }
 
 function kanbanDueLabel(value: string): string {
@@ -656,6 +669,12 @@ export default function HomeScreen() {
     () => projectAccessPeople.filter((person) => !memberById.has(person.id)),
     [memberById, projectAccessPeople]
   );
+  const projectAccessInviteEmail = useMemo(() => {
+    const query = projectAccessQuery.trim().toLowerCase();
+    if (!isValidEmailAddress(query)) return '';
+    if (projectAccessPeopleVisible.some((person) => person.email.toLowerCase() === query)) return '';
+    return query;
+  }, [projectAccessPeopleVisible, projectAccessQuery]);
 
   useEffect(() => {
     if (!linkingProjectTeam) {
@@ -1511,27 +1530,57 @@ export default function HomeScreen() {
     }
   }
 
-  async function addProjectMemberByEmail(rawEmail: string) {
-    if (!selectedProjectId || projectAccessBusy) return;
+  async function inviteProjectMemberByEmail(rawEmail: string) {
+    if (!selectedProjectId || !selectedProject || projectAccessBusy) return;
     const normalizedEmail = rawEmail.trim().toLowerCase();
-    if (!normalizedEmail) return;
+    if (!isValidEmailAddress(normalizedEmail)) {
+      setError('Enter a valid email address to invite.');
+      return;
+    }
 
     setProjectAccessBusy(true);
     try {
-      const { data: rows, error: profileError } = await supabase
-        .rpc('find_profile_by_email', { p_email: normalizedEmail });
-      if (profileError) {
-        setError(profileError.message);
+      const { data: rows, error: inviteError } = await supabase.rpc('create_project_invitation', {
+        p_project_id: selectedProjectId,
+        p_email: normalizedEmail,
+      });
+      if (inviteError) {
+        setError(inviteError.message);
         return;
       }
 
-      const profileRow = rows?.[0] ?? null;
-      if (!profileRow) {
-        setError('No account found for that email. They must sign in at least once before you can add them.');
+      const invite = rows?.[0] ?? null;
+      if (!invite?.token) {
+        setError('Could not create the project invitation.');
         return;
       }
 
-      await addProjectMember(profileRow);
+      const inviterName = profile ? profileDisplayName(profile) : emailDisplayName(session?.user.email);
+      const inviteLink = projectInviteUrl(invite.token);
+      const subject = `${inviterName} invited you to ${selectedProject.name} in TODO.prj`;
+      const body = [
+        `Hi,`,
+        '',
+        `${inviterName} has invited you to the project "${selectedProject.name}" in TODO.prj.`,
+        'Would you accept this invitation?',
+        'You will need to create a member account in TODO.prj before you can join the project if you do not already have one.',
+        '',
+        `Open this invitation link: ${inviteLink}`,
+        '',
+        'If you already have a TODO.prj account, sign in with this email address to accept the invite.',
+      ].join('\n');
+
+      const mailtoUrl = `mailto:${encodeURIComponent(normalizedEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      const canOpen = await Linking.canOpenURL(mailtoUrl);
+      if (canOpen) {
+        await Linking.openURL(mailtoUrl);
+      } else {
+        setMessage(`Invitation created for ${normalizedEmail}. Copy this link: ${inviteLink}`);
+      }
+
+      setProjectAccessQuery('');
+      setProjectAccessPeople([]);
+      showToast(`Invitation prepared for ${normalizedEmail}.`);
     } finally {
       setProjectAccessBusy(false);
     }
@@ -4727,8 +4776,8 @@ export default function HomeScreen() {
                   addProjectMemberByProfile(projectAccessPeopleVisible[0]);
                   return;
                 }
-                if (value.includes('@')) {
-                  addProjectMemberByEmail(value);
+                if (projectAccessInviteEmail) {
+                  inviteProjectMemberByEmail(value);
                 }
               }}
             />
@@ -4769,7 +4818,20 @@ export default function HomeScreen() {
                     <Text style={styles.projectAccessAddGlyph}>+</Text>
                   </Pressable>
                 );
-              }) : (
+              }) : projectAccessInviteEmail ? (
+                <Pressable
+                  onPress={() => inviteProjectMemberByEmail(projectAccessInviteEmail)}
+                  disabled={projectAccessBusy}
+                  style={[styles.manageMemberAction, projectAccessBusy && styles.manageMemberActionDisabled]}
+                >
+                  <Text style={styles.manageMemberActionText}>
+                    {projectAccessBusy ? 'Preparing invitation...' : `Invite ${projectAccessInviteEmail}`}
+                  </Text>
+                  <Text style={styles.manageMemberActionNote}>
+                    They will get an email invitation to join this project.
+                  </Text>
+                </Pressable>
+              ) : (
                 <Text style={styles.editModalSectionLabel}>
                   No people match this search.
                 </Text>
@@ -4808,27 +4870,6 @@ export default function HomeScreen() {
                   No teams match this search.
                 </Text>
               )}
-            </View>
-
-            <View style={styles.projectAccessSection}>
-              <View style={styles.pickerSectionDivider}>
-                <View style={styles.pickerSectionLine} />
-                <Text style={styles.pickerSectionLabel}>Email fallback</Text>
-                <View style={styles.pickerSectionLine} />
-              </View>
-              <Pressable
-                onPress={() => addProjectMemberByEmail(projectAccessQuery)}
-                disabled={!projectAccessQuery.trim() || !projectAccessQuery.includes('@') || projectAccessBusy}
-                style={[
-                  styles.manageMemberAction,
-                  (!projectAccessQuery.trim() || !projectAccessQuery.includes('@') || projectAccessBusy) && styles.manageMemberActionDisabled,
-                ]}
-              >
-                <Text style={styles.manageMemberActionText}>
-                  {projectAccessBusy ? 'Adding...' : `Add ${projectAccessQuery.trim() || 'email'} as member`}
-                </Text>
-                <Text style={styles.manageMemberActionNote}>Requires an existing account</Text>
-              </Pressable>
             </View>
 
             <View style={[styles.editModalActions, { marginTop: 8 }]}>
