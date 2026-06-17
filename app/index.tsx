@@ -7192,6 +7192,8 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   kanbanColBody: {
+    flex: 1,
+    minHeight: 120,
     maxHeight: 520,
   },
   kanbanAddCol: {
