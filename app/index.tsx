@@ -3535,13 +3535,14 @@ export default function HomeScreen() {
           <View style={styles.projectViewModeMeta}>
             {selectedProjectOwner && (
               <View style={styles.projectOwnerBadge}>
-                <InboxAssignerAvatar
-                  initials={(profileDisplayName(selectedProjectOwner)[0] ?? '?').toUpperCase()}
-                  color={pickAvatarColor(selectedProjectOwner.email)}
-                  tooltip={`Project owner: ${profileDisplayName(selectedProjectOwner)}`}
-                />
+                <View style={styles.projectOwnerAvatarRing}>
+                  <InboxAssignerAvatar
+                    initials={(profileDisplayName(selectedProjectOwner)[0] ?? '?').toUpperCase()}
+                    color={pickAvatarColor(selectedProjectOwner.email)}
+                    tooltip="Owner"
+                  />
+                </View>
                 <View style={styles.projectOwnerBadgeText}>
-                  <Text style={styles.projectOwnerBadgeLabel}>Owner</Text>
                   <Text style={styles.projectOwnerBadgeName} numberOfLines={1}>
                     {profileDisplayName(selectedProjectOwner)}
                   </Text>
@@ -7517,32 +7518,30 @@ const styles = StyleSheet.create({
   projectOwnerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#dbeafe',
-    backgroundColor: '#eff6ff',
+    borderColor: '#fecaca',
+    backgroundColor: '#fff1f2',
     minWidth: 0,
     flexShrink: 1,
+  },
+  projectOwnerAvatarRing: {
+    padding: 2,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
   },
   projectOwnerBadgeText: {
     minWidth: 0,
     flexShrink: 1,
   },
-  projectOwnerBadgeLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    color: '#2563eb',
-    textTransform: 'uppercase',
-    lineHeight: 12,
-  },
   projectOwnerBadgeName: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1e3a8a',
+    color: '#991b1b',
     lineHeight: 16,
   },
   projectMemberAvatarRow: {
