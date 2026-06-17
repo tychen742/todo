@@ -469,6 +469,8 @@ export default function HomeScreen() {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>('plan');
   const [workflowColumnLabels, setWorkflowColumnLabels] = useState(defaultWorkflowColumnLabels);
+  const [projectAccessQuery, setProjectAccessQuery] = useState('');
+  const [projectAccessBusy, setProjectAccessBusy] = useState(false);
   const [phasePickerTodo, setPhasePickerTodo] = useState<Todo | null>(null);
   const [addingPhase, setAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
@@ -640,6 +642,12 @@ export default function HomeScreen() {
     if (!selectedProject?.created_by) return members;
     return members.filter((member) => member.user_id !== selectedProject.created_by);
   }, [members, selectedProject?.created_by]);
+  const projectAccessTeams = useMemo(() => {
+    const query = projectAccessQuery.trim().toLowerCase();
+    return teams
+      .filter((team) => !query || team.name.toLowerCase().includes(query))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [projectAccessQuery, teams]);
 
   function showToast(text: string) {
     setToast(text);
@@ -1401,7 +1409,61 @@ export default function HomeScreen() {
     setProjects((prev) =>
       prev.map((p) => p.id === selectedProjectId ? { ...p, team_id: teamId } : p)
     );
+    closeProjectAccessModal();
+    loadMembers();
+  }
+
+  function openProjectAccessModal() {
+    setProjectAccessQuery('');
+    setProjectAccessBusy(false);
+    setError('');
+    setLinkingProjectTeam(true);
+  }
+
+  function closeProjectAccessModal() {
     setLinkingProjectTeam(false);
+    setProjectAccessQuery('');
+    setProjectAccessBusy(false);
+    setError('');
+  }
+
+  async function addProjectMemberByEmail(rawEmail: string) {
+    if (!selectedProjectId) return;
+    const normalizedEmail = rawEmail.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    setProjectAccessBusy(true);
+    const { data: rows, error: profileError } = await supabase
+      .rpc('find_profile_by_email', { p_email: normalizedEmail });
+    if (profileError) {
+      setProjectAccessBusy(false);
+      setError(profileError.message);
+      return;
+    }
+
+    const profileRow = rows?.[0] ?? null;
+    if (!profileRow) {
+      setProjectAccessBusy(false);
+      setError('No account found for that email. They must sign in at least once before you can add them.');
+      return;
+    }
+
+    const { error: insertError } = await supabase
+      .from('project_members')
+      .upsert({
+        project_id: selectedProjectId,
+        user_id: profileRow.id,
+        role: 'member',
+      });
+
+    setProjectAccessBusy(false);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+
+    setProjectAccessQuery('');
+    closeProjectAccessModal();
     loadMembers();
   }
 
@@ -3549,6 +3611,15 @@ export default function HomeScreen() {
                 </View>
               </View>
             )}
+            <Pressable
+              onPress={openProjectAccessModal}
+              style={styles.projectOwnerAddButton}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Add members or team to project"
+            >
+              <Text style={styles.projectOwnerAddButtonText}>+</Text>
+            </Pressable>
             {projectMemberAvatars.length > 0 && (
               <View style={styles.projectMemberAvatarRow}>
                 {projectMemberAvatars.map((m) => {
@@ -4560,40 +4631,92 @@ export default function HomeScreen() {
         visible={linkingProjectTeam}
         transparent
         animationType="fade"
-        onRequestClose={() => setLinkingProjectTeam(false)}
+        onRequestClose={closeProjectAccessModal}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setLinkingProjectTeam(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={closeProjectAccessModal}>
           <Pressable style={styles.calendarCard}>
-            <Text style={styles.editModalTitle}>Link team to project</Text>
+            <Text style={styles.editModalTitle}>Project access</Text>
             <Text style={styles.editModalSectionLabel}>
-              Members of the linked team can be assigned to tasks.
+              Add a team to share its members, or add a person directly by email.
             </Text>
 
-            <Pressable
-              onPress={() => linkProjectTeam(null)}
-              style={styles.teamLinkRow}
-            >
-              <Text style={styles.teamLinkRowText}>No team</Text>
-              {!selectedProject?.team_id && <Text style={styles.assigneePickerCheck}>✓</Text>}
-            </Pressable>
-            {teams.map((team) => (
-              <Pressable
-                key={team.id}
-                onPress={() => linkProjectTeam(team.id)}
-                style={styles.teamLinkRow}
-              >
-                <View style={[styles.teamLinkDot, { backgroundColor: pickAvatarColor(team.id) }]}>
-                  <Text style={styles.teamLinkDotText}>{(team.name[0] ?? 'T').toUpperCase()}</Text>
-                </View>
-                <Text style={styles.teamLinkRowText} numberOfLines={1}>{team.name}</Text>
-                <Text style={styles.teamLinkMeta}>{team.member_count ?? 0} member{(team.member_count ?? 0) !== 1 ? 's' : ''}</Text>
-                {selectedProject?.team_id === team.id && <Text style={styles.assigneePickerCheck}>✓</Text>}
+            <TextInput
+              style={styles.editModalInput}
+              value={projectAccessQuery}
+              onChangeText={(v) => { setProjectAccessQuery(v); if (error) setError(''); }}
+              placeholder="Search teams or type email"
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              returnKeyType="done"
+              autoFocus
+              onSubmitEditing={() => {
+                const value = projectAccessQuery.trim();
+                if (!value) return;
+                if (value.includes('@')) {
+                  addProjectMemberByEmail(value);
+                }
+              }}
+            />
+
+            <View style={styles.projectAccessSection}>
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>Team</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+
+              <Pressable onPress={() => linkProjectTeam(null)} style={styles.teamLinkRow}>
+                <Text style={styles.teamLinkRowText}>No team</Text>
+                {!selectedProject?.team_id && <Text style={styles.assigneePickerCheck}>✓</Text>}
               </Pressable>
-            ))}
+
+              {projectAccessTeams.length > 0 ? projectAccessTeams.map((team) => (
+                <Pressable
+                  key={team.id}
+                  onPress={() => linkProjectTeam(team.id)}
+                  style={styles.teamLinkRow}
+                >
+                  <View style={[styles.teamLinkDot, { backgroundColor: pickAvatarColor(team.id) }]}>
+                    <Text style={styles.teamLinkDotText}>{(team.name[0] ?? 'T').toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.teamLinkRowText} numberOfLines={1}>{team.name}</Text>
+                    <Text style={styles.teamLinkMeta}>{team.member_count ?? 0} member{(team.member_count ?? 0) !== 1 ? 's' : ''}</Text>
+                  </View>
+                  {selectedProject?.team_id === team.id && <Text style={styles.assigneePickerCheck}>✓</Text>}
+                </Pressable>
+              )) : (
+                <Text style={styles.editModalSectionLabel}>
+                  No teams match this search.
+                </Text>
+              )}
+            </View>
+
+            <View style={styles.projectAccessSection}>
+              <View style={styles.pickerSectionDivider}>
+                <View style={styles.pickerSectionLine} />
+                <Text style={styles.pickerSectionLabel}>Member</Text>
+                <View style={styles.pickerSectionLine} />
+              </View>
+              <Pressable
+                onPress={() => addProjectMemberByEmail(projectAccessQuery)}
+                disabled={!projectAccessQuery.trim() || !projectAccessQuery.includes('@') || projectAccessBusy}
+                style={[
+                  styles.manageMemberAction,
+                  (!projectAccessQuery.trim() || !projectAccessQuery.includes('@') || projectAccessBusy) && styles.manageMemberActionDisabled,
+                ]}
+              >
+                <Text style={styles.manageMemberActionText}>
+                  {projectAccessBusy ? 'Adding...' : `Add ${projectAccessQuery.trim() || 'email'} as member`}
+                </Text>
+                <Text style={styles.manageMemberActionNote}>Requires an existing account</Text>
+              </Pressable>
+            </View>
 
             <View style={[styles.editModalActions, { marginTop: 8 }]}>
               <View />
-              <Pressable onPress={() => setLinkingProjectTeam(false)}>
+              <Pressable onPress={closeProjectAccessModal}>
                 <Text style={styles.calendarCancelText}>Cancel</Text>
               </Pressable>
             </View>
@@ -7546,6 +7669,23 @@ const styles = StyleSheet.create({
     color: '#991b1b',
     lineHeight: 16,
   },
+  projectOwnerAddButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fff1f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  projectOwnerAddButtonText: {
+    fontSize: 18,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
   projectMemberAvatarRow: {
     flexDirection: 'row',
     gap: 4,
@@ -7724,11 +7864,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9ca3af',
   },
+  projectAccessSection: {
+    marginTop: 12,
+  },
   manageMemberAction: {
     paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#f3f4f6',
     marginTop: 4,
+  },
+  manageMemberActionDisabled: {
+    opacity: 0.5,
   },
   manageMemberActionText: {
     fontSize: 13,
