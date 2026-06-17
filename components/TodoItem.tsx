@@ -71,7 +71,7 @@ function agePill(value?: string): { label: string; days: number; hours: number }
   return { label: `${days}d`, days, hours };
 }
 
-type DuePill = { label: string; bg: string; color: string; overdue: boolean };
+type DuePill = { label: string; bg: string; color: string };
 
 function dueDatePill(value?: string | null): DuePill | null {
   if (!value) return null;
@@ -83,13 +83,14 @@ function dueDatePill(value?: string | null): DuePill | null {
   if (Number.isNaN(dueMid.getTime())) return null;
   const delta = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000);
 
-  if (delta < 0) return { label: `${delta}d`, bg: '#fef2f2', color: '#dc2626', overdue: true };
-  if (delta === 0) return { label: 'Today', bg: '#fef3c7', color: '#d97706', overdue: false };
-  if (delta === 1) return { label: 'Tmrw', bg: '#fefce8', color: '#ca8a04', overdue: false };
-  if (delta <= 7) return { label: `${delta}d`, bg: '#eef2ff', color: '#4338ca', overdue: false };
+  if (delta < -1) return { label: `${Math.abs(delta)}d late`, bg: '#fef2f2', color: '#dc2626' };
+  if (delta === -1) return { label: '1d late', bg: '#fef2f2', color: '#dc2626' };
+  if (delta === 0) return { label: 'Today', bg: '#fef3c7', color: '#d97706' };
+  if (delta === 1) return { label: 'Tmrw', bg: '#fefce8', color: '#ca8a04' };
+  if (delta <= 7) return { label: `${delta}d`, bg: '#eef2ff', color: '#4338ca' };
   const date = new Date(y, m - 1, d);
   const label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  return { label, bg: '#f3f4f6', color: '#6b7280', overdue: false };
+  return { label, bg: '#f3f4f6', color: '#6b7280' };
 }
 
 export default function TodoItem({
@@ -131,7 +132,6 @@ export default function TodoItem({
   const [now] = useState(Date.now);
 
   const duePill = dueDatePill(dueDate);
-  const isOverdue = !!duePill?.overdue;
   const ageTimestamp = assignedAt ?? createdAt;
   const ageLabel = assignedAt ? 'Assigned' : 'Created';
   const age = agePill(ageTimestamp);
@@ -175,20 +175,9 @@ export default function TodoItem({
     })}`;
   })();
 
-  const stageLabel = kanbanStage?.label ?? null;
-  const stageColor = kanbanStage ? kanbanStageColors[kanbanStage.key] : null;
-
   return (
-    <View
-      style={[
-        styles.rowOuter,
-        isDragging && styles.rowDragging,
-        isMilestone && styles.rowMilestone,
-        isOverdue && styles.rowOverdueOuter,
-        (ageHovered || dueDateHovered || kanbanStageHovered || archiveHovered || priorityHovered || assignerHovered) && styles.rowTooltipActive,
-      ]}
-    >
-    <View style={[styles.row, { paddingVertical: rowPV }, isOverdue && styles.rowOverdueInner]}>
+    <View style={[styles.rowOuter, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone, (ageHovered || dueDateHovered) && styles.rowTooltipActive]}>
+    <View style={[styles.row, { paddingVertical: rowPV }]}>
       {!!onDrag && (
         <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
           <Text style={styles.dragHandleText}>⠿</Text>
@@ -215,158 +204,155 @@ export default function TodoItem({
       >
         <View style={styles.textRow}>
           {isMilestone && <Text style={styles.milestoneIcon}>◆</Text>}
+          {!!kanbanStage && (
+            <Pressable
+              onHoverIn={() => setKanbanStageHovered(true)}
+              onHoverOut={() => setKanbanStageHovered(false)}
+              style={styles.kanbanStageIconWrap}
+              hitSlop={4}
+              accessibilityRole="image"
+              accessibilityLabel={`Kanban stage: ${kanbanStage.label}`}
+            >
+              <KanbanStageIcon
+                size={15}
+                strokeWidth={2.5}
+                color={kanbanStageColors[kanbanStage.key]}
+              />
+              {kanbanStageHovered && Platform.OS === 'web' && (
+                <View style={styles.kanbanStageTooltip}>
+                  <Text style={styles.tooltipText}>Kanban: {kanbanStage.label}</Text>
+                </View>
+              )}
+            </Pressable>
+          )}
           <Text
-            style={[styles.text, done && styles.textDone, isMilestone && !done && styles.textMilestone, isOverdue && styles.textOverdue]}
+            style={[styles.text, done && styles.textDone, isMilestone && !done && styles.textMilestone]}
             numberOfLines={1}
           >
             {text}
           </Text>
         </View>
-        <View style={styles.metaRow}>
-          {!!onPriority && (
-            <Pressable
-              onPress={onPriority}
-              disabled={!onPriority}
-              onHoverIn={() => setPriorityHovered(true)}
-              onHoverOut={() => setPriorityHovered(false)}
-              style={[styles.priorityControl, isOverdue && styles.metaControlOverdue]}
-              accessibilityRole="button"
-              accessibilityLabel={`Priority: ${priorityLabels[priority]}`}
-            >
-              <View style={[styles.prioritySquare, { backgroundColor: priorityColors[priority] }]} />
-              {priorityHovered && Platform.OS === 'web' && (
-                <View style={styles.tooltip}>
-                  <Text style={styles.tooltipText}>{priorityLabels[priority]}</Text>
-                </View>
-              )}
-            </Pressable>
-          )}
-          {!!kanbanStage && stageLabel && stageColor && (
-            <Pressable
-              onHoverIn={() => setKanbanStageHovered(true)}
-              onHoverOut={() => setKanbanStageHovered(false)}
-              style={[styles.statusPill, { borderColor: stageColor, backgroundColor: `${stageColor}18` }]}
-              hitSlop={4}
-              accessibilityRole="image"
-              accessibilityLabel={`Kanban stage: ${stageLabel}`}
-            >
-              <KanbanStageIcon size={13} strokeWidth={2.5} color={stageColor} />
-              <Text style={[styles.statusPillText, { color: stageColor }]}>
-                {stageLabel}
-              </Text>
-              {kanbanStageHovered && Platform.OS === 'web' && (
-                <View style={styles.kanbanStageTooltip}>
-                  <Text style={styles.tooltipText}>Kanban: {stageLabel}</Text>
-                </View>
-              )}
-            </Pressable>
-          )}
-          {!!assignedLabel && (
-            <Pressable onPress={onAssign} disabled={!onAssign} style={[styles.statusPill, isOverdue && styles.metaControlOverdue]}>
-              <Text style={styles.assignee} numberOfLines={1}>
-                {assignedLabel}
-              </Text>
-            </Pressable>
-          )}
-          {!!assignerInitials && (
-            <Pressable
-              onHoverIn={() => setAssignerHovered(true)}
-              onHoverOut={() => setAssignerHovered(false)}
-              style={styles.assignerAvatarWrap}
-              hitSlop={4}
-            >
-              <View style={[styles.assignerAvatar, { backgroundColor: assignerColor ?? '#9ca3af' }, isOverdue && styles.metaAvatarOverdue]}>
-                <Text style={styles.assignerAvatarText}>{assignerInitials}</Text>
-              </View>
-              {assignerHovered && Platform.OS === 'web' && assignerName && (
-                <View style={styles.tooltip}>
-                  <Text style={styles.tooltipText}>{assignerName}</Text>
-                </View>
-              )}
-            </Pressable>
-          )}
-          {!!onPhase && (
-            <Pressable onPress={onPhase} style={[styles.statusPill, isOverdue && styles.metaControlOverdue]}>
-              <Text style={[styles.statusPillText, phaseLabel ? styles.phaseLabelText : styles.phaseLabelEmpty]}>
-                {phaseLabel ?? 'Set phase'}
-              </Text>
-            </Pressable>
-          )}
-          {!!scheduledStartLabel && !done && (
-            <Text style={[styles.startScheduleText, isOverdue && styles.textOverdue]} numberOfLines={1}>
-              {scheduledStartLabel}
+        {!!onPhase && (
+          <Pressable onPress={onPhase} style={styles.phaseTagWrap}>
+            <Text style={phaseLabel ? styles.phaseTag : styles.phaseTagEmpty}>
+              {phaseLabel ?? 'Set phase'}
             </Text>
+          </Pressable>
+        )}
+        {!!note && (
+          <Text style={styles.notePreview} numberOfLines={1}>
+            {note}
+          </Text>
+        )}
+        {!!scheduledStartLabel && !done && (
+          <Text style={styles.startScheduleText} numberOfLines={1}>
+            {scheduledStartLabel}
+          </Text>
+        )}
+      </Pressable>
+
+      <View style={styles.priorityGroup}>
+        <Pressable
+          onPress={onPriority}
+          disabled={!onPriority}
+          onHoverIn={() => setPriorityHovered(true)}
+          onHoverOut={() => setPriorityHovered(false)}
+          style={styles.priorityControl}
+          accessibilityRole="button"
+          accessibilityLabel={`Priority: ${priorityLabels[priority]}`}
+        >
+          <View style={[styles.prioritySquare, { backgroundColor: priorityColors[priority] }]} />
+          {priorityHovered && Platform.OS === 'web' && (
+            <View style={styles.tooltip}>
+              <Text style={styles.tooltipText}>{priorityLabels[priority]}</Text>
+            </View>
           )}
-          {!!note && (
-            <Text style={[styles.notePreview, isOverdue && styles.textOverdue]} numberOfLines={1}>
-              {note}
-            </Text>
-          )}
-          {!!duePill && (
-            <Pressable
-              onPress={onDueDate}
-              disabled={!onDueDate && !duePill}
-              onHoverIn={() => setDueDateHovered(true)}
-              onHoverOut={() => setDueDateHovered(false)}
-              style={styles.dueDateCol}
-            >
-              <View style={[styles.pill, { backgroundColor: duePill.bg }, duePill.overdue && styles.duePillOverdue]}>
-                <Text style={[styles.pillText, { color: duePill.color }]} numberOfLines={1}>
-                  {duePill.label}
-                </Text>
-              </View>
-              {dueDateHovered && Platform.OS === 'web' && dueDateTooltip && (
-                <View style={styles.dueDateTooltip}>
-                  <Text style={styles.tooltipText}>Due: {dueDateTooltip.full}</Text>
-                  <Text style={styles.tooltipText}>{dueDateTooltip.relative}</Text>
-                </View>
-              )}
-            </Pressable>
-          )}
-          {!duePill && onDueDate ? <Text style={styles.pillEmpty}>+ date</Text> : null}
+        </Pressable>
+        {!!assignerInitials && (
           <Pressable
-            style={styles.ageCol}
-            onHoverIn={() => setAgeHovered(true)}
-            onHoverOut={() => setAgeHovered(false)}
-            disabled={!ageTimestamp}
+            onHoverIn={() => setAssignerHovered(true)}
+            onHoverOut={() => setAssignerHovered(false)}
+            style={styles.assignerAvatarWrap}
+            hitSlop={4}
           >
-            {age ? (
-              <View style={[styles.agePill, isOverdue && styles.metaControlOverdue]}>
-                <Text style={[styles.agePillText, isOverdue && styles.textOverdue]}>{age.label}</Text>
-              </View>
-            ) : null}
-            {ageHovered && Platform.OS === 'web' && !!ageTimestamp && age && (
-              <View style={styles.ageTooltip}>
-                <Text style={styles.tooltipText}>
-                  {'Age: ' + (age.days > 0 ? `${age.days}d ` : '') + (age.hours > 0 ? `${age.hours}h` : age.days === 0 ? age.label : '0h')}
-                </Text>
-                <Text style={styles.tooltipText}>
-                  {ageLabel + ' ' + new Date(ageTimestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                </Text>
+            <View style={[styles.assignerAvatar, { backgroundColor: assignerColor ?? '#9ca3af' }]}>
+              <Text style={styles.assignerAvatarText}>{assignerInitials}</Text>
+            </View>
+            {assignerHovered && Platform.OS === 'web' && assignerName && (
+              <View style={styles.tooltip}>
+                <Text style={styles.tooltipText}>{assignerName}</Text>
               </View>
             )}
           </Pressable>
-          {!!startedWorkAt && (
-            <View style={[styles.statusPill, isOverdue && styles.metaControlOverdue]}>
-              <Text style={[styles.startWorkText, styles.startWorkTextActive]} numberOfLines={1}>
-                Working
-              </Text>
-            </View>
-          )}
-          {!done && !startedWorkAt && onStartWork && (
-            <Pressable
-              onPress={onStartWork}
-              disabled={!onStartWork}
-              style={[styles.statusPill, isOverdue && styles.metaControlOverdue]}
-            >
-              <Text style={styles.startWorkText} numberOfLines={1}>
-                Start
-              </Text>
-            </Pressable>
-          )}
-        </View>
+        )}
+      </View>
+
+      {!!assignedLabel && (
+        <Pressable onPress={onAssign} disabled={!onAssign} style={styles.inlineControl}>
+          <Text style={styles.assignee} numberOfLines={1}>
+            {assignedLabel}
+          </Text>
+        </Pressable>
+      )}
+
+      {!done && (
+        <Pressable
+          onPress={onStartWork}
+          disabled={!onStartWork || !!startedWorkAt}
+          style={styles.startWorkCol}
+        >
+          <Text style={[styles.startWorkText, startedWorkAt && styles.startWorkTextActive]} numberOfLines={1}>
+            {startedWorkAt ? 'Working' : 'Start'}
+          </Text>
+        </Pressable>
+      )}
+
+      <Pressable
+        onPress={onDueDate}
+        disabled={!onDueDate && !duePill}
+        onHoverIn={() => setDueDateHovered(true)}
+        onHoverOut={() => setDueDateHovered(false)}
+        style={styles.dueDateCol}
+      >
+        {duePill ? (
+          <View style={[styles.pill, { backgroundColor: duePill.bg }]}>
+            <Text style={[styles.pillText, { color: duePill.color }]} numberOfLines={1}>
+              {duePill.label}
+            </Text>
+          </View>
+        ) : (
+          onDueDate ? <Text style={styles.pillEmpty}>+ date</Text> : null
+        )}
+        {dueDateHovered && Platform.OS === 'web' && dueDateTooltip && (
+          <View style={styles.dueDateTooltip}>
+            <Text style={styles.tooltipText}>Due: {dueDateTooltip.full}</Text>
+            <Text style={styles.tooltipText}>{dueDateTooltip.relative}</Text>
+          </View>
+        )}
       </Pressable>
 
+      <Pressable
+        style={styles.ageCol}
+        onHoverIn={() => setAgeHovered(true)}
+        onHoverOut={() => setAgeHovered(false)}
+        disabled={!ageTimestamp}
+      >
+        {age ? (
+          <View style={styles.agePill}>
+            <Text style={styles.agePillText}>{age.label}</Text>
+          </View>
+        ) : null}
+        {ageHovered && Platform.OS === 'web' && !!ageTimestamp && age && (
+          <View style={styles.ageTooltip}>
+            <Text style={styles.tooltipText}>
+              {'Age: ' + (age.days > 0 ? `${age.days}d ` : '') + (age.hours > 0 ? `${age.hours}h` : age.days === 0 ? age.label : '0h')}
+            </Text>
+            <Text style={styles.tooltipText}>
+              {ageLabel + ' ' + new Date(ageTimestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </Text>
+          </View>
+        )}
+      </Pressable>
       {!!onArchive && (
         <Pressable
           onPress={onArchive}
@@ -401,12 +387,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 7,
     paddingRight: 16,
-  },
-  rowOverdueOuter: {
-    backgroundColor: '#fef2f2',
-  },
-  rowOverdueInner: {
-    backgroundColor: '#fef2f2',
   },
   rowSeparator: {
     height: StyleSheet.hairlineWidth,
@@ -445,9 +425,6 @@ const styles = StyleSheet.create({
   textDone: {
     textDecorationLine: 'line-through',
     color: '#9ca3af',
-  },
-  textOverdue: {
-    color: '#dc2626',
   },
   notePreview: {
     fontSize: 11,
@@ -490,6 +467,21 @@ const styles = StyleSheet.create({
   startWorkTextActive: {
     color: '#16a34a',
   },
+  startWorkCol: {
+    marginLeft: 8,
+    width: 56,
+    alignItems: 'flex-start',
+  },
+  dueDateCol: {
+    marginLeft: 8,
+    width: 64,
+    alignItems: 'flex-start',
+  },
+  ageCol: {
+    marginLeft: 2,
+    width: 56,
+    alignItems: 'flex-start',
+  },
   archiveAction: {
     width: 28,
     height: 28,
@@ -523,14 +515,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9ca3af',
   },
-  metaRow: {
+  priorityGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     marginLeft: 8,
-    flexWrap: 'wrap',
-    gap: 6,
-    minWidth: 0,
-    flex: 1,
+    width: 48,
   },
   priorityControl: {
     width: 28,
@@ -543,14 +532,6 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 3,
   },
-  metaControlOverdue: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 999,
-  },
-  metaAvatarOverdue: {
-    borderWidth: 1,
-    borderColor: '#fca5a5',
-  },
   rowMilestone: {
     backgroundColor: '#fefce8',
   },
@@ -562,26 +543,6 @@ const styles = StyleSheet.create({
   milestoneIcon: {
     fontSize: 11,
     color: '#d97706',
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: 1,
-    overflow: 'visible',
-  },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  phaseLabelText: {
-    color: '#4338ca',
-  },
-  phaseLabelEmpty: {
-    color: '#d1d5db',
   },
   kanbanStageIconWrap: {
     width: 18,
@@ -699,9 +660,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '600',
-  },
-  duePillOverdue: {
-    borderWidth: 1,
-    borderColor: '#fca5a5',
   },
 });
