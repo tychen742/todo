@@ -21,6 +21,7 @@ type Props = {
   assignerInitials?: string;
   assignerColor?: string;
   assignerName?: string;
+  projectAvatar?: { label: string; initials: string; color: string };
   onToggle: () => void;
   onOpenEdit?: () => void;
   onAssign?: () => void;
@@ -33,6 +34,7 @@ type Props = {
   reserveDragSpace?: boolean;
   isDragging?: boolean;
   rowPV?: number;
+  rowPaddingRight?: number;
 };
 
 const priorityLabels = {
@@ -109,6 +111,7 @@ export default function TodoItem({
   assignerInitials,
   assignerColor,
   assignerName,
+  projectAvatar,
   onToggle,
   onOpenEdit,
   onAssign,
@@ -121,6 +124,7 @@ export default function TodoItem({
   reserveDragSpace = false,
   isDragging = false,
   rowPV = 7,
+  rowPaddingRight = 16,
 }: Props) {
   const [priorityHovered, setPriorityHovered] = useState(false);
   const [assignerHovered, setAssignerHovered] = useState(false);
@@ -128,6 +132,7 @@ export default function TodoItem({
   const [dueDateHovered, setDueDateHovered] = useState(false);
   const [archiveHovered, setArchiveHovered] = useState(false);
   const [statusHovered, setStatusHovered] = useState(false);
+  const [projectHovered, setProjectHovered] = useState(false);
   const [now] = useState(Date.now);
 
   const duePill = dueDatePill(dueDate);
@@ -177,8 +182,8 @@ export default function TodoItem({
   })();
 
   return (
-    <View style={[styles.rowOuter, isMilestone && styles.rowMilestone, isDragging && styles.rowDragging, isLate && styles.rowLate, (ageHovered || dueDateHovered) && styles.rowTooltipActive]}>
-    <View style={[styles.row, { paddingVertical: rowPV }]}>
+    <View style={[styles.rowOuter, isMilestone && styles.rowMilestone, isDragging && styles.rowDragging, isLate && styles.rowLate, (priorityHovered || ageHovered || dueDateHovered || statusHovered || projectHovered) && styles.rowTooltipActive]}>
+    <View style={[styles.row, { paddingVertical: rowPV, paddingRight: rowPaddingRight }]}>
       {!!onDrag && (
         <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
           <Text style={styles.dragHandleText}>⠿</Text>
@@ -284,22 +289,39 @@ export default function TodoItem({
         accessibilityRole="button"
         accessibilityLabel={kanbanStage ? `Kanban stage: ${kanbanStage.label}` : startedWorkAt ? 'Working' : 'Start work'}
       >
-        {!done && (kanbanStage || onStartWork) ? (
-          <>
+        <View style={styles.statusIcons}>
+          {!!projectAvatar && (
+            <Pressable
+              onHoverIn={() => setProjectHovered(true)}
+              onHoverOut={() => setProjectHovered(false)}
+              style={[styles.projectAvatar, { backgroundColor: projectAvatar.color }]}
+              accessibilityRole="image"
+              accessibilityLabel={`Project: ${projectAvatar.label}`}
+              hitSlop={4}
+            >
+              <Text style={styles.projectAvatarText}>{projectAvatar.initials}</Text>
+              {projectHovered && Platform.OS === 'web' && (
+                <View style={styles.projectTooltip}>
+                  <Text style={styles.tooltipText}>{projectAvatar.label}</Text>
+                </View>
+              )}
+            </Pressable>
+          )}
+          {!done && (kanbanStage || onStartWork) ? (
             <StatusIcon
               size={18}
               strokeWidth={2.5}
               color={kanbanStage ? kanbanStageColors[kanbanStage.key] : startedWorkAt ? '#16a34a' : '#2563eb'}
             />
-            {statusHovered && Platform.OS === 'web' && (
-              <View style={styles.statusTooltip}>
-                <Text style={styles.tooltipText}>
-                  {kanbanStage ? kanbanStage.label : startedWorkAt ? 'Working' : 'Start work'}
-                </Text>
-              </View>
-            )}
-          </>
-        ) : null}
+          ) : null}
+        </View>
+        {statusHovered && Platform.OS === 'web' && !projectHovered && !done && (kanbanStage || onStartWork) && (
+          <View style={styles.statusTooltip}>
+            <Text style={styles.tooltipText}>
+              {kanbanStage ? kanbanStage.label : startedWorkAt ? 'Working' : 'Start work'}
+            </Text>
+          </View>
+        )}
       </Pressable>
 
       <Pressable
@@ -516,6 +538,7 @@ const styles = StyleSheet.create({
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
   },
   prioritySquare: {
     width: 14,
@@ -630,6 +653,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusTooltip: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    backgroundColor: '#374151',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 100,
+    minWidth: 110,
+    alignItems: 'center',
+  },
+  statusIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  projectAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  projectAvatarText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  projectTooltip: {
     position: 'absolute',
     bottom: 24,
     left: 0,

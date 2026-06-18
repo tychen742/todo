@@ -51,6 +51,7 @@ type Todo = {
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const MAX_PROJECT_PHASES = 5;
+const projectAvatarColors = ['#e74c3c', '#e67e22', '#16a34a', '#2563eb', '#7c3aed', '#db2777', '#0891b2', '#d97706'];
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0, high: 1, normal: 2, low: 3,
@@ -67,6 +68,21 @@ function sortTodos(items: Todo[]) {
     if (pd !== 0) return pd;
     return Date.parse(b.created_at) - Date.parse(a.created_at);
   });
+}
+
+function pickProjectAvatarColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return projectAvatarColors[Math.abs(hash) % projectAvatarColors.length];
+}
+
+function projectInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0] ?? ''}${words[1][0] ?? ''}`.toUpperCase();
 }
 
 function formatDateValue(date: Date) {
@@ -165,6 +181,14 @@ export default function ProjectScreen() {
       .sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity))[0] ?? null;
   }, [todos]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const projectAvatar = useMemo(() => {
+    if (!project) return undefined;
+    return {
+      label: project.name,
+      initials: projectInitials(project.name),
+      color: pickProjectAvatarColor(`project:${project.id}`),
+    };
+  }, [project]);
 
   const loadProject = useCallback(async () => {
     if (!id) return;
@@ -497,6 +521,7 @@ export default function ProjectScreen() {
             createdAt={todo.created_at}
             isMilestone={todo.is_milestone}
             phaseLabel={todo.phase_id ? (phaseById.get(todo.phase_id)?.name ?? '') : undefined}
+            projectAvatar={projectAvatar}
             onToggle={() => toggle(todo.id)}
             onOpenEdit={() => openEditModal(todo)}
             onPriority={() => cyclePriority(todo)}
@@ -536,6 +561,7 @@ export default function ProjectScreen() {
                     createdAt={todo.created_at}
                     isMilestone={todo.is_milestone}
                     phaseLabel={todo.phase_id ? (phaseById.get(todo.phase_id)?.name ?? '') : undefined}
+                    projectAvatar={projectAvatar}
                     onToggle={() => toggle(todo.id)}
                     onOpenEdit={() => openEditModal(todo)}
                     onPriority={() => cyclePriority(todo)}

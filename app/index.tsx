@@ -417,6 +417,12 @@ function pickAvatarAnimal(seed: string): string {
   for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) + h);
   return AVATAR_ANIMALS[Math.abs(h) % AVATAR_ANIMALS.length];
 }
+function projectInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0] ?? ''}${words[1][0] ?? ''}`.toUpperCase();
+}
 
 const priorityLabels: Record<string, string> = {
   low: 'Low',
@@ -625,6 +631,17 @@ export default function HomeScreen() {
     if (!todo.project_id && !isProject) return undefined;
     const key = workflowStageForTodo(todo);
     return { key, label: workflowColumnLabels[key] };
+  }
+  function todoProjectAvatar(todo: Todo): { label: string; initials: string; color: string } | undefined {
+    const project = todo.project_id
+      ? projects.find((item) => item.id === todo.project_id)
+      : selectedProject;
+    if (!project) return undefined;
+    return {
+      label: project.name,
+      initials: projectInitials(project.name),
+      color: pickAvatarColor(`project:${project.id}`),
+    };
   }
   const active = useMemo(() => {
     const items = todos.filter((t) => !t.done);
@@ -4106,6 +4123,7 @@ export default function HomeScreen() {
                         assignedAt={todo.assigned_at ?? undefined}
                         assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
                         kanbanStage={todoKanbanStage(todo)}
+                        projectAvatar={todoProjectAvatar(todo)}
                         assignerInitials={assigner?.initials} assignerColor={assigner?.color}
                         assignerName={assigner?.name}
                         onToggle={() => toggle(todo.id)}
@@ -4183,6 +4201,7 @@ export default function HomeScreen() {
                           assignedAt={todo.assigned_at ?? undefined}
                           assignedLabel={isPersonal ? undefined : assigneeLabel(todo.assigned_to)}
                           kanbanStage={todoKanbanStage(todo)}
+                          projectAvatar={todoProjectAvatar(todo)}
                           assignerInitials={assigner?.initials} assignerColor={assigner?.color}
                           assignerName={assigner?.name}
                           onToggle={() => toggle(todo.id)}
@@ -4192,6 +4211,7 @@ export default function HomeScreen() {
                           onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
                           onArchive={() => archiveTodo(todo.id)}
                           reserveDragSpace={Platform.OS === 'web'}
+                          rowPaddingRight={done.length > 3 ? 0 : 16}
                           rowPV={rowPV}
                         />
                       );

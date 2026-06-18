@@ -74,6 +74,8 @@ Reason: misaligned column headers break visual scanning and make the UI feel unp
 
 The Kanban/status column is fixed-width even when a row is completed. Completed rows must reserve this space so priority, due date, age, and delete action columns line up with active task rows.
 
+Priority squares are fixed-position row controls and must show their priority level in a tooltip on hover.
+
 ## 2026-06-18: Overdue Rows Use Negative Due Labels
 
 Decision: overdue todos render due-date pills as negative day counts, such as `-7d`, and the entire row gets a red-tinted background.
@@ -179,6 +181,8 @@ Implementation rules:
 Decision: normal TASK list rows should show a compact Kanban-stage icon when the task belongs to a project workflow.
 
 Reason: accepted project tasks can appear in a user's personal todo list, so the row must reveal whether the task is in Backlog, Doing, Review, or Done without forcing the user to open the project board.
+
+Project-scoped rows also show a deterministic project avatar derived from the project name and id. This keeps project identity visible in mixed personal/workspace task lists without adding avatar storage to the schema.
 
 Implementation rules:
 
