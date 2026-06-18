@@ -70,6 +70,12 @@ Decision: every column in a list view must have a fixed width that is shared exa
 
 Reason: misaligned column headers break visual scanning and make the UI feel unpolished. The rule is enforced by (a) wrapping related row elements (e.g. priority square + assigner avatar) in a fixed-width container, and (b) setting the corresponding sort column to the same width + marginLeft. When a row element is added or removed, both the container width and the sort column width must be updated together.
 
+## 2026-06-18: Overdue Rows Use Negative Due Labels
+
+Decision: overdue todos render due-date pills as negative day counts, such as `-7d`, and the entire row gets a red-tinted background.
+
+Reason: late work should read as a schedule deficit at a glance. A row-level red tint makes overdue items visible while scanning long task lists, and the negative label keeps the due column compact.
+
 ## 2026-06-10: Profile Photo Is Encouraged and Part of Onboarding
 
 Decision: profile photo upload is a first-class onboarding step, not a buried settings option.

@@ -71,7 +71,7 @@ function agePill(value?: string): { label: string; days: number; hours: number }
   return { label: `${days}d`, days, hours };
 }
 
-type DuePill = { label: string; bg: string; color: string };
+type DuePill = { label: string; bg: string; color: string; isLate?: boolean };
 
 function dueDatePill(value?: string | null): DuePill | null {
   if (!value) return null;
@@ -83,8 +83,7 @@ function dueDatePill(value?: string | null): DuePill | null {
   if (Number.isNaN(dueMid.getTime())) return null;
   const delta = Math.round((dueMid.getTime() - todayMid.getTime()) / 86400000);
 
-  if (delta < -1) return { label: `${Math.abs(delta)}d late`, bg: '#fef2f2', color: '#dc2626' };
-  if (delta === -1) return { label: '1d late', bg: '#fef2f2', color: '#dc2626' };
+  if (delta < 0) return { label: `${delta}d`, bg: '#fee2e2', color: '#dc2626', isLate: true };
   if (delta === 0) return { label: 'Today', bg: '#fef3c7', color: '#d97706' };
   if (delta === 1) return { label: 'Tmrw', bg: '#fefce8', color: '#ca8a04' };
   if (delta <= 7) return { label: `${delta}d`, bg: '#eef2ff', color: '#4338ca' };
@@ -132,6 +131,7 @@ export default function TodoItem({
   const [now] = useState(Date.now);
 
   const duePill = dueDatePill(dueDate);
+  const isLate = duePill?.isLate === true;
   const ageTimestamp = assignedAt ?? createdAt;
   const ageLabel = assignedAt ? 'Assigned' : 'Created';
   const age = agePill(ageTimestamp);
@@ -176,7 +176,7 @@ export default function TodoItem({
   })();
 
   return (
-    <View style={[styles.rowOuter, isDragging && styles.rowDragging, isMilestone && styles.rowMilestone, (ageHovered || dueDateHovered) && styles.rowTooltipActive]}>
+    <View style={[styles.rowOuter, isMilestone && styles.rowMilestone, isDragging && styles.rowDragging, isLate && styles.rowLate, (ageHovered || dueDateHovered) && styles.rowTooltipActive]}>
     <View style={[styles.row, { paddingVertical: rowPV }]}>
       {!!onDrag && (
         <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
@@ -534,6 +534,9 @@ const styles = StyleSheet.create({
   },
   rowMilestone: {
     backgroundColor: '#fefce8',
+  },
+  rowLate: {
+    backgroundColor: '#fef2f2',
   },
   textRow: {
     flexDirection: 'row',
