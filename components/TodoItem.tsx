@@ -338,7 +338,7 @@ export default function TodoItem({
             </Text>
           </View>
         ) : (
-          onDueDate ? <Text style={styles.pillEmpty}>+ date</Text> : null
+          onDueDate ? <Text style={styles.pillEmpty}>+</Text> : null
         )}
         {dueDateHovered && Platform.OS === 'web' && dueDateTooltip && (
           <View style={styles.dueDateTooltip}>

@@ -627,6 +627,14 @@ export default function HomeScreen() {
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
 
+  function projectAvatarFor(project: Project): { label: string; initials: string; color: string } {
+    return {
+      label: project.name,
+      initials: projectInitials(project.name),
+      color: pickAvatarColor(`project:${project.id}`),
+    };
+  }
+
   function todoKanbanStage(todo: Todo): { key: WorkflowLaneKey; label: string } | undefined {
     if (!todo.project_id && !isProject) return undefined;
     const key = workflowStageForTodo(todo);
@@ -637,11 +645,7 @@ export default function HomeScreen() {
       ? projects.find((item) => item.id === todo.project_id)
       : selectedProject;
     if (!project) return undefined;
-    return {
-      label: project.name,
-      initials: projectInitials(project.name),
-      color: pickAvatarColor(`project:${project.id}`),
-    };
+    return projectAvatarFor(project);
   }
   const active = useMemo(() => {
     const items = todos.filter((t) => !t.done);
@@ -3102,10 +3106,7 @@ export default function HomeScreen() {
         <ScrollView style={styles.projectsGrid} contentContainerStyle={styles.projectsGridContent}>
           {projects.map((project) => {
             const linkedTeam = project.team_id ? teams.find((t) => t.id === project.team_id) : null;
-            const avatar = {
-              initials: projectInitials(project.name),
-              color: pickAvatarColor(`project:${project.id}`),
-            };
+            const avatar = projectAvatarFor(project);
             return (
               <View key={project.id} style={styles.projectCard}>
                 <Pressable
@@ -3676,31 +3677,37 @@ export default function HomeScreen() {
             contentContainerStyle={styles.projectSwitchList}
             style={styles.projectSwitchScroll}
           >
-            {projects.map((project) => (
-              <Pressable
-                key={project.id}
-                onPress={() => {
-                  setSelectedProjectId(project.id);
-                  setSelectedTeamId(null);
-                }}
-                style={[
-                  styles.projectSwitchButton,
-                  selectedProjectId === project.id && styles.projectSwitchButtonActive,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`Open project ${project.name}`}
-              >
-                <Text
+            {projects.map((project) => {
+              const avatar = projectAvatarFor(project);
+              return (
+                <Pressable
+                  key={project.id}
+                  onPress={() => {
+                    setSelectedProjectId(project.id);
+                    setSelectedTeamId(null);
+                  }}
                   style={[
-                    styles.projectSwitchButtonText,
-                    selectedProjectId === project.id && styles.projectSwitchButtonTextActive,
+                    styles.projectSwitchButton,
+                    selectedProjectId === project.id && styles.projectSwitchButtonActive,
                   ]}
-                  numberOfLines={1}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open project ${project.name}`}
                 >
-                  {project.name}
-                </Text>
-              </Pressable>
-            ))}
+                  <View style={[styles.projectSwitchAvatar, { backgroundColor: avatar.color }]}>
+                    <Text style={styles.projectSwitchAvatarText}>{avatar.initials}</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.projectSwitchButtonText,
+                      selectedProjectId === project.id && styles.projectSwitchButtonTextActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {project.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
             <Pressable
               onPress={() => openCreateTarget('project')}
               style={styles.projectSwitchAddButton}
@@ -7804,18 +7811,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1d5db',
     backgroundColor: '#fff',
-    paddingHorizontal: 11,
+    paddingHorizontal: 8,
     paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 7,
   },
   projectSwitchButtonActive: {
     backgroundColor: '#eef2ff',
     borderColor: '#6366f1',
   },
+  projectSwitchAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  projectSwitchAvatarText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
   projectSwitchButtonText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#374151',
+    flexShrink: 1,
   },
   projectSwitchButtonTextActive: {
     color: '#4338ca',
