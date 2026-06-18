@@ -4079,6 +4079,7 @@ export default function HomeScreen() {
                     {sortField === 'text' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
                   </Pressable>
                   <View style={[styles.sortColPriority, { flexShrink: 0 }]} />
+                  <View style={styles.sortStatusGap} />
                   <Pressable onPress={() => toggleSort('due_date')} style={[styles.sortColDue, styles.sortColInner]}>
                     <Text style={[styles.sortColLabel, sortField === 'due_date' && styles.sortColLabelActive]}>Due</Text>
                     {sortField === 'due_date' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
@@ -4148,7 +4149,7 @@ export default function HomeScreen() {
                           >
                             <View style={styles.sectionDividerLine} />
                             <Text style={styles.sectionLabel}>
-                              Archived ({archivedTodos.length}) {archivedExpanded ? '↑' : '↓'}
+                              Deleted ({archivedTodos.length}) {archivedExpanded ? '↑' : '↓'}
                             </Text>
                             <View style={styles.sectionDividerLine} />
                           </Pressable>
@@ -5179,7 +5180,7 @@ export default function HomeScreen() {
 
             <View style={[styles.editModalActions, { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb', paddingTop: 12 }]}>
               <Pressable onPress={() => editTodo && archiveTodo(editTodo.id)}>
-                <Text style={styles.archiveBtnText}>Archive</Text>
+                <Text style={styles.archiveBtnText}>Delete</Text>
               </Pressable>
               <View style={styles.editModalActionsRight}>
                 <Pressable onPress={closeEditModal}>
@@ -6978,6 +6979,11 @@ const styles = StyleSheet.create({
   sortColPriority: {
     width: 48,
     marginLeft: 8,
+  },
+  sortStatusGap: {
+    width: 56,
+    marginLeft: 8,
+    flexShrink: 0,
   },
   prioritySortSquare: {
     width: 10,

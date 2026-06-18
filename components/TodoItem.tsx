@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
-import { Archive, CircleCheck, Eye, SquareKanban, SquarePlay } from 'lucide-react-native';
+import { CircleCheck, Eye, SquareKanban, SquarePlay, Trash2 } from 'lucide-react-native';
 
 type KanbanStageKey = 'backlog' | 'doing' | 'review' | 'done';
 
@@ -127,7 +127,7 @@ export default function TodoItem({
   const [ageHovered, setAgeHovered] = useState(false);
   const [dueDateHovered, setDueDateHovered] = useState(false);
   const [archiveHovered, setArchiveHovered] = useState(false);
-  const [kanbanStageHovered, setKanbanStageHovered] = useState(false);
+  const [statusHovered, setStatusHovered] = useState(false);
   const [now] = useState(Date.now);
 
   const duePill = dueDatePill(dueDate);
@@ -135,11 +135,12 @@ export default function TodoItem({
   const ageTimestamp = assignedAt ?? createdAt;
   const ageLabel = assignedAt ? 'Assigned' : 'Created';
   const age = agePill(ageTimestamp);
-  const KanbanStageIcon =
+  const StageIcon =
     kanbanStage?.key === 'doing' ? SquarePlay :
     kanbanStage?.key === 'review' ? Eye :
     kanbanStage?.key === 'done' ? CircleCheck :
     SquareKanban;
+  const StatusIcon = kanbanStage ? StageIcon : SquarePlay;
 
   const dueDateTooltip = (() => {
     if (!dueDate) return null;
@@ -204,27 +205,6 @@ export default function TodoItem({
       >
         <View style={styles.textRow}>
           {isMilestone && <Text style={styles.milestoneIcon}>◆</Text>}
-          {!!kanbanStage && (
-            <Pressable
-              onHoverIn={() => setKanbanStageHovered(true)}
-              onHoverOut={() => setKanbanStageHovered(false)}
-              style={styles.kanbanStageIconWrap}
-              hitSlop={4}
-              accessibilityRole="image"
-              accessibilityLabel={`Kanban stage: ${kanbanStage.label}`}
-            >
-              <KanbanStageIcon
-                size={15}
-                strokeWidth={2.5}
-                color={kanbanStageColors[kanbanStage.key]}
-              />
-              {kanbanStageHovered && Platform.OS === 'web' && (
-                <View style={styles.kanbanStageTooltip}>
-                  <Text style={styles.tooltipText}>Kanban: {kanbanStage.label}</Text>
-                </View>
-              )}
-            </Pressable>
-          )}
           <Text
             style={[styles.text, done && styles.textDone, isMilestone && !done && styles.textMilestone]}
             numberOfLines={1}
@@ -295,17 +275,32 @@ export default function TodoItem({
         </Pressable>
       )}
 
-      {!done && (
-        <Pressable
-          onPress={onStartWork}
-          disabled={!onStartWork || !!startedWorkAt}
-          style={styles.startWorkCol}
-        >
-          <Text style={[styles.startWorkText, startedWorkAt && styles.startWorkTextActive]} numberOfLines={1}>
-            {startedWorkAt ? 'Working' : 'Start'}
-          </Text>
-        </Pressable>
-      )}
+      <Pressable
+        onPress={onStartWork}
+        disabled={done || !onStartWork || !!startedWorkAt}
+        onHoverIn={() => setStatusHovered(true)}
+        onHoverOut={() => setStatusHovered(false)}
+        style={styles.statusCol}
+        accessibilityRole="button"
+        accessibilityLabel={kanbanStage ? `Kanban stage: ${kanbanStage.label}` : startedWorkAt ? 'Working' : 'Start work'}
+      >
+        {!done && (kanbanStage || onStartWork) ? (
+          <>
+            <StatusIcon
+              size={18}
+              strokeWidth={2.5}
+              color={kanbanStage ? kanbanStageColors[kanbanStage.key] : startedWorkAt ? '#16a34a' : '#2563eb'}
+            />
+            {statusHovered && Platform.OS === 'web' && (
+              <View style={styles.statusTooltip}>
+                <Text style={styles.tooltipText}>
+                  {kanbanStage ? kanbanStage.label : startedWorkAt ? 'Working' : 'Start work'}
+                </Text>
+              </View>
+            )}
+          </>
+        ) : null}
+      </Pressable>
 
       <Pressable
         onPress={onDueDate}
@@ -361,12 +356,12 @@ export default function TodoItem({
           style={styles.archiveAction}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Archive task"
+          accessibilityLabel="Move task to deleted items"
         >
-          <Archive size={15} strokeWidth={2.4} color="#9ca3af" />
+          <Trash2 size={15} strokeWidth={2.4} color="#9ca3af" />
           {archiveHovered && Platform.OS === 'web' && (
             <View style={styles.archiveTooltip}>
-              <Text style={styles.tooltipText}>Archive</Text>
+              <Text style={styles.tooltipText}>Delete</Text>
             </View>
           )}
         </Pressable>
@@ -459,18 +454,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     maxWidth: 96,
   },
-  startWorkText: {
-    fontSize: 11,
-    color: '#2563eb',
-    fontWeight: '600',
-  },
-  startWorkTextActive: {
-    color: '#16a34a',
-  },
-  startWorkCol: {
+  statusCol: {
     marginLeft: 8,
     width: 56,
+    height: 28,
     alignItems: 'flex-start',
+    justifyContent: 'center',
+    position: 'relative',
   },
   dueDateCol: {
     marginLeft: 8,
@@ -546,14 +536,6 @@ const styles = StyleSheet.create({
   milestoneIcon: {
     fontSize: 11,
     color: '#d97706',
-  },
-  kanbanStageIconWrap: {
-    width: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    flexShrink: 0,
   },
   textMilestone: {
     fontWeight: '600',
@@ -647,7 +629,7 @@ const styles = StyleSheet.create({
     minWidth: 72,
     alignItems: 'center',
   },
-  kanbanStageTooltip: {
+  statusTooltip: {
     position: 'absolute',
     bottom: 24,
     left: 0,

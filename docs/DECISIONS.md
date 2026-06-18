@@ -60,6 +60,8 @@ Reason: both web and iPhone clients talk directly to Supabase, so database polic
 
 **Archive vs. Delete:** Permanent deletion is prohibited in production. Tasks are archived (`archived_at` timestamp set). Archived tasks retain their comment thread and full history. They appear in a collapsed "Archived" section and can be un-archived. This preserves project history and supports auditability.
 
+UI language may call this recoverable state "Deleted" and use a trash icon, but the database state remains `archived_at` until true permanent deletion exists.
+
 **Archive vs. Decline vs. Complete:** These are three distinct end-states with different semantics — complete means the work was finished, decline means it was rejected before acceptance, archive means it was removed from the active list after acceptance (could be de-scoped, duplicate, or replaced).
 
 Reason: commercial product requires an auditable, recoverable history. Permanent deletes destroy project context. Pre-acceptance immutability ensures the assigner's intent is preserved until the assignee commits. The comment thread enables async negotiation without requiring real-time presence.
@@ -69,6 +71,8 @@ Reason: commercial product requires an auditable, recoverable history. Permanent
 Decision: every column in a list view must have a fixed width that is shared exactly between the sort/header bar and the row items. Flexible or approximate widths are not acceptable.
 
 Reason: misaligned column headers break visual scanning and make the UI feel unpolished. The rule is enforced by (a) wrapping related row elements (e.g. priority square + assigner avatar) in a fixed-width container, and (b) setting the corresponding sort column to the same width + marginLeft. When a row element is added or removed, both the container width and the sort column width must be updated together.
+
+The Kanban/status column is fixed-width even when a row is completed. Completed rows must reserve this space so priority, due date, age, and delete action columns line up with active task rows.
 
 ## 2026-06-18: Overdue Rows Use Negative Due Labels
 
