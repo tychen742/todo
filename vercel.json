@@ -2,7 +2,7 @@
   "framework": null,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "crons": [{ "path": "/api/keep-supabase-awake", "schedule": "17 8 * * *" }],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
-
 

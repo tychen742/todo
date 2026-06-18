@@ -120,6 +120,35 @@ Re-run the command after any schema change to keep types in sync. Do not edit `l
 
 For iPhone, scan the Expo QR code or open the LAN `exp://...` URL in Expo Go.
 
+## Vercel Cron Supabase Keep-Alive
+
+`vercel.json` schedules a daily Vercel Cron request to:
+
+```text
+/api/keep-supabase-awake
+```
+
+The route sends lightweight Supabase REST reads against `profiles` and `todos`
+using the deployed environment variables:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_ANON_KEY
+```
+
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` are also accepted as server-only aliases.
+
+The schedule is `17 8 * * *`, which runs once per day at 08:17 UTC. The route is
+operational only; it does not contain product logic. Its purpose is to create
+daily Supabase API activity so the hosted project is less likely to be treated as
+idle.
+
+Manual check after deployment:
+
+```bash
+curl https://<deployment-host>/api/keep-supabase-awake
+```
+
 ## mba/mst Workflow
 
 On each machine:

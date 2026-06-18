@@ -16,12 +16,17 @@ The project is intentionally on Expo SDK 54 because the App Store version of Exp
 
 - Web runs through Expo/Metro at `localhost:8081`.
 - iPhone runs through Expo Go using the LAN URL from the Metro server.
+- Vercel serves the static Expo web build from `dist/`.
+- Vercel Cron calls `/api/keep-supabase-awake` once per day to send lightweight
+  Supabase REST reads and reduce idle-pause risk.
 - Node version is pinned with `.nvmrc`.
 
 ## App Structure
 
 - `app/index.tsx`: primary screen and current product workflow.
 - `components/TodoItem.tsx`: todo row rendering.
+- `api/keep-supabase-awake.js`: Vercel Cron endpoint for Supabase keep-alive
+  reads.
 - `lib/supabase.ts`: Supabase client and auth persistence.
 - `supabase/schema.sql`: database schema, RLS policies, and realtime publication.
 
