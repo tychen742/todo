@@ -145,6 +145,12 @@ Good candidates for `todo_events` are assignment changes, due-date changes, reop
 - Team todos are managed by members of that team.
 - Todo assignment must target a member of the same team.
 
+## Function Security
+
+Internal RLS and trigger helper functions live in the non-exposed `app_private` schema. Client-callable RPC functions remain in `public` and must receive explicit `EXECUTE` grants for only the intended Supabase roles.
+
+The schema revokes default function execution from `public`, `anon`, and `authenticated` in both function schemas, then grants back the helpers and RPC functions used by the app. New functions should follow the same rule: put internal helpers in `app_private`; expose only deliberate RPCs in `public`.
+
 ## Realtime
 
 The schema adds `todos` to the `supabase_realtime` publication so web and iPhone clients can refresh when todo rows change.

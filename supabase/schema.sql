@@ -1,5 +1,7 @@
 create extension if not exists pgcrypto;
 
+create schema if not exists app_private;
+
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique not null,
@@ -69,7 +71,7 @@ create unique index if not exists todos_position_team_active_unique
   on todos (team_id, position)
   where team_id is not null and done = false and position is not null;
 
-create or replace function public.is_team_member(p_team_id uuid, p_user_id uuid)
+create or replace function app_private.is_team_member(p_team_id uuid, p_user_id uuid)
 returns boolean
 language sql
 security definer
@@ -83,7 +85,7 @@ as $$
   );
 $$;
 
-create or replace function public.can_manage_team(p_team_id uuid, p_user_id uuid)
+create or replace function app_private.can_manage_team(p_team_id uuid, p_user_id uuid)
 returns boolean
 language sql
 security definer
@@ -107,7 +109,7 @@ $$;
 -- Auto-create a profile row whenever a new auth user signs up.
 -- This runs as a privileged trigger so it bypasses RLS, making it
 -- more reliable than the client-side ensureProfile upsert.
-create or replace function public.handle_new_user()
+create or replace function app_private.handle_new_user()
 returns trigger
 language plpgsql
 security definer
@@ -124,7 +126,7 @@ $$;
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+  for each row execute procedure app_private.handle_new_user();
 
 alter table profiles enable row level security;
 alter table teams enable row level security;
@@ -168,7 +170,7 @@ drop policy if exists "Users can create teams" on teams;
 create policy "Team members can read teams"
   on teams for select
   to authenticated
-  using (created_by = auth.uid() or public.is_team_member(id, auth.uid()));
+  using (created_by = auth.uid() or app_private.is_team_member(id, auth.uid()));
 
 create policy "Users can create teams"
   on teams for insert
@@ -183,23 +185,23 @@ drop policy if exists "Team admins can delete memberships" on team_members;
 create policy "Team members can read memberships"
   on team_members for select
   to authenticated
-  using (public.is_team_member(team_id, auth.uid()));
+  using (app_private.is_team_member(team_id, auth.uid()));
 
 create policy "Team admins can add memberships"
   on team_members for insert
   to authenticated
-  with check (public.can_manage_team(team_id, auth.uid()));
+  with check (app_private.can_manage_team(team_id, auth.uid()));
 
 create policy "Team admins can update memberships"
   on team_members for update
   to authenticated
-  using (public.can_manage_team(team_id, auth.uid()))
-  with check (public.can_manage_team(team_id, auth.uid()));
+  using (app_private.can_manage_team(team_id, auth.uid()))
+  with check (app_private.can_manage_team(team_id, auth.uid()));
 
 create policy "Team admins can delete memberships"
   on team_members for delete
   to authenticated
-  using (public.can_manage_team(team_id, auth.uid()));
+  using (app_private.can_manage_team(team_id, auth.uid()));
 
 drop policy if exists "Users can read their own todos" on todos;
 drop policy if exists "Users can add their own todos" on todos;
@@ -215,7 +217,7 @@ create policy "Team members can read team todos"
   to authenticated
   using (
     (team_id is null and created_by = auth.uid())
-    or public.is_team_member(team_id, auth.uid())
+    or app_private.is_team_member(team_id, auth.uid())
   );
 
 create policy "Team members can add team todos"
@@ -226,8 +228,8 @@ create policy "Team members can add team todos"
     and (
       (team_id is null and assigned_to is null)
       or (
-        public.is_team_member(team_id, auth.uid())
-        and (assigned_to is null or public.is_team_member(team_id, assigned_to))
+        app_private.is_team_member(team_id, auth.uid())
+        and (assigned_to is null or app_private.is_team_member(team_id, assigned_to))
       )
     )
   );
@@ -237,14 +239,14 @@ create policy "Team members can update team todos"
   to authenticated
   using (
     (team_id is null and created_by = auth.uid())
-    or public.is_team_member(team_id, auth.uid())
+    or app_private.is_team_member(team_id, auth.uid())
   )
   with check (
     (
       (team_id is null and created_by = auth.uid() and assigned_to is null)
       or (
-        public.is_team_member(team_id, auth.uid())
-        and (assigned_to is null or public.is_team_member(team_id, assigned_to))
+        app_private.is_team_member(team_id, auth.uid())
+        and (assigned_to is null or app_private.is_team_member(team_id, assigned_to))
       )
     )
   );
@@ -254,7 +256,7 @@ create policy "Team members can delete team todos"
   to authenticated
   using (
     (team_id is null and created_by = auth.uid())
-    or public.is_team_member(team_id, auth.uid())
+    or app_private.is_team_member(team_id, auth.uid())
   );
 
 do $$
@@ -343,7 +345,7 @@ create policy "Project members can read projects"
   on projects for select to authenticated
   using (
     created_by = auth.uid()
-    or (team_id is not null and public.is_team_member(team_id, auth.uid()))
+    or (team_id is not null and app_private.is_team_member(team_id, auth.uid()))
   );
 
 create policy "Users can create projects"
@@ -354,14 +356,14 @@ create policy "Project owners can update projects"
   on projects for update to authenticated
   using (
     created_by = auth.uid()
-    or (team_id is not null and public.can_manage_team(team_id, auth.uid()))
+    or (team_id is not null and app_private.can_manage_team(team_id, auth.uid()))
   );
 
 create policy "Project owners can delete projects"
   on projects for delete to authenticated
   using (
     created_by = auth.uid()
-    or (team_id is not null and public.can_manage_team(team_id, auth.uid()))
+    or (team_id is not null and app_private.can_manage_team(team_id, auth.uid()))
   );
 
 drop policy if exists "Project members can read phases" on project_phases;
@@ -375,7 +377,7 @@ create policy "Project members can read phases"
       where p.id = project_phases.project_id
         and (
           p.created_by = auth.uid()
-          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+          or (p.team_id is not null and app_private.is_team_member(p.team_id, auth.uid()))
         )
     )
   );
@@ -388,7 +390,7 @@ create policy "Project members can manage phases"
       where p.id = project_phases.project_id
         and (
           p.created_by = auth.uid()
-          or (p.team_id is not null and public.can_manage_team(p.team_id, auth.uid()))
+          or (p.team_id is not null and app_private.can_manage_team(p.team_id, auth.uid()))
         )
     )
   );
@@ -410,7 +412,7 @@ create policy "Project members can read project todos"
       where p.id = todos.project_id
         and (
           p.created_by = auth.uid()
-          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+          or (p.team_id is not null and app_private.is_team_member(p.team_id, auth.uid()))
         )
     )
   );
@@ -425,7 +427,7 @@ create policy "Project members can add project todos"
       where p.id = project_id
         and (
           p.created_by = auth.uid()
-          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+          or (p.team_id is not null and app_private.is_team_member(p.team_id, auth.uid()))
         )
     )
   );
@@ -439,7 +441,7 @@ create policy "Project members can update project todos"
       where p.id = todos.project_id
         and (
           p.created_by = auth.uid()
-          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+          or (p.team_id is not null and app_private.is_team_member(p.team_id, auth.uid()))
         )
     )
   );
@@ -453,7 +455,7 @@ create policy "Project members can delete project todos"
       where p.id = todos.project_id
         and (
           p.created_by = auth.uid()
-          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
+          or (p.team_id is not null and app_private.is_team_member(p.team_id, auth.uid()))
         )
     )
   );
@@ -480,7 +482,7 @@ alter table teams add column if not exists org_id uuid references organizations(
 create index if not exists org_members_user_id_idx on org_members (user_id);
 create index if not exists teams_org_id_idx on teams (org_id);
 
-create or replace function public.is_org_member(p_org_id uuid, p_user_id uuid)
+create or replace function app_private.is_org_member(p_org_id uuid, p_user_id uuid)
 returns boolean
 language sql
 security definer
@@ -494,7 +496,7 @@ as $$
   );
 $$;
 
-create or replace function public.can_manage_org(p_org_id uuid, p_user_id uuid)
+create or replace function app_private.can_manage_org(p_org_id uuid, p_user_id uuid)
 returns boolean
 language sql
 security definer
@@ -525,7 +527,7 @@ drop policy if exists "Org owners can delete organizations" on organizations;
 
 create policy "Org members can read organizations"
   on organizations for select to authenticated
-  using (created_by = auth.uid() or public.is_org_member(id, auth.uid()));
+  using (created_by = auth.uid() or app_private.is_org_member(id, auth.uid()));
 
 create policy "Users can create organizations"
   on organizations for insert to authenticated
@@ -533,8 +535,8 @@ create policy "Users can create organizations"
 
 create policy "Org admins can update organizations"
   on organizations for update to authenticated
-  using (public.can_manage_org(id, auth.uid()))
-  with check (public.can_manage_org(id, auth.uid()));
+  using (app_private.can_manage_org(id, auth.uid()))
+  with check (app_private.can_manage_org(id, auth.uid()));
 
 create policy "Org owners can delete organizations"
   on organizations for delete to authenticated
@@ -547,20 +549,20 @@ drop policy if exists "Org admins can delete org memberships" on org_members;
 
 create policy "Org members can read org memberships"
   on org_members for select to authenticated
-  using (public.is_org_member(org_id, auth.uid()));
+  using (app_private.is_org_member(org_id, auth.uid()));
 
 create policy "Org admins can add org memberships"
   on org_members for insert to authenticated
-  with check (public.can_manage_org(org_id, auth.uid()));
+  with check (app_private.can_manage_org(org_id, auth.uid()));
 
 create policy "Org admins can update org memberships"
   on org_members for update to authenticated
-  using (public.can_manage_org(org_id, auth.uid()))
-  with check (public.can_manage_org(org_id, auth.uid()));
+  using (app_private.can_manage_org(org_id, auth.uid()))
+  with check (app_private.can_manage_org(org_id, auth.uid()));
 
 create policy "Org admins can delete org memberships"
   on org_members for delete to authenticated
-  using (public.can_manage_org(org_id, auth.uid()));
+  using (app_private.can_manage_org(org_id, auth.uid()));
 
 -- Org members can see all teams in their organization.
 drop policy if exists "Team members can read teams" on teams;
@@ -568,8 +570,8 @@ create policy "Team members can read teams"
   on teams for select to authenticated
   using (
     created_by = auth.uid()
-    or public.is_team_member(id, auth.uid())
-    or (org_id is not null and public.is_org_member(org_id, auth.uid()))
+    or app_private.is_team_member(id, auth.uid())
+    or (org_id is not null and app_private.is_org_member(org_id, auth.uid()))
   );
 
 drop policy if exists "Team admins can update teams" on teams;
@@ -577,14 +579,14 @@ drop policy if exists "Team owners can delete teams" on teams;
 
 create policy "Team admins can update teams"
   on teams for update to authenticated
-  using (public.can_manage_team(id, auth.uid()))
-  with check (public.can_manage_team(id, auth.uid()));
+  using (app_private.can_manage_team(id, auth.uid()))
+  with check (app_private.can_manage_team(id, auth.uid()));
 
 create policy "Team owners can delete teams"
   on teams for delete to authenticated
   using (
     created_by = auth.uid()
-    or (org_id is not null and public.can_manage_org(org_id, auth.uid()))
+    or (org_id is not null and app_private.can_manage_org(org_id, auth.uid()))
   );
 
 -- Org co-members can see each other's profiles.
@@ -612,7 +614,7 @@ create policy "Users can read own and team profiles"
 -- Free-tier enforcement: 3 orgs per user, 5 members per org.
 -- Both limits are checked on every insert into org_members, which covers
 -- org creation (creator is inserted as owner) and member additions.
-create or replace function public.check_org_membership_limits()
+create or replace function app_private.check_org_membership_limits()
 returns trigger
 language plpgsql
 security definer
@@ -645,7 +647,7 @@ $$;
 drop trigger if exists enforce_org_membership_limits on org_members;
 create trigger enforce_org_membership_limits
   before insert on org_members
-  for each row execute procedure public.check_org_membership_limits();
+  for each row execute procedure app_private.check_org_membership_limits();
 
 -- Atomically transfer org ownership: promotes the new owner, demotes the caller to admin.
 -- security invoker so auth.uid() resolves to the caller, not the definer.
@@ -681,7 +683,7 @@ $$;
 -- Look up a profile by email for the "add member by email" flow.
 -- Security definer so the lookup works before the two users share a team/org.
 -- Returns only id and email — no other profile data is exposed.
-create or replace function public.find_profile_by_email(p_email text)
+create or replace function app_private.find_profile_by_email_impl(p_email text)
 returns table(id uuid, email text)
 language sql
 security definer
@@ -691,6 +693,15 @@ as $$
   from profiles
   where email = lower(p_email)
   limit 1;
+$$;
+
+create or replace function public.find_profile_by_email(p_email text)
+returns table(id uuid, email text)
+language sql
+security invoker
+set search_path = public
+as $$
+  select * from app_private.find_profile_by_email_impl(p_email);
 $$;
 
 create or replace function public.search_profiles(p_query text, p_limit integer default 8)
@@ -796,7 +807,7 @@ create policy "Team members can read team todos"
   to authenticated
   using (
     (team_id is null and created_by = auth.uid())
-    or public.is_team_member(team_id, auth.uid())
+    or app_private.is_team_member(team_id, auth.uid())
     or assigned_to = auth.uid()
   );
 
@@ -807,7 +818,7 @@ create policy "Team members can update team todos"
   to authenticated
   using (
     (team_id is null and created_by = auth.uid())
-    or public.is_team_member(team_id, auth.uid())
+    or app_private.is_team_member(team_id, auth.uid())
     or assigned_to = auth.uid()
   );
 
@@ -853,7 +864,7 @@ alter table task_comments enable row level security;
 
 -- Helper: can the current user access a given todo's comment thread?
 -- Mirrors the union of all todo SELECT policies.
-create or replace function public.can_access_todo(p_todo_id uuid, p_user_id uuid)
+create or replace function app_private.can_access_todo(p_todo_id uuid, p_user_id uuid)
 returns boolean
 language sql
 security definer
@@ -864,7 +875,7 @@ as $$
     where t.id = p_todo_id
       and (
         (t.team_id is null and t.created_by = p_user_id)
-        or public.is_team_member(t.team_id, p_user_id)
+        or app_private.is_team_member(t.team_id, p_user_id)
         or t.assigned_to = p_user_id
         or (
           t.project_id is not null
@@ -873,7 +884,7 @@ as $$
             where p.id = t.project_id
               and (
                 p.created_by = p_user_id
-                or (p.team_id is not null and public.is_team_member(p.team_id, p_user_id))
+                or (p.team_id is not null and app_private.is_team_member(p.team_id, p_user_id))
               )
           )
         )
@@ -887,14 +898,14 @@ drop policy if exists "Accessible todo members can post comments" on task_commen
 create policy "Accessible todo members can read comments"
   on task_comments for select
   to authenticated
-  using (public.can_access_todo(todo_id, auth.uid()));
+  using (app_private.can_access_todo(todo_id, auth.uid()));
 
 create policy "Accessible todo members can post comments"
   on task_comments for insert
   to authenticated
   with check (
     user_id = auth.uid()
-    and public.can_access_todo(todo_id, auth.uid())
+    and app_private.can_access_todo(todo_id, auth.uid())
   );
 
 -- Publish task_comments to realtime so threads update live.
@@ -988,7 +999,7 @@ create index if not exists project_members_user_id_idx    on project_members (us
 alter table project_members enable row level security;
 
 -- Security-definer helper to avoid RLS recursion when policies reference project_members.
-create or replace function public.is_project_member(p_project_id uuid, p_user_id uuid)
+create or replace function app_private.is_project_member(p_project_id uuid, p_user_id uuid)
 returns boolean
 language sql
 security definer
@@ -1000,7 +1011,7 @@ as $$
   );
 $$;
 
-create or replace function public.can_manage_project(p_project_id uuid, p_user_id uuid)
+create or replace function app_private.can_manage_project(p_project_id uuid, p_user_id uuid)
 returns boolean
 language sql
 security definer
@@ -1011,7 +1022,7 @@ as $$
     where p.id = p_project_id
       and (
         p.created_by = p_user_id
-        or public.is_project_member(p.id, p_user_id)
+        or app_private.is_project_member(p.id, p_user_id)
       )
   );
 $$;
@@ -1025,8 +1036,8 @@ create policy "Project members can read project membership"
       where p.id = project_members.project_id
         and (
           p.created_by = auth.uid()
-          or (p.team_id is not null and public.is_team_member(p.team_id, auth.uid()))
-          or public.is_project_member(p.id, auth.uid())
+          or (p.team_id is not null and app_private.is_team_member(p.team_id, auth.uid()))
+          or app_private.is_project_member(p.id, auth.uid())
         )
     )
   );
@@ -1035,10 +1046,10 @@ drop policy if exists "Project owners can manage project membership" on project_
 create policy "Project owners can manage project membership"
   on project_members for all to authenticated
   using (
-    public.can_manage_project(project_members.project_id, auth.uid())
+    app_private.can_manage_project(project_members.project_id, auth.uid())
   )
   with check (
-    public.can_manage_project(project_members.project_id, auth.uid())
+    app_private.can_manage_project(project_members.project_id, auth.uid())
   );
 
 create table if not exists project_invitations (
@@ -1067,21 +1078,21 @@ drop policy if exists "Project managers can update project invitations" on proje
 
 create policy "Project managers can read project invitations"
   on project_invitations for select to authenticated
-  using (public.can_manage_project(project_id, auth.uid()));
+  using (app_private.can_manage_project(project_id, auth.uid()));
 
 create policy "Project managers can create project invitations"
   on project_invitations for insert to authenticated
-  with check (public.can_manage_project(project_id, auth.uid()) and invited_by = auth.uid());
+  with check (app_private.can_manage_project(project_id, auth.uid()) and invited_by = auth.uid());
 
 create policy "Project managers can update project invitations"
   on project_invitations for update to authenticated
-  using (public.can_manage_project(project_id, auth.uid()))
-  with check (public.can_manage_project(project_id, auth.uid()));
+  using (app_private.can_manage_project(project_id, auth.uid()))
+  with check (app_private.can_manage_project(project_id, auth.uid()));
 
 create or replace function public.create_project_invitation(p_project_id uuid, p_email text)
 returns table(token uuid, email text, project_id uuid, status text)
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $$
 declare
@@ -1091,7 +1102,7 @@ begin
     raise exception 'Email is required';
   end if;
 
-  if not public.can_manage_project(p_project_id, auth.uid()) then
+  if not app_private.can_manage_project(p_project_id, auth.uid()) then
     raise exception 'Not authorized to invite people to this project';
   end if;
 
@@ -1109,7 +1120,7 @@ begin
 end;
 $$;
 
-create or replace function public.get_project_invitation_by_token(p_token uuid)
+create or replace function app_private.get_project_invitation_by_token_impl(p_token uuid)
 returns table(project_id uuid, project_name text, email text, status text, invited_by_email text, invited_by_display_name text)
 language sql
 security definer
@@ -1129,7 +1140,16 @@ as $$
   limit 1;
 $$;
 
-create or replace function public.accept_project_invitation(p_token uuid)
+create or replace function public.get_project_invitation_by_token(p_token uuid)
+returns table(project_id uuid, project_name text, email text, status text, invited_by_email text, invited_by_display_name text)
+language sql
+security invoker
+set search_path = public
+as $$
+  select * from app_private.get_project_invitation_by_token_impl(p_token);
+$$;
+
+create or replace function app_private.accept_project_invitation_impl(p_token uuid)
 returns table(project_id uuid, email text)
 language plpgsql
 security definer
@@ -1182,8 +1202,17 @@ begin
 end;
 $$;
 
+create or replace function public.accept_project_invitation(p_token uuid)
+returns table(project_id uuid, email text)
+language sql
+security invoker
+set search_path = public
+as $$
+  select * from app_private.accept_project_invitation_impl(p_token);
+$$;
+
 -- Auto-insert the project creator as owner whenever a project row is inserted.
-create or replace function public.handle_new_project()
+create or replace function app_private.handle_new_project()
 returns trigger
 language plpgsql
 security definer
@@ -1200,4 +1229,52 @@ $$;
 drop trigger if exists on_project_created on projects;
 create trigger on_project_created
   after insert on projects
-  for each row execute procedure public.handle_new_project();
+  for each row execute procedure app_private.handle_new_project();
+
+-- Function execution is public by default in Postgres. Keep internal helpers out
+-- of the exposed API schema, then grant only the RPC functions the app calls.
+revoke execute on all functions in schema public from public;
+revoke execute on all functions in schema public from anon, authenticated;
+alter default privileges in schema public revoke execute on functions from public;
+alter default privileges in schema public revoke execute on functions from anon, authenticated;
+
+revoke usage on schema app_private from public, anon;
+grant usage on schema app_private to anon, authenticated;
+revoke execute on all functions in schema app_private from public;
+revoke execute on all functions in schema app_private from anon, authenticated;
+alter default privileges in schema app_private revoke execute on functions from public;
+alter default privileges in schema app_private revoke execute on functions from anon, authenticated;
+
+grant execute on function app_private.is_team_member(uuid, uuid) to authenticated;
+grant execute on function app_private.can_manage_team(uuid, uuid) to authenticated;
+grant execute on function app_private.is_org_member(uuid, uuid) to authenticated;
+grant execute on function app_private.can_manage_org(uuid, uuid) to authenticated;
+grant execute on function app_private.can_access_todo(uuid, uuid) to authenticated;
+grant execute on function app_private.is_project_member(uuid, uuid) to authenticated;
+grant execute on function app_private.can_manage_project(uuid, uuid) to authenticated;
+grant execute on function app_private.find_profile_by_email_impl(text) to authenticated;
+grant execute on function app_private.accept_project_invitation_impl(uuid) to authenticated;
+grant execute on function app_private.get_project_invitation_by_token_impl(uuid) to anon, authenticated;
+
+grant execute on function public.search_profiles(text, integer) to authenticated;
+grant execute on function public.batch_update_todo_positions(jsonb) to authenticated;
+grant execute on function public.batch_update_todo_workflow_positions(jsonb) to authenticated;
+grant execute on function public.create_team_with_owner(text, uuid) to authenticated;
+grant execute on function public.create_org_with_owner(text) to authenticated;
+grant execute on function public.transfer_org_ownership(uuid, uuid) to authenticated;
+grant execute on function public.find_profile_by_email(text) to authenticated;
+grant execute on function public.create_project_invitation(uuid, text) to authenticated;
+grant execute on function public.accept_project_invitation(uuid) to authenticated;
+grant execute on function public.get_project_invitation_by_token(uuid) to anon, authenticated;
+
+-- Cleanup for databases created before internal helpers moved out of public.
+drop function if exists public.is_team_member(uuid, uuid);
+drop function if exists public.can_manage_team(uuid, uuid);
+drop function if exists public.handle_new_user();
+drop function if exists public.is_org_member(uuid, uuid);
+drop function if exists public.can_manage_org(uuid, uuid);
+drop function if exists public.check_org_membership_limits();
+drop function if exists public.can_access_todo(uuid, uuid);
+drop function if exists public.is_project_member(uuid, uuid);
+drop function if exists public.can_manage_project(uuid, uuid);
+drop function if exists public.handle_new_project();
