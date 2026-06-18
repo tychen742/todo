@@ -72,6 +72,8 @@ Decision: every column in a list view must have a fixed width that is shared exa
 
 Reason: misaligned column headers break visual scanning and make the UI feel unpolished. The rule is enforced by (a) wrapping related row elements (e.g. priority square + assigner avatar) in a fixed-width container, and (b) setting the corresponding sort column to the same width + marginLeft. When a row element is added or removed, both the container width and the sort column width must be updated together.
 
+UI symbols that represent the same entity or state must be consistent across views. If a project is represented by a colored initials avatar in task rows, the Projects view must use the same avatar derivation for that project. If a state uses a specific icon in one row or card surface, other surfaces showing that state should use the same icon unless there is a documented reason not to.
+
 The Kanban/status column is fixed-width even when a row is completed. Completed rows must reserve this space so priority, due date, age, and delete action columns line up with active task rows.
 
 Priority squares are fixed-position row controls and must show their priority level in a tooltip on hover.

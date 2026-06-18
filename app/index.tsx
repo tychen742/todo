@@ -3102,6 +3102,10 @@ export default function HomeScreen() {
         <ScrollView style={styles.projectsGrid} contentContainerStyle={styles.projectsGridContent}>
           {projects.map((project) => {
             const linkedTeam = project.team_id ? teams.find((t) => t.id === project.team_id) : null;
+            const avatar = {
+              initials: projectInitials(project.name),
+              color: pickAvatarColor(`project:${project.id}`),
+            };
             return (
               <View key={project.id} style={styles.projectCard}>
                 <Pressable
@@ -3115,7 +3119,12 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Open project ${project.name}`}
                 >
-                  <Text style={styles.projectCardName} numberOfLines={1}>{project.name}</Text>
+                  <View style={styles.projectCardHeader}>
+                    <View style={[styles.projectCardAvatar, { backgroundColor: avatar.color }]}>
+                      <Text style={styles.projectCardAvatarText}>{avatar.initials}</Text>
+                    </View>
+                    <Text style={styles.projectCardName} numberOfLines={1}>{project.name}</Text>
+                  </View>
                   <Text style={styles.projectCardMeta} numberOfLines={1}>
                     {linkedTeam ? linkedTeam.name : 'No team linked'}
                   </Text>
@@ -6240,11 +6249,31 @@ const styles = StyleSheet.create({
     padding: 14,
     justifyContent: 'center',
   },
+  projectCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  projectCardAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  projectCardAvatarText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   projectCardName: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 16,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 6,
   },
   projectCardMeta: {
     fontSize: 12,
