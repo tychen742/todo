@@ -94,6 +94,7 @@ Rules:
 - Projects are bounded and should support lifecycle states such as active, paused, completed, and closed.
 - Projects should support lifecycle planning through phases, milestones, schedule views, and critical path identification.
 - Project names should be editable from an explicit project planning or settings surface rather than relying on double-click, because project naming is tied to planning metadata and must work well on mobile.
+- Project phase columns should be editable and deletable per project. Deleting a phase moves its tasks back to Backlog, and every project must keep at least one phase column.
 - Resource management and risk management should start as lightweight planning and annotation workflows, not as a heavy enterprise module.
 - Todo annotations and project planning/annotation should capture resource constraints, risks, assumptions, blockers, and mitigation notes.
 - Assignment only makes sense in a team or project context with multiple users.

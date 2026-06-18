@@ -499,6 +499,7 @@ export default function HomeScreen() {
   const [newPhaseName, setNewPhaseName] = useState('');
   const [renamingPhase, setRenamingPhase] = useState<Phase | null>(null);
   const [renamePhaseName, setRenamePhaseName] = useState('');
+  const [phaseDeleteConfirming, setPhaseDeleteConfirming] = useState(false);
   const [renamingWorkflowLane, setRenamingWorkflowLane] = useState<WorkflowLaneKey | null>(null);
   const [renameWorkflowLaneName, setRenameWorkflowLaneName] = useState('');
   const [editDraftPhaseId, setEditDraftPhaseId] = useState<string | null>(null);
@@ -2400,11 +2401,13 @@ export default function HomeScreen() {
   function openRenamePhase(phase: Phase) {
     setRenamingPhase(phase);
     setRenamePhaseName(phase.name);
+    setPhaseDeleteConfirming(false);
   }
 
   function closeRenamePhase() {
     setRenamingPhase(null);
     setRenamePhaseName('');
+    setPhaseDeleteConfirming(false);
   }
 
   async function saveRenamePhase() {
@@ -2426,6 +2429,55 @@ export default function HomeScreen() {
     )));
     closeRenamePhase();
     setError('');
+  }
+
+  async function deletePhase() {
+    if (!renamingPhase) return;
+    if (phases.length <= 1) {
+      setError('Projects must keep at least one column.');
+      setPhaseDeleteConfirming(false);
+      return;
+    }
+
+    const phase = renamingPhase;
+    const remainingPhases = phases
+      .filter((item) => item.id !== phase.id)
+      .sort((a, b) => a.order_index - b.order_index)
+      .map((item, index) => ({ ...item, order_index: index }));
+
+    const { error: deleteError } = await supabase
+      .from('project_phases')
+      .delete()
+      .eq('id', phase.id);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
+
+    setPhases(remainingPhases);
+    setTodos((prev) => prev.map((todo) => (
+      todo.phase_id === phase.id ? { ...todo, phase_id: null } : todo
+    )));
+    setColumnInputs((prev) => {
+      const next = { ...prev };
+      delete next[phase.id];
+      return next;
+    });
+    closeRenamePhase();
+    setError('');
+
+    const reindexResults = await Promise.all(
+      remainingPhases.map((item) =>
+        supabase
+          .from('project_phases')
+          .update({ order_index: item.order_index })
+          .eq('id', item.id)
+      )
+    );
+    const reindexError = reindexResults.find((result) => result.error)?.error;
+    if (reindexError) {
+      setError(reindexError.message);
+    }
   }
 
   function openRenameWorkflowLane(lane: WorkflowLaneKey) {
@@ -3900,7 +3952,7 @@ export default function HomeScreen() {
                       style={styles.kanbanColMenuButton}
                       hitSlop={8}
                       accessibilityRole="button"
-                      accessibilityLabel={`Rename ${phase.name} column`}
+                      accessibilityLabel={`${phase.name} column settings`}
                     >
                       <MoreHorizontal size={16} color="#9ca3af" />
                     </Pressable>
@@ -5273,7 +5325,7 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={closeRenamePhase}>
           <Pressable style={styles.calendarCard}>
-            <Text style={styles.editModalTitle}>Rename Column</Text>
+            <Text style={styles.editModalTitle}>Column Settings</Text>
             <TextInput
               style={styles.editModalInput}
               value={renamePhaseName}
@@ -5284,16 +5336,50 @@ export default function HomeScreen() {
               returnKeyType="done"
               onSubmitEditing={saveRenamePhase}
             />
-            <View style={styles.editModalActions}>
-              <Pressable onPress={closeRenamePhase}>
-                <Text style={styles.calendarCancelText}>Cancel</Text>
-              </Pressable>
+            {phaseDeleteConfirming && (
+              <View style={styles.columnDeleteConfirm}>
+                <Text style={styles.columnDeleteConfirmText}>
+                  Delete this column? Its tasks will move to Backlog.
+                </Text>
+              </View>
+            )}
+            <View style={[styles.editModalActions, { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb', paddingTop: 12 }]}>
               <Pressable
-                onPress={saveRenamePhase}
-                style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+                onPress={() => {
+                  if (phases.length <= 1) {
+                    setError('Projects must keep at least one column.');
+                    closeRenamePhase();
+                    return;
+                  }
+                  if (phaseDeleteConfirming) {
+                    deletePhase();
+                  } else {
+                    setPhaseDeleteConfirming(true);
+                  }
+                }}
+                disabled={phases.length <= 1}
+                accessibilityRole="button"
+                accessibilityLabel={phases.length <= 1 ? 'Cannot delete the only column' : 'Delete column'}
               >
-                <Text style={styles.smallBtnText}>Save</Text>
+                <Text style={[
+                  styles.archiveBtnText,
+                  styles.columnDeleteText,
+                  phases.length <= 1 && styles.columnDeleteTextDisabled,
+                ]}>
+                  {phaseDeleteConfirming ? 'Confirm delete' : 'Delete'}
+                </Text>
               </Pressable>
+              <View style={styles.editModalActionsRight}>
+                <Pressable onPress={closeRenamePhase}>
+                  <Text style={styles.calendarCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={saveRenamePhase}
+                  style={({ pressed }) => [styles.smallBtn, pressed && styles.btnPressed]}
+                >
+                  <Text style={styles.smallBtnText}>Save</Text>
+                </Pressable>
+              </View>
             </View>
           </Pressable>
         </Pressable>
@@ -8194,6 +8280,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9ca3af',
     fontWeight: '600',
+  },
+  columnDeleteText: {
+    color: '#dc2626',
+  },
+  columnDeleteTextDisabled: {
+    color: '#d1d5db',
+  },
+  columnDeleteConfirm: {
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  columnDeleteConfirmText: {
+    color: '#991b1b',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
   },
   editModalActionsRight: {
     flexDirection: 'row',

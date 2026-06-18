@@ -83,6 +83,8 @@ Workflow status values:
 
 `phase_id` and `position` are the project Plan placement. They answer where the task belongs in the project structure. `workflow_status` and `workflow_position` are the Kanban placement. They answer what is happening to the task now. These fields are intentionally separate.
 
+Deleting a project phase sets affected todo `phase_id` values to `null`, which moves those tasks back to the project Backlog. The app enforces at least one phase column per project and compacts remaining phase `order_index` values after deletion.
+
 Personal todos have `team_id = null`. Team todos have `team_id` set and can be assigned to a team member.
 Assigned tasks start as incoming work until the assignee accepts them. `assigned_at` records when the task was assigned, `accepted_at` records when the assignee accepted it into their todo list, and `completed_at` records when the task was marked done.
 
