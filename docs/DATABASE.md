@@ -17,7 +17,13 @@ Application profile for each Supabase Auth user.
 - `id`
 - `email`
 - `display_name`
+- `avatar_url`
+- `status`
 - `created_at`
+
+`avatar_url` stores the public Supabase Storage URL for the user's profile photo.
+Task rows use this as the assigner avatar. If it is empty, the UI falls back to
+the user's initials or local animal avatar.
 
 The project access modal uses a `search_profiles` RPC to typeahead people by display name or email. The RPC still respects `profiles` RLS, so it only returns people the signed-in user is allowed to see.
 
@@ -152,6 +158,18 @@ Good candidates for `todo_events` are assignment changes, due-date changes, reop
 Internal RLS and trigger helper functions live in the non-exposed `app_private` schema. Client-callable RPC functions remain in `public` and must receive explicit `EXECUTE` grants for only the intended Supabase roles.
 
 The schema revokes default function execution from `public`, `anon`, and `authenticated` in both function schemas, then grants back the helpers and RPC functions used by the app. New functions should follow the same rule: put internal helpers in `app_private`; expose only deliberate RPCs in `public`.
+
+## Storage
+
+### `avatars`
+
+Public Supabase Storage bucket for profile photos.
+
+- Files are stored under `{user_id}/...`.
+- Any user can read avatar files.
+- Signed-in users can insert, update, and delete only files in their own
+  `{auth.uid()}` folder.
+- The app writes the public URL to `profiles.avatar_url` after upload.
 
 ## Realtime
 

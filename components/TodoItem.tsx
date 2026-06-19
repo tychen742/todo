@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform, Image } from 'react-native';
 import { CircleCheck, Eye, SquareKanban, SquarePlay, Trash2 } from 'lucide-react-native';
 
 type KanbanStageKey = 'backlog' | 'doing' | 'review' | 'done';
@@ -20,11 +20,13 @@ type Props = {
   isMilestone?: boolean;
   assignerInitials?: string;
   assignerColor?: string;
+  assignerAvatarUrl?: string | null;
   assignerName?: string;
   projectAvatar?: { label: string; initials: string; color: string };
   onToggle: () => void;
   onOpenEdit?: () => void;
   onAssign?: () => void;
+  onProject?: () => void;
   onPriority?: () => void;
   onDueDate?: () => void;
   onStartWork?: () => void;
@@ -110,11 +112,13 @@ export default function TodoItem({
   isMilestone = false,
   assignerInitials,
   assignerColor,
+  assignerAvatarUrl,
   assignerName,
   projectAvatar,
   onToggle,
   onOpenEdit,
   onAssign,
+  onProject,
   onPriority,
   onDueDate,
   onStartWork,
@@ -260,9 +264,13 @@ export default function TodoItem({
             style={styles.assignerAvatarWrap}
             hitSlop={4}
           >
-            <View style={[styles.assignerAvatar, { backgroundColor: assignerColor ?? '#9ca3af' }]}>
-              <Text style={styles.assignerAvatarText}>{assignerInitials}</Text>
-            </View>
+            {assignerAvatarUrl ? (
+              <Image source={{ uri: assignerAvatarUrl }} style={styles.assignerAvatarPhoto} />
+            ) : (
+              <View style={[styles.assignerAvatar, { backgroundColor: assignerColor ?? '#9ca3af' }]}>
+                <Text style={styles.assignerAvatarText}>{assignerInitials}</Text>
+              </View>
+            )}
             {assignerHovered && Platform.OS === 'web' && assignerName && (
               <View style={styles.tooltip}>
                 <Text style={styles.tooltipText}>{assignerName}</Text>
@@ -280,22 +288,16 @@ export default function TodoItem({
         </Pressable>
       )}
 
-      <Pressable
-        onPress={onStartWork}
-        disabled={done || !onStartWork || !!startedWorkAt}
-        onHoverIn={() => setStatusHovered(true)}
-        onHoverOut={() => setStatusHovered(false)}
-        style={styles.statusCol}
-        accessibilityRole="button"
-        accessibilityLabel={kanbanStage ? `Kanban stage: ${kanbanStage.label}` : startedWorkAt ? 'Working' : 'Start work'}
-      >
+      <View style={styles.statusCol}>
         <View style={styles.statusIcons}>
           {projectAvatar ? (
             <Pressable
+              onPress={onProject}
+              disabled={!onProject}
               onHoverIn={() => setProjectHovered(true)}
               onHoverOut={() => setProjectHovered(false)}
               style={[styles.projectAvatar, { backgroundColor: projectAvatar.color }]}
-              accessibilityRole="image"
+              accessibilityRole={onProject ? 'button' : 'image'}
               accessibilityLabel={`Project: ${projectAvatar.label}`}
               hitSlop={4}
             >
@@ -308,11 +310,13 @@ export default function TodoItem({
             </Pressable>
           ) : (
             <Pressable
+              onPress={onProject}
+              disabled={!onProject}
               onHoverIn={() => setProjectHovered(true)}
               onHoverOut={() => setProjectHovered(false)}
               style={styles.projectAvatarEmpty}
-              accessibilityRole="image"
-              accessibilityLabel="No project assigned"
+              accessibilityRole={onProject ? 'button' : 'image'}
+              accessibilityLabel={onProject ? 'Assign project' : 'No project assigned'}
               hitSlop={4}
             >
               <Text style={styles.projectAvatarEmptyText}>+</Text>
@@ -324,11 +328,21 @@ export default function TodoItem({
             </Pressable>
           )}
           {!done && (kanbanStage || onStartWork) ? (
-            <StatusIcon
-              size={18}
-              strokeWidth={2.5}
-              color={kanbanStage ? kanbanStageColors[kanbanStage.key] : startedWorkAt ? '#16a34a' : '#2563eb'}
-            />
+            <Pressable
+              onPress={onStartWork}
+              disabled={done || !onStartWork || !!startedWorkAt}
+              onHoverIn={() => setStatusHovered(true)}
+              onHoverOut={() => setStatusHovered(false)}
+              accessibilityRole="button"
+              accessibilityLabel={kanbanStage ? `Kanban stage: ${kanbanStage.label}` : startedWorkAt ? 'Working' : 'Start work'}
+              hitSlop={4}
+            >
+              <StatusIcon
+                size={18}
+                strokeWidth={2.5}
+                color={kanbanStage ? kanbanStageColors[kanbanStage.key] : startedWorkAt ? '#16a34a' : '#2563eb'}
+              />
+            </Pressable>
           ) : null}
         </View>
         {statusHovered && Platform.OS === 'web' && !projectHovered && !done && (kanbanStage || onStartWork) && (
@@ -338,7 +352,7 @@ export default function TodoItem({
             </Text>
           </View>
         )}
-      </Pressable>
+      </View>
 
       <Pressable
         onPress={onDueDate}
@@ -610,6 +624,12 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  assignerAvatarPhoto: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e5e7eb',
   },
   assignerAvatarText: {
     fontSize: 9,

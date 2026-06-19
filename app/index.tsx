@@ -11,6 +11,7 @@ import {
   Linking,
   Modal,
   useWindowDimensions,
+  Image,
 } from 'react-native';
 import { DraggableList } from '../components/DraggableList';
 import { KanbanDragItem, KanbanDragProvider, KanbanDropLane } from '../components/KanbanDrag';
@@ -19,6 +20,7 @@ import { Stack } from 'expo-router';
 import { createURL } from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
+import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
@@ -75,6 +77,7 @@ type Member = {
   user_id: string;
   email: string;
   display_name: string | null;
+  avatar_url: string | null;
   role: string;
 };
 
@@ -82,6 +85,7 @@ type Profile = {
   id: string;
   email: string;
   display_name: string | null;
+  avatar_url: string | null;
   status: string | null;
 };
 
@@ -431,7 +435,17 @@ const priorityLabels: Record<string, string> = {
   urgent: 'Urgent',
 };
 
-function InboxAssignerAvatar({ initials, color, tooltip }: { initials: string; color: string; tooltip: string }) {
+function InboxAssignerAvatar({
+  initials,
+  color,
+  avatarUrl,
+  tooltip,
+}: {
+  initials: string;
+  color: string;
+  avatarUrl?: string | null;
+  tooltip: string;
+}) {
   const [hovered, setHovered] = useState(false);
   return (
     <Pressable
@@ -440,9 +454,13 @@ function InboxAssignerAvatar({ initials, color, tooltip }: { initials: string; c
       style={ias.wrap}
       hitSlop={4}
     >
-      <View style={[ias.avatar, { backgroundColor: color }]}>
-        <Text style={ias.initials}>{initials}</Text>
-      </View>
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={ias.avatarPhoto} />
+      ) : (
+        <View style={[ias.avatar, { backgroundColor: color }]}>
+          <Text style={ias.initials}>{initials}</Text>
+        </View>
+      )}
       {hovered && Platform.OS === 'web' && (
         <View style={ias.tooltip}>
           <Text style={ias.tooltipText}>{tooltip}</Text>
@@ -454,6 +472,7 @@ function InboxAssignerAvatar({ initials, color, tooltip }: { initials: string; c
 const ias = StyleSheet.create({
   wrap: { position: 'relative' },
   avatar: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  avatarPhoto: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#e5e7eb' },
   initials: { fontSize: 9, fontWeight: '700', color: '#fff' },
   tooltip: {
     position: 'absolute', bottom: 26, right: 0, backgroundColor: '#111827',
@@ -495,6 +514,7 @@ export default function HomeScreen() {
   const [projectAccessSearchLoading, setProjectAccessSearchLoading] = useState(false);
   const [projectAccessBusy, setProjectAccessBusy] = useState(false);
   const [phasePickerTodo, setPhasePickerTodo] = useState<Todo | null>(null);
+  const [projectPickerTodo, setProjectPickerTodo] = useState<Todo | null>(null);
   const [addingPhase, setAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState('');
   const [renamingPhase, setRenamingPhase] = useState<Phase | null>(null);
@@ -833,7 +853,7 @@ export default function HomeScreen() {
         id: currentSession.user.id,
         email: profileEmail,
       })
-      .select('id, email, display_name, status')
+      .select('id, email, display_name, avatar_url, status')
       .single();
 
     if (profileError) {
@@ -844,6 +864,69 @@ export default function HomeScreen() {
     setProfile(profileData);
     setStatusDraft(profileData.status ?? '');
   }, []);
+
+  async function uploadProfilePhoto() {
+    if (!session) return;
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError('Photo library permission is required to upload an avatar.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset) return;
+
+    const contentType = asset.mimeType ?? 'image/jpeg';
+    const extension = contentType.includes('png')
+      ? 'png'
+      : contentType.includes('webp')
+        ? 'webp'
+        : 'jpg';
+    const path = `${session.user.id}/avatar-${Date.now()}.${extension}`;
+
+    let body: Blob;
+    if (asset.file) {
+      body = asset.file;
+    } else {
+      body = await fetch(asset.uri).then((res) => res.blob());
+    }
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, body, { contentType, upsert: true });
+
+    if (uploadError) {
+      setError(uploadError.message);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
+    const avatarUrl = publicUrlData.publicUrl;
+    const { data: nextProfile, error: profileError } = await supabase
+      .from('profiles')
+      .update({ avatar_url: avatarUrl })
+      .eq('id', session.user.id)
+      .select('id, email, display_name, avatar_url, status')
+      .single();
+
+    if (profileError) {
+      setError(profileError.message);
+      return;
+    }
+
+    setProfile(nextProfile);
+    setCustomAnimal(null);
+    setAnimalPickerVisible(false);
+    showToast('Profile photo updated.');
+  }
 
   const loadTeams = useCallback(async () => {
     if (!session) return;
@@ -959,7 +1042,7 @@ export default function HomeScreen() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, email, display_name')
+        .select('id, email, display_name, avatar_url')
         .in('id', ids);
       if (profileError) { setError(profileError.message); return; }
 
@@ -971,6 +1054,7 @@ export default function HomeScreen() {
           role: roleMap.get(id) ?? 'member',
           email: profilesById.get(id)!.email,
           display_name: profilesById.get(id)!.display_name ?? null,
+          avatar_url: profilesById.get(id)!.avatar_url ?? null,
         }));
 
       setMembers(nextMembers);
@@ -999,7 +1083,7 @@ export default function HomeScreen() {
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, email, display_name')
+      .select('id, email, display_name, avatar_url')
       .in('id', ids);
     if (profileError) { setError(profileError.message); return; }
 
@@ -1009,6 +1093,7 @@ export default function HomeScreen() {
       role: member.role,
       email: profilesById.get(member.user_id)?.email ?? 'unknown@example.com',
       display_name: profilesById.get(member.user_id)?.display_name ?? null,
+      avatar_url: profilesById.get(member.user_id)?.avatar_url ?? null,
     }));
 
     setMembers(nextMembers);
@@ -1677,7 +1762,7 @@ export default function HomeScreen() {
 
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, email, display_name')
+      .select('id, email, display_name, avatar_url')
       .in('id', ids);
 
     if (profileError) { setError(profileError.message); return; }
@@ -1689,6 +1774,7 @@ export default function HomeScreen() {
         role: m.role,
         email: profilesById.get(m.user_id)?.email ?? 'unknown@example.com',
         display_name: profilesById.get(m.user_id)?.display_name ?? null,
+        avatar_url: profilesById.get(m.user_id)?.avatar_url ?? null,
       }))
     );
   }
@@ -1973,6 +2059,35 @@ export default function HomeScreen() {
     setError('');
   }
 
+  function openProjectPicker(todo: Todo) {
+    if (isProject) return;
+    setProjectPickerTodo(todo);
+  }
+
+  async function setTodoProject(todo: Todo, project_id: string | null) {
+    const updates = {
+      project_id,
+      phase_id: null,
+      workflow_status: 'backlog' as WorkflowLaneKey,
+      workflow_position: null,
+    };
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update(updates)
+      .eq('id', todo.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setTodos((prev) =>
+      sortTodos(prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item)))
+    );
+    setProjectPickerTodo(null);
+    setError('');
+  }
+
   function openDueCalendar(todo: Todo) {
     const dueDate = parseDateValue(todo.due_date) ?? new Date();
     setDueTodo(todo);
@@ -2047,13 +2162,14 @@ export default function HomeScreen() {
       const ids = [...roleMap.keys()];
       if (ids.length > 0) {
         const { data: profileData } = await supabase
-          .from('profiles').select('id, email, display_name').in('id', ids);
+          .from('profiles').select('id, email, display_name, avatar_url').in('id', ids);
         const profilesById = new Map((profileData ?? []).map((p) => [p.id, p]));
         setMembers(ids.filter((id) => profilesById.has(id)).map((id) => ({
           user_id: id,
           role: roleMap.get(id) ?? 'member',
           email: profilesById.get(id)!.email,
           display_name: profilesById.get(id)!.display_name ?? null,
+          avatar_url: profilesById.get(id)!.avatar_url ?? null,
         })));
       }
     }
@@ -2540,7 +2656,7 @@ export default function HomeScreen() {
     return `Assigned to ${profileDisplayName(member)}`;
   }
 
-  function getAssignerInfo(todo: Todo): { initials: string; color: string; name: string } | null {
+  function getAssignerInfo(todo: Todo): { initials: string; color: string; avatarUrl: string | null; name: string } | null {
     if (!todo.assigned_to || !todo.created_by) return null;
     const isMe = todo.created_by === session?.user.id;
     const creator = memberById.get(todo.created_by);
@@ -2555,6 +2671,7 @@ export default function HomeScreen() {
     return {
       initials: (displayName[0] ?? '?').toUpperCase(),
       color: pickAvatarColor(email),
+      avatarUrl: isMe ? (profile?.avatar_url ?? null) : (creator?.avatar_url ?? null),
       name,
     };
   }
@@ -2576,6 +2693,7 @@ export default function HomeScreen() {
     const creatorEmail = isCreatorMe ? (profile?.email ?? '') : (creatorMember?.email ?? todo.created_by ?? '');
     const creatorInitials = creatorName ? (creatorName[0] ?? '?').toUpperCase() : '?';
     const creatorColor = pickAvatarColor(creatorEmail);
+    const creatorAvatarUrl = isCreatorMe ? (profile?.avatar_url ?? null) : (creatorMember?.avatar_url ?? null);
     const creatorTooltip = creatorName ? `From: ${creatorName}` : `From: ${contextLabel}`;
     return (
       <View key={todo.id} style={[styles.assignedToMeRow, { paddingVertical: rowPV }]}>
@@ -2604,7 +2722,7 @@ export default function HomeScreen() {
             {isOverdue ? 'Overdue' : todo.due_date}
           </Text>
         )}
-        <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} tooltip={creatorTooltip} />
+        <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} avatarUrl={creatorAvatarUrl} tooltip={creatorTooltip} />
       </View>
     );
   }
@@ -2850,11 +2968,6 @@ export default function HomeScreen() {
         const seed = profile?.email ?? session.user.email ?? '';
         const avatarColor = pickAvatarColor(seed);
         const animal = customAnimal ?? pickAvatarAnimal(seed);
-        const initials = accountDisplayName
-          .split(/[\s._-]+/)
-          .slice(0, 2)
-          .map((w) => w[0]?.toUpperCase() ?? '')
-          .join('');
         return (
           <View style={styles.titleBar}>
             <View style={styles.titleBarLeft}>
@@ -2864,9 +2977,13 @@ export default function HomeScreen() {
                   accessibilityLabel="Change avatar"
                   hitSlop={4}
                 >
-                  <View style={[styles.userAvatarBig, { backgroundColor: avatarColor }]}>
-                    <Text style={styles.userAvatarBigAnimal}>{animal}</Text>
-                  </View>
+                  {profile?.avatar_url ? (
+                    <Image source={{ uri: profile.avatar_url }} style={styles.userAvatarBigPhoto} />
+                  ) : (
+                    <View style={[styles.userAvatarBig, { backgroundColor: avatarColor }]}>
+                      <Text style={styles.userAvatarBigAnimal}>{animal}</Text>
+                    </View>
+                  )}
                 </Pressable>
                 <View style={styles.userMeta}>
                   <Pressable
@@ -4193,6 +4310,7 @@ export default function HomeScreen() {
                         kanbanStage={todoKanbanStage(todo)}
                         projectAvatar={todoProjectAvatar(todo)}
                         assignerInitials={assigner?.initials} assignerColor={assigner?.color}
+                        assignerAvatarUrl={assigner?.avatarUrl}
                         assignerName={assigner?.name}
                         onToggle={() => toggle(todo.id)}
                         onOpenEdit={() => openEditModal(todo)}
@@ -4271,6 +4389,7 @@ export default function HomeScreen() {
                           kanbanStage={todoKanbanStage(todo)}
                           projectAvatar={todoProjectAvatar(todo)}
                           assignerInitials={assigner?.initials} assignerColor={assigner?.color}
+                          assignerAvatarUrl={assigner?.avatarUrl}
                           assignerName={assigner?.name}
                           onToggle={() => toggle(todo.id)}
                           onOpenEdit={() => openEditModal(todo)}
@@ -5461,6 +5580,15 @@ export default function HomeScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setAnimalPickerVisible(false)}>
           <Pressable style={styles.calendarCard}>
             <Text style={styles.editModalTitle}>Choose your avatar</Text>
+            <Pressable
+              onPress={uploadProfilePhoto}
+              style={({ pressed }) => [styles.avatarUploadButton, pressed && styles.btnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Upload profile photo"
+            >
+              <Text style={styles.avatarUploadButtonText}>Upload photo</Text>
+              <Text style={styles.avatarUploadHint}>Shown in task rows as the assigner avatar.</Text>
+            </Pressable>
             <View style={styles.animalGrid}>
               {AVATAR_ANIMALS.map((emoji) => (
                 <Pressable
@@ -7392,6 +7520,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  userAvatarBigPhoto: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#e5e7eb',
+    flexShrink: 0,
+  },
   userAvatarBigText: {
     color: '#fff',
     fontSize: 18,
@@ -7847,6 +7982,25 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 16,
+  },
+  avatarUploadButton: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    backgroundColor: '#f9fafb',
+  },
+  avatarUploadButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  avatarUploadHint: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 2,
   },
   animalCell: {
     width: 48,
