@@ -290,7 +290,7 @@ export default function TodoItem({
         accessibilityLabel={kanbanStage ? `Kanban stage: ${kanbanStage.label}` : startedWorkAt ? 'Working' : 'Start work'}
       >
         <View style={styles.statusIcons}>
-          {!!projectAvatar && (
+          {projectAvatar ? (
             <Pressable
               onHoverIn={() => setProjectHovered(true)}
               onHoverOut={() => setProjectHovered(false)}
@@ -303,6 +303,22 @@ export default function TodoItem({
               {projectHovered && Platform.OS === 'web' && (
                 <View style={styles.projectTooltip}>
                   <Text style={styles.tooltipText}>{projectAvatar.label}</Text>
+                </View>
+              )}
+            </Pressable>
+          ) : (
+            <Pressable
+              onHoverIn={() => setProjectHovered(true)}
+              onHoverOut={() => setProjectHovered(false)}
+              style={styles.projectAvatarEmpty}
+              accessibilityRole="image"
+              accessibilityLabel="No project assigned"
+              hitSlop={4}
+            >
+              <Text style={styles.projectAvatarEmptyText}>+</Text>
+              {projectHovered && Platform.OS === 'web' && (
+                <View style={styles.projectTooltip}>
+                  <Text style={styles.tooltipText}>No project</Text>
                 </View>
               )}
             </Pressable>
@@ -681,6 +697,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 8,
     fontWeight: '800',
+  },
+  projectAvatarEmpty: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    position: 'relative',
+  },
+  projectAvatarEmptyText: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 13,
   },
   projectTooltip: {
     position: 'absolute',
