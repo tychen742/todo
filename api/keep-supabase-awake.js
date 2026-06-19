@@ -1,7 +1,4 @@
-const SUPABASE_ENDPOINTS = [
-  { name: 'profiles', path: '/rest/v1/profiles?select=id&limit=1' },
-  { name: 'todos', path: '/rest/v1/todos?select=id&limit=1' },
-];
+const HEARTBEAT_RPC_PATH = '/rest/v1/rpc/touch_supabase_heartbeat';
 
 function getSupabaseConfig() {
   const supabaseUrl =
@@ -37,43 +34,35 @@ module.exports = async function keepSupabaseAwake(request, response) {
     apikey: config.supabaseKey,
     Authorization: `Bearer ${config.supabaseKey}`,
     Accept: 'application/json',
-    Prefer: 'count=none',
+    'Content-Type': 'application/json',
   };
 
-  const checks = await Promise.all(
-    SUPABASE_ENDPOINTS.map(async (endpoint) => {
-      const startedAt = Date.now();
-      const url = `${config.supabaseUrl}${endpoint.path}`;
+  const startedAt = Date.now();
 
-      try {
-        const supabaseResponse = await fetch(url, { headers });
-        await supabaseResponse.arrayBuffer();
+  try {
+    const supabaseResponse = await fetch(
+      `${config.supabaseUrl}${HEARTBEAT_RPC_PATH}`,
+      {
+        method: 'POST',
+        headers,
+        body: '{}',
+      },
+    );
+    const heartbeat = await supabaseResponse.json().catch(() => null);
 
-        return {
-          name: endpoint.name,
-          status: supabaseResponse.status,
-          ok: supabaseResponse.ok,
-          durationMs: Date.now() - startedAt,
-        };
-      } catch (error) {
-        return {
-          name: endpoint.name,
-          status: null,
-          ok: false,
-          durationMs: Date.now() - startedAt,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        };
-      }
-    }),
-  );
-
-  const reachedSupabase = checks.some(
-    (check) => typeof check.status === 'number' && check.status < 500,
-  );
-
-  return response.status(reachedSupabase ? 200 : 502).json({
-    ok: reachedSupabase,
-    checkedAt: new Date().toISOString(),
-    checks,
-  });
+    return response.status(supabaseResponse.ok ? 200 : 502).json({
+      ok: supabaseResponse.ok,
+      checkedAt: new Date().toISOString(),
+      durationMs: Date.now() - startedAt,
+      status: supabaseResponse.status,
+      heartbeat,
+    });
+  } catch (error) {
+    return response.status(502).json({
+      ok: false,
+      checkedAt: new Date().toISOString(),
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
 };

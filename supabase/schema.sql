@@ -2,6 +2,27 @@ create extension if not exists pgcrypto;
 
 create schema if not exists app_private;
 
+create table if not exists app_private.supabase_heartbeat (
+  id text primary key,
+  touched_at timestamptz not null default now(),
+  touch_count bigint not null default 0
+);
+
+create or replace function public.touch_supabase_heartbeat()
+returns table(touched_at timestamptz, touch_count bigint)
+language sql
+security definer
+set search_path = public
+as $$
+  insert into app_private.supabase_heartbeat (id, touched_at, touch_count)
+  values ('daily-keep-alive', now(), 1)
+  on conflict (id) do update
+    set touched_at = excluded.touched_at,
+        touch_count = app_private.supabase_heartbeat.touch_count + 1
+  returning app_private.supabase_heartbeat.touched_at,
+            app_private.supabase_heartbeat.touch_count;
+$$;
+
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique not null,
@@ -1266,6 +1287,7 @@ grant execute on function public.find_profile_by_email(text) to authenticated;
 grant execute on function public.create_project_invitation(uuid, text) to authenticated;
 grant execute on function public.accept_project_invitation(uuid) to authenticated;
 grant execute on function public.get_project_invitation_by_token(uuid) to anon, authenticated;
+grant execute on function public.touch_supabase_heartbeat() to anon, authenticated;
 
 -- Cleanup for databases created before internal helpers moved out of public.
 drop function if exists public.is_team_member(uuid, uuid);

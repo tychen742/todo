@@ -128,8 +128,8 @@ For iPhone, scan the Expo QR code or open the LAN `exp://...` URL in Expo Go.
 /api/keep-supabase-awake
 ```
 
-The route sends lightweight Supabase REST reads against `profiles` and `todos`
-using the deployed environment variables:
+The route calls the `touch_supabase_heartbeat()` Supabase RPC using the deployed
+environment variables:
 
 ```bash
 EXPO_PUBLIC_SUPABASE_URL
@@ -139,9 +139,13 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY
 `SUPABASE_URL` and `SUPABASE_ANON_KEY` are also accepted as server-only aliases.
 
 The schedule is `17 8 * * *`, which runs once per day at 08:17 UTC. The route is
-operational only; it does not contain product logic. Its purpose is to create
-daily Supabase API activity so the hosted project is less likely to be treated as
-idle.
+operational only; it does not contain product logic. Its purpose is to create one
+trivial daily Supabase write so the hosted project is less likely to be treated
+as idle.
+
+Before relying on the cron route, apply `supabase/schema.sql` so the private
+`app_private.supabase_heartbeat` table and `touch_supabase_heartbeat()` RPC
+exist in Supabase.
 
 Manual check after deployment:
 
