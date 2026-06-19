@@ -516,12 +516,12 @@ const styles = StyleSheet.create({
   },
   dueDateCol: {
     marginLeft: 8,
-    width: 64,
+    width: 50,
     alignItems: 'flex-start',
   },
   ageCol: {
-    marginLeft: 2,
-    width: 56,
+    marginLeft: 0,
+    width: 46,
     alignItems: 'flex-start',
   },
   archiveAction: {

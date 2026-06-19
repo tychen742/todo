@@ -711,6 +711,10 @@ export default function HomeScreen() {
     () => projectAccessPeople.filter((person) => !memberById.has(person.id)),
     [memberById, projectAccessPeople]
   );
+  const activeProjects = useMemo(
+    () => projects.filter((project) => !project.archived_at),
+    [projects]
+  );
   const projectAccessInviteEmail = useMemo(() => {
     const query = projectAccessQuery.trim().toLowerCase();
     if (!isValidEmailAddress(query)) return '';
@@ -4316,6 +4320,7 @@ export default function HomeScreen() {
                         onOpenEdit={() => openEditModal(todo)}
                         onStartWork={() => startWorkOnTodo(todo)}
                         onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
+                        onProject={!isProject ? () => openProjectPicker(todo) : undefined}
                         onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
                         onArchive={() => archiveTodo(todo.id)}
                         onDrag={drag} isDragging={isActive ?? false}
@@ -4395,6 +4400,7 @@ export default function HomeScreen() {
                           onOpenEdit={() => openEditModal(todo)}
                           onStartWork={() => startWorkOnTodo(todo)}
                           onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
+                          onProject={!isProject ? () => openProjectPicker(todo) : undefined}
                           onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
                           onArchive={() => archiveTodo(todo.id)}
                           reserveDragSpace={Platform.OS === 'web'}
@@ -5312,7 +5318,7 @@ export default function HomeScreen() {
                 autoCorrect={false}
               />
 
-              {!isProject && projects.filter(p => !p.archived_at).length > 0 && (
+              {!isProject && activeProjects.length > 0 && (
                 <>
                   <View style={styles.pickerSectionDivider}>
                     <View style={styles.pickerSectionLine} />
@@ -5328,7 +5334,7 @@ export default function HomeScreen() {
                         None
                       </Text>
                     </Pressable>
-                    {projects.filter(p => !p.archived_at).map((project) => (
+                    {activeProjects.map((project) => (
                       <Pressable
                         key={project.id}
                         onPress={() => setEditDraftProjectId(project.id)}
@@ -5400,6 +5406,65 @@ export default function HomeScreen() {
                   <Text style={styles.smallBtnText}>Save</Text>
                 </Pressable>
               </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal
+        visible={!!projectPickerTodo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProjectPickerTodo(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setProjectPickerTodo(null)}>
+          <Pressable style={styles.calendarCard}>
+            <Text style={styles.editModalTitle}>Assign Project</Text>
+            <Pressable
+              onPress={() => projectPickerTodo && setTodoProject(projectPickerTodo, null)}
+              style={[
+                styles.projectPickerRow,
+                !projectPickerTodo?.project_id && styles.projectPickerRowActive,
+              ]}
+            >
+              <View style={styles.projectPickerEmptyAvatar}>
+                <Text style={styles.projectPickerEmptyAvatarText}>+</Text>
+              </View>
+              <Text
+                style={[
+                  styles.projectPickerRowText,
+                  !projectPickerTodo?.project_id && styles.projectPickerRowTextActive,
+                ]}
+              >
+                No project
+              </Text>
+              {!projectPickerTodo?.project_id && <Text style={styles.assigneePickerCheck}>✓</Text>}
+            </Pressable>
+            {activeProjects.map((project) => {
+              const avatar = projectAvatarFor(project);
+              const selected = projectPickerTodo?.project_id === project.id;
+              return (
+                <Pressable
+                  key={project.id}
+                  onPress={() => projectPickerTodo && setTodoProject(projectPickerTodo, project.id)}
+                  style={[styles.projectPickerRow, selected && styles.projectPickerRowActive]}
+                >
+                  <View style={[styles.projectPickerAvatar, { backgroundColor: avatar.color }]}>
+                    <Text style={styles.projectPickerAvatarText}>{avatar.initials}</Text>
+                  </View>
+                  <Text
+                    style={[styles.projectPickerRowText, selected && styles.projectPickerRowTextActive]}
+                    numberOfLines={1}
+                  >
+                    {project.name}
+                  </Text>
+                  {selected && <Text style={styles.assigneePickerCheck}>✓</Text>}
+                </Pressable>
+              );
+            })}
+            <View style={styles.editModalActions}>
+              <Pressable onPress={() => setProjectPickerTodo(null)}>
+                <Text style={styles.calendarCancelText}>Cancel</Text>
+              </Pressable>
             </View>
           </Pressable>
         </Pressable>
@@ -7261,13 +7326,13 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   sortColDue: {
-    width: 64,
+    width: 50,
     marginLeft: 8,
     paddingLeft: 6,
   },
   sortColAgeGap: {
-    width: 56,
-    marginLeft: 2,
+    width: 46,
+    marginLeft: 0,
     flexShrink: 0,
   },
   sortArchiveGap: {
@@ -8262,6 +8327,60 @@ const styles = StyleSheet.create({
   teamLinkMeta: {
     fontSize: 11,
     color: '#9ca3af',
+  },
+  projectPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  projectPickerRowActive: {
+    backgroundColor: '#eef2ff',
+    borderColor: '#c7d2fe',
+  },
+  projectPickerAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  projectPickerAvatarText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  projectPickerEmptyAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    flexShrink: 0,
+  },
+  projectPickerEmptyAvatarText: {
+    color: '#9ca3af',
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  projectPickerRowText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  projectPickerRowTextActive: {
+    color: '#4338ca',
   },
   colAssigneeRow: {
     flexDirection: 'row',

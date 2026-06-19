@@ -74,9 +74,11 @@ Reason: misaligned column headers break visual scanning and make the UI feel unp
 
 UI symbols that represent the same entity or state must be consistent across views. If a project is represented by a colored initials avatar in task rows, the Projects view must use the same avatar derivation for that project. If a state uses a specific icon in one row or card surface, other surfaces showing that state should use the same icon unless there is a documented reason not to.
 
-Missing optional entity slots must not collapse when neighboring columns depend on their position. If a task row has no project assignment, the project-avatar slot renders a compact `+` placeholder rather than shifting the Kanban/start icon into the project column. Workspace and Projects views must preserve the same row-column visual grammar.
+Missing optional entity slots must not collapse when neighboring columns depend on their position. If a task row has no project assignment, the project-avatar slot renders a compact `+` placeholder rather than shifting the Kanban/start icon into the project column. In Workspace rows, that `+` is an action that opens project assignment. Workspace and Projects views must preserve the same row-column visual grammar.
 
 The Kanban/status column is fixed-width even when a row is completed. Completed rows must reserve this space so priority, due date, age, and delete action columns line up with active task rows.
+
+Due date and age are a compact time group. Their fixed slots must stay close together and the corresponding header spacers must use the same widths so short due labels (`+`, `2d`, `-7d`) do not look disconnected from the age pill.
 
 Priority squares are fixed-position row controls and must show their priority level in a tooltip on hover.
 
