@@ -6038,7 +6038,6 @@ const styles = StyleSheet.create({
   authLink: {
     color: '#6366f1',
     fontSize: 13,
-    fontWeight: '600',
   },
   authSubtitleText: {
     color: '#6b7280',
