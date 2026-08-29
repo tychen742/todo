@@ -1127,9 +1127,15 @@ export default function HomeScreen() {
         }
         query = query.or(orClauses.join(','));
       } else if (session) {
-        query = query.or(
-          `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
-        );
+        const personalProjectIds = projects.filter((p) => p.team_id === null && p.created_by === session.user.id).map((p) => p.id);
+        const orClauses = [
+          `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id})`,
+          `and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
+        ];
+        if (personalProjectIds.length > 0) {
+          orClauses.push('project_id.in.(' + personalProjectIds.join(',') + ')');
+        }
+        query = query.or(orClauses.join(','));
       }
     }
 
@@ -1176,9 +1182,15 @@ export default function HomeScreen() {
       }
       query = query.or(orClauses.join(','));
     } else if (session) {
-      query = query.or(
-        `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id})`
-      );
+      const personalProjectIds = projects.filter((p) => p.team_id === null && p.created_by === session.user.id).map((p) => p.id);
+      const orClauses = [
+        `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id})`,
+        `and(assigned_to.eq.${session.user.id})`
+      ];
+      if (personalProjectIds.length > 0) {
+        orClauses.push('project_id.in.(' + personalProjectIds.join(',') + ')');
+      }
+      query = query.or(orClauses.join(','));
     }
 
     const { data, error: err } = await query;
