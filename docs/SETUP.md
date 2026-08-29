@@ -43,6 +43,27 @@ http://localhost:8082
 Magic links and password reset links will fail if Supabase redirects to a port
 where Expo is not running, such as `http://localhost:3000`.
 
+## Google OAuth
+
+The app uses Supabase Auth as the OAuth broker. In Google Cloud Console, the
+OAuth client must allow Supabase's callback URL, not the local Expo URL:
+
+```text
+https://<project-ref>.supabase.co/auth/v1/callback
+```
+
+For the current local project this is:
+
+```text
+https://kxejtmumnxarcooqncgj.supabase.co/auth/v1/callback
+```
+
+If Google shows `Error 400: redirect_uri_mismatch`, add that URL under
+Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client IDs
+-> Authorized redirect URIs. Keep the Expo localhost URLs in Supabase
+Authentication -> URL Configuration -> Redirect URLs so Supabase can send the
+browser back to the running app after Google completes.
+
 ## Database
 
 Open Supabase SQL Editor and run the full contents of:
