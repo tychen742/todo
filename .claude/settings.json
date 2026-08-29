@@ -3,7 +3,8 @@
     "allow": [
       "Bash(curl -s http://localhost:19006)",
       "Bash(git commit -m 'fix: include project todos in team workspace view *)",
-      "Bash(git commit -m 'fix: include personal project todos in workspace view *)"
+      "Bash(git commit -m 'fix: include personal project todos in workspace view *)",
+      "Bash(git commit -m 'remove debug log *)"
     ]
   },
   "enabledPlugins": {

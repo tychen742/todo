@@ -1128,7 +1128,6 @@ export default function HomeScreen() {
         query = query.or(orClauses.join(','));
       } else if (session) {
         const personalProjectIds = projects.filter((p) => p.team_id === null && p.created_by === session.user.id).map((p) => p.id);
-        console.log('[loadTodos] Personal workspace - personalProjectIds:', personalProjectIds, 'all projects:', projects);
         const orClauses = [
           `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id})`,
           `and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
