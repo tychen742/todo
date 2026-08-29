@@ -6132,7 +6132,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 16,
     color: '#111827',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   authInputError: {
     borderColor: '#ef4444',
@@ -6152,7 +6152,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#c7d2fe',
     paddingHorizontal: 16,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   authPasswordInput: {
     flex: 1,
@@ -6171,7 +6171,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 8,
   },
   authSubmitBtnMuted: {
     backgroundColor: '#9ca3af',
