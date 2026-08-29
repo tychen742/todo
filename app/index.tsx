@@ -2910,7 +2910,7 @@ export default function HomeScreen() {
               ]}
             >
               <Text style={styles.authSubmitBtnText}>
-                {authLoading ? 'Please wait…' : 'Continue'}
+                {authLoading ? 'Please wait…' : (isSignIn ? 'Log in' : 'Create account')}
               </Text>
             </Pressable>
 
@@ -6033,11 +6033,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 14,
   },
   authLink: {
     color: '#6366f1',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
   },
   authSubtitleText: {
