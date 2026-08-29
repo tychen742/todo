@@ -1120,7 +1120,12 @@ export default function HomeScreen() {
       query = query.eq('project_id', selectedProjectId);
     } else {
       if (selectedTeamId) {
-        query = query.eq('team_id', selectedTeamId).is('project_id', null);
+        const teamProjectIds = projects.filter((p) => p.team_id === selectedTeamId).map((p) => p.id);
+        const orClauses = ['and(team_id.eq.' + selectedTeamId + ',project_id.is.null)'];
+        if (teamProjectIds.length > 0) {
+          orClauses.push('project_id.in.(' + teamProjectIds.join(',') + ')');
+        }
+        query = query.or(orClauses.join(','));
       } else if (session) {
         query = query.or(
           `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
@@ -1137,7 +1142,7 @@ export default function HomeScreen() {
       setError('');
     }
     setLoading(false);
-  }, [selectedTeamId, selectedProjectId, session]);
+  }, [selectedTeamId, selectedProjectId, session, projects]);
 
   const loadAssignedToMe = useCallback(async () => {
     if (!session) return;
@@ -1164,7 +1169,12 @@ export default function HomeScreen() {
     if (selectedProjectId) {
       query = query.eq('project_id', selectedProjectId);
     } else if (selectedTeamId) {
-      query = query.eq('team_id', selectedTeamId).is('project_id', null);
+      const teamProjectIds = projects.filter((p) => p.team_id === selectedTeamId).map((p) => p.id);
+      const orClauses = ['and(team_id.eq.' + selectedTeamId + ',project_id.is.null)'];
+      if (teamProjectIds.length > 0) {
+        orClauses.push('project_id.in.(' + teamProjectIds.join(',') + ')');
+      }
+      query = query.or(orClauses.join(','));
     } else if (session) {
       query = query.or(
         `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id}),and(assigned_to.eq.${session.user.id})`
@@ -1174,7 +1184,7 @@ export default function HomeScreen() {
     const { data, error: err } = await query;
     if (!err) setArchivedTodos((data ?? []) as Todo[]);
     setLoading(false);
-  }, [selectedTeamId, selectedProjectId, session]);
+  }, [selectedTeamId, selectedProjectId, session, projects]);
 
   useEffect(() => {
     loadAssignedToMe();
