@@ -2848,12 +2848,33 @@ export default function HomeScreen() {
               autoComplete="email"
             />
 
+            {/* Password */}
+            <Text style={styles.authLabel}>Password</Text>
+            <View style={[styles.authPasswordWrap, !!error && styles.authInputError]}>
+              <TextInput
+                style={styles.authPasswordInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                placeholderTextColor="#9ca3af"
+                secureTextEntry={!showPassword}
+                textContentType="password"
+                autoComplete="current-password"
+                onSubmitEditing={submitAuth}
+              />
+              <Pressable onPress={() => setShowPassword((p) => !p)} hitSlop={8}>
+                <Text style={styles.passwordToggleText}>{showPassword ? 'Hide' : 'Show'}</Text>
+              </Pressable>
+            </View>
+
+            {!!error && <Text style={styles.authFieldError}>{error}</Text>}
+
             <Pressable
               onPress={submitAuth}
-              disabled={authLoading || !isSupabaseConfigured || !email.trim()}
+              disabled={authLoading || !isSupabaseConfigured || !email.trim() || !password}
               style={({ pressed }) => [
                 styles.authSubmitBtn,
-                (authLoading || !isSupabaseConfigured || !email.trim()) && styles.authSubmitBtnMuted,
+                (authLoading || !isSupabaseConfigured || !email.trim() || !password) && styles.authSubmitBtnMuted,
                 pressed && styles.btnPressed,
               ]}
             >
@@ -2861,6 +2882,21 @@ export default function HomeScreen() {
                 {authLoading ? 'Please wait…' : 'Continue'}
               </Text>
             </Pressable>
+
+            <View style={styles.authLinksRow}>
+              <Pressable onPress={sendPasswordReset} disabled={authLoading}>
+                <Text style={styles.authLink}>Forgot password?</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setAuthMode(isSignIn ? 'signUp' : 'signIn');
+                  setError('');
+                  setMessage('');
+                }}
+              >
+                <Text style={styles.authLink}>{isSignIn ? 'Sign up' : 'Sign in'}</Text>
+              </Pressable>
+            </View>
 
             <View style={styles.authDivider}>
               <View style={styles.authDividerLine} />
@@ -2876,23 +2912,6 @@ export default function HomeScreen() {
               <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
                 <Text style={styles.appleIcon}></Text>
                 <Text style={styles.socialGridBtnText}>Apple</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.authSubtitleRow}>
-              <Text style={styles.authSubtitleText}>
-                {isSignIn ? 'New here? ' : 'Already have an account? '}
-              </Text>
-              <Pressable
-                onPress={() => {
-                  setAuthMode(isSignIn ? 'signUp' : 'signIn');
-                  setError('');
-                  setMessage('');
-                }}
-              >
-                <Text style={styles.authSubtitleLink}>
-                  {isSignIn ? 'Create account' : 'Sign in'}
-                </Text>
               </Pressable>
             </View>
           </View>
@@ -5981,12 +6000,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 4,
   },
-  authSubtitleRow: {
+  authLinksRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 8,
+    marginTop: 16,
+  },
+  authLink: {
+    color: '#6366f1',
+    fontSize: 14,
+    fontWeight: '600',
+    display: 'none',
   },
   authSubtitleText: {
     color: '#6b7280',
@@ -5998,13 +6022,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   socialGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: 10,
   },
   socialGridBtn: {
-    flexBasis: '47%',
-    flexGrow: 1,
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
