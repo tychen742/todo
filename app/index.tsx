@@ -2834,13 +2834,6 @@ export default function HomeScreen() {
               <Text style={styles.authBrandName}>Todo</Text>
             </View>
 
-            <Text style={styles.authTitle}>
-              {isSignIn ? 'Welcome back' : 'Create your account'}
-            </Text>
-            <Text style={styles.authTitleSub}>
-              {isSignIn ? 'Sign in to continue' : 'Get started — it\'s free'}
-            </Text>
-
             {/* Email */}
             <Text style={styles.authLabel}>Email</Text>
             <TextInput
@@ -2855,53 +2848,19 @@ export default function HomeScreen() {
               autoComplete="email"
             />
 
-            {/* Password */}
-            <View style={styles.authPasswordHeader}>
-              <Text style={styles.authLabel}>Password</Text>
-              {isSignIn && (
-                <Pressable onPress={sendPasswordReset} disabled={authLoading}>
-                  <Text style={styles.forgotBtnText}>Forgot password?</Text>
-                </Pressable>
-              )}
-            </View>
-            <View style={[styles.authPasswordWrap, !!error && styles.authInputError]}>
-              <TextInput
-                style={styles.authPasswordInput}
-                value={password}
-                onChangeText={setPassword}
-                placeholder={isSignIn ? '••••••••' : 'At least 8 characters'}
-                placeholderTextColor="#9ca3af"
-                secureTextEntry={!showPassword}
-                textContentType={isSignIn ? 'password' : 'newPassword'}
-                autoComplete={isSignIn ? 'current-password' : 'new-password'}
-                onSubmitEditing={submitAuth}
-              />
-              <Pressable onPress={() => setShowPassword((p) => !p)} hitSlop={8}>
-                <Text style={styles.passwordToggleText}>{showPassword ? 'Hide' : 'Show'}</Text>
-              </Pressable>
-            </View>
-
-            {!!error && <Text style={styles.authFieldError}>{error}</Text>}
-
-            {!!message ? (
-              <View style={styles.authSuccessBox}>
-                <Text style={styles.authSuccessText}>{message}</Text>
-              </View>
-            ) : (
-              <Pressable
-                onPress={submitAuth}
-                disabled={authLoading || !isSupabaseConfigured || !email.trim() || !password}
-                style={({ pressed }) => [
-                  styles.authSubmitBtn,
-                  (authLoading || !isSupabaseConfigured || !email.trim() || !password) && styles.authSubmitBtnMuted,
-                  pressed && styles.btnPressed,
-                ]}
-              >
-                <Text style={styles.authSubmitBtnText}>
-                  {authLoading ? 'Please wait…' : isSignIn ? 'Sign In' : 'Create Account'}
-                </Text>
-              </Pressable>
-            )}
+            <Pressable
+              onPress={submitAuth}
+              disabled={authLoading || !isSupabaseConfigured || !email.trim()}
+              style={({ pressed }) => [
+                styles.authSubmitBtn,
+                (authLoading || !isSupabaseConfigured || !email.trim()) && styles.authSubmitBtnMuted,
+                pressed && styles.btnPressed,
+              ]}
+            >
+              <Text style={styles.authSubmitBtnText}>
+                {authLoading ? 'Please wait…' : 'Continue'}
+              </Text>
+            </Pressable>
 
             <View style={styles.authDivider}>
               <View style={styles.authDividerLine} />
