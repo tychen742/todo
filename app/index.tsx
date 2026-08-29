@@ -567,7 +567,6 @@ export default function HomeScreen() {
   const [editDraftProjectId, setEditDraftProjectId] = useState<string | null>(null);
   const [editDraftAssignedTo, setEditDraftAssignedTo] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [displayNameInput, setDisplayNameInput] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
@@ -1340,7 +1339,7 @@ export default function HomeScreen() {
             password,
             options: {
               emailRedirectTo: authRedirectUrl(),
-              data: { display_name: displayNameInput.trim() || null },
+              data: { display_name: null },
             },
           });
 
@@ -1354,11 +1353,6 @@ export default function HomeScreen() {
     if (authMode === 'signUp' && !result.data.session) {
       setMessage('Account created! Check your email to confirm, then sign in.');
       return;
-    }
-
-    // On sign-up with immediate session (email confirm disabled), save display name
-    if (authMode === 'signUp' && result.data.session && displayNameInput.trim()) {
-      await supabase.from('profiles').update({ display_name: displayNameInput.trim() }).eq('id', result.data.session.user.id);
     }
   }
 
@@ -2861,23 +2855,6 @@ export default function HomeScreen() {
               autoComplete="email"
             />
 
-            {/* Display name — sign-up only */}
-            {!isSignIn && (
-              <>
-                <Text style={styles.authLabel}>Your name</Text>
-                <TextInput
-                  style={styles.authInput}
-                  value={displayNameInput}
-                  onChangeText={setDisplayNameInput}
-                  placeholder="How should we call you?"
-                  placeholderTextColor="#9ca3af"
-                  autoCapitalize="words"
-                  textContentType="name"
-                  autoComplete="name"
-                />
-              </>
-            )}
-
             {/* Password */}
             <View style={styles.authPasswordHeader}>
               <Text style={styles.authLabel}>Password</Text>
@@ -2941,16 +2918,7 @@ export default function HomeScreen() {
                 <Text style={styles.appleIcon}></Text>
                 <Text style={styles.socialGridBtnText}>Apple</Text>
               </Pressable>
-              <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
-                <Text style={styles.githubIcon}>GH</Text>
-                <Text style={styles.socialGridBtnText}>GitHub</Text>
-              </Pressable>
-              <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
-                <Text style={styles.ssoIcon}>☁</Text>
-                <Text style={styles.socialGridBtnText}>SSO</Text>
-              </Pressable>
             </View>
-            <Text style={styles.socialComingSoon}>OAuth providers coming soon</Text>
 
             <View style={styles.authSubtitleRow}>
               <Text style={styles.authSubtitleText}>
@@ -2961,7 +2929,6 @@ export default function HomeScreen() {
                   setAuthMode(isSignIn ? 'signUp' : 'signIn');
                   setError('');
                   setMessage('');
-                  setDisplayNameInput('');
                 }}
               >
                 <Text style={styles.authSubtitleLink}>
