@@ -298,3 +298,9 @@ Implementation rules:
 - Week view shows seven columns for quick comparison.
 - Day view shows due tasks plus a note pane.
 - Calendar notes are local `AsyncStorage` data for now. Do not sync them or treat them as team-visible until the product model decides whether day notes are personal, team, project, or organization scoped.
+
+## 2026-08-29: AI Contributions Require Explicit Authorship Approval
+
+Decision: Claude (or any AI assistant) must ask before adding co-authorship via `Co-Authored-By:` git trailers.
+
+Reason: this is your project and you are the primary maintainer. An AI tool is a contributor, not a co-maintainer. Authorship should always reflect your judgment and approval, not be assumed automatically. Asking first respects the boundary between you and any tool.
