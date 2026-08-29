@@ -6008,9 +6008,8 @@ const styles = StyleSheet.create({
   },
   authLink: {
     color: '#6366f1',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    display: 'none',
   },
   authSubtitleText: {
     color: '#6b7280',
@@ -6118,18 +6117,18 @@ const styles = StyleSheet.create({
   authPasswordWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 52,
+    height: 56,
     backgroundColor: '#eef2ff',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#c7d2fe',
     paddingHorizontal: 16,
-    marginTop: 12,
+    marginBottom: 24,
   },
   authPasswordInput: {
     flex: 1,
     height: '100%',
-    fontSize: 15,
+    fontSize: 16,
     color: '#111827',
   },
   passwordToggleText: {
@@ -6143,7 +6142,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 0,
+    marginTop: 16,
   },
   authSubmitBtnMuted: {
     backgroundColor: '#9ca3af',
