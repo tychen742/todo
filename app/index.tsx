@@ -1385,6 +1385,37 @@ export default function HomeScreen() {
     setMessage('Check your email for a password reset link.');
   }
 
+  async function signInWithOAuth(provider: 'google' | 'apple') {
+    if (!isSupabaseConfigured) {
+      setError('Add Supabase env vars to sign in.');
+      return;
+    }
+
+    setAuthLoading(true);
+    setError('');
+
+    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: authRedirectUrl(),
+      },
+    });
+
+    setAuthLoading(false);
+
+    if (oauthError) {
+      setError(oauthError.message);
+      return;
+    }
+
+    if (data?.url) {
+      // On web, redirect to the OAuth provider
+      if (Platform.OS === 'web') {
+        window.location.href = data.url;
+      }
+    }
+  }
+
   async function saveRecoveryPassword() {
     const nextPassword = recoveryPassword.trim();
     if (nextPassword.length < 6) {
@@ -2905,11 +2936,19 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.socialGrid}>
-              <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
+              <Pressable
+                style={({ pressed }) => [styles.socialGridBtn, pressed && styles.btnPressed]}
+                onPress={() => signInWithOAuth('google')}
+                disabled={authLoading}
+              >
                 <Text style={styles.googleG}>G</Text>
                 <Text style={styles.socialGridBtnText}>Google</Text>
               </Pressable>
-              <Pressable style={[styles.socialGridBtn, styles.socialGridBtnSoon]} disabled>
+              <Pressable
+                style={({ pressed }) => [styles.socialGridBtn, pressed && styles.btnPressed]}
+                onPress={() => signInWithOAuth('apple')}
+                disabled={authLoading}
+              >
                 <Text style={styles.appleIcon}></Text>
                 <Text style={styles.socialGridBtnText}>Apple</Text>
               </Pressable>
