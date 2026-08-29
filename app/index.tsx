@@ -5946,8 +5946,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 6,
-    marginTop: 14,
+    marginBottom: 10,
+    marginTop: 0,
   },
   authPasswordHeader: {
     flexDirection: 'row',
@@ -6048,7 +6048,7 @@ const styles = StyleSheet.create({
   authDivider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 28,
   },
   authDividerLine: {
     flex: 1,
@@ -6074,15 +6074,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   authInput: {
-    height: 52,
+    height: 56,
     backgroundColor: '#eef2ff',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#c7d2fe',
     paddingHorizontal: 16,
-    fontSize: 15,
+    fontSize: 16,
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 24,
   },
   authInputError: {
     borderColor: '#ef4444',
@@ -6116,12 +6116,12 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   authSubmitBtn: {
-    height: 52,
+    height: 56,
     backgroundColor: '#6366f1',
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    marginTop: 0,
   },
   authSubmitBtnMuted: {
     backgroundColor: '#9ca3af',
