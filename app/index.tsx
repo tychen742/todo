@@ -2935,24 +2935,14 @@ export default function HomeScreen() {
               <View style={styles.authDividerLine} />
             </View>
 
-            <View style={styles.socialGrid}>
-              <Pressable
-                style={({ pressed }) => [styles.socialGridBtn, pressed && styles.btnPressed]}
-                onPress={() => signInWithOAuth('google')}
-                disabled={authLoading}
-              >
-                <Text style={styles.googleG}>G</Text>
-                <Text style={styles.socialGridBtnText}>Google</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.socialGridBtn, pressed && styles.btnPressed]}
-                onPress={() => signInWithOAuth('apple')}
-                disabled={authLoading}
-              >
-                <Text style={styles.appleIcon}></Text>
-                <Text style={styles.socialGridBtnText}>Apple</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              style={({ pressed }) => [styles.socialGridBtn, pressed && styles.btnPressed]}
+              onPress={() => signInWithOAuth('google')}
+              disabled={authLoading}
+            >
+              <Text style={styles.googleG}>G</Text>
+              <Text style={styles.socialGridBtnText}>Google</Text>
+            </Pressable>
           </View>
 
           <View style={styles.authFooter}>
