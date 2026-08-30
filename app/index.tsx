@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -575,6 +575,8 @@ export default function HomeScreen() {
   const [toast, setToast] = useState('');
   const [hoveredInboxId, setHoveredInboxId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadedTodoScopes, setLoadedTodoScopes] = useState<Record<string, true>>({});
+  const loadedTodoScopesRef = useRef<Record<string, true>>({});
   const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [density, setDensity] = useState<Density>('cozy');
@@ -646,6 +648,12 @@ export default function HomeScreen() {
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal && assignedToMe.length > 0;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
+  const todoScopeKey = selectedProjectId
+    ? `project:${selectedProjectId}`
+    : selectedTeamId
+      ? `team:${selectedTeamId}`
+      : `personal:${session?.user.id ?? 'anonymous'}`;
+  const hasLoadedCurrentTodos = loadedTodoScopes[todoScopeKey] === true;
 
   function projectAvatarFor(project: Project): { label: string; initials: string; color: string } {
     return {
@@ -1108,7 +1116,8 @@ export default function HomeScreen() {
   }, [selectedTeamId, selectedProjectId, selectedProject?.created_by, projects, session]);
 
   const loadTodos = useCallback(async () => {
-    setLoading(true);
+    const shouldShowLoading = loadedTodoScopesRef.current[todoScopeKey] !== true;
+    if (shouldShowLoading) setLoading(true);
     let query = supabase
       .from('todos')
       .select(todoSelectColumns)
@@ -1146,8 +1155,12 @@ export default function HomeScreen() {
       setTodos(sortTodos((data ?? []) as Todo[]));
       setError('');
     }
+    if (loadedTodoScopesRef.current[todoScopeKey] !== true) {
+      loadedTodoScopesRef.current = { ...loadedTodoScopesRef.current, [todoScopeKey]: true };
+      setLoadedTodoScopes(loadedTodoScopesRef.current);
+    }
     setLoading(false);
-  }, [selectedTeamId, selectedProjectId, session, projects]);
+  }, [selectedTeamId, selectedProjectId, session, projects, todoScopeKey]);
 
   const loadAssignedToMe = useCallback(async () => {
     if (!session) return;
@@ -1164,7 +1177,6 @@ export default function HomeScreen() {
   }, [session]);
 
   const loadArchivedTodos = useCallback(async () => {
-    setLoading(true);
     let query = supabase
       .from('todos')
       .select(todoSelectColumns)
@@ -1194,7 +1206,6 @@ export default function HomeScreen() {
 
     const { data, error: err } = await query;
     if (!err) setArchivedTodos((data ?? []) as Todo[]);
-    setLoading(false);
   }, [selectedTeamId, selectedProjectId, session, projects]);
 
   useEffect(() => {
@@ -1234,6 +1245,8 @@ export default function HomeScreen() {
       setPhases([]);
       setMembers([]);
       setTodos([]);
+      loadedTodoScopesRef.current = {};
+      setLoadedTodoScopes({});
       setError('');
       setMessage('');
     });
@@ -4329,7 +4342,7 @@ export default function HomeScreen() {
                       {!!error && <Text style={styles.error}>{error}</Text>}
                       {!!message && <Text style={styles.message}>{message}</Text>}
                       {loading && !error && <Text style={styles.empty}>Loading todos...</Text>}
-                      {!loading && active.length === 0 && done.length === 0 && (
+                      {hasLoadedCurrentTodos && active.length === 0 && done.length === 0 && (
                         <Text style={styles.empty}>No todos yet. Add one above.</Text>
                       )}
                     </>

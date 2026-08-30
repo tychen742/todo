@@ -45,6 +45,10 @@ keeps URL session detection disabled and stores sessions in AsyncStorage.
 5. Writes go directly through Supabase with RLS enforcing access.
 6. Realtime subscriptions refresh todos and team members across web and iPhone.
 
+Todo pages track whether each personal/team/project scope has loaded once.
+Returning to an already loaded scope keeps the current rows mounted and syncs
+quietly instead of showing a visible loading refresh.
+
 ## Security Model
 
 Supabase Row Level Security is the main security boundary.
