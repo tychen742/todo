@@ -40,6 +40,9 @@ signed-out form, which prevents a brief login-brand flash when a persisted
 session is restored on refresh.
 Email/password sign-in applies the returned session before clearing the auth
 loading state so the signed-out form does not briefly reappear during login.
+After auth is initialized, the signed-in workspace shell is also held until the
+first todo scope finishes loading, preventing a header/divider-only flash on
+page refresh.
 
 ## Data Flow
 

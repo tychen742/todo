@@ -672,6 +672,7 @@ export default function HomeScreen() {
       ? `team:${selectedTeamId}`
       : `personal:${session?.user.id ?? 'anonymous'}`;
   const hasLoadedCurrentTodos = loadedTodoScopes[todoScopeKey] === true;
+  const hasLoadedAnyTodoScope = Object.keys(loadedTodoScopes).length > 0;
 
   function projectAvatarFor(project: Project): { label: string; initials: string; color: string } {
     return {
@@ -2915,6 +2916,15 @@ export default function HomeScreen() {
   }
 
   if (!authInitialized) {
+    return (
+      <View style={styles.root}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="dark" />
+      </View>
+    );
+  }
+
+  if (session && !hasLoadedAnyTodoScope) {
     return (
       <View style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
