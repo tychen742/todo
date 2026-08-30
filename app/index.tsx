@@ -109,6 +109,7 @@ const taskHeaderHeight = 42;
 const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
 const incomingBoxMaxHeight = taskHeaderHeight + incomingRowHeight * defaultVisibleTaskRows;
 const webAppUrl = 'https://todo-eight-gamma.vercel.app';
+const oauthReturnStorageKey = 'todo:oauth-return-to-production';
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0,
@@ -298,6 +299,33 @@ function forceOAuthRedirectUrl(url: string) {
   } catch {
     return url;
   }
+}
+
+function isLocalWebHost() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+}
+
+function markOAuthRedirectIntent() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  window.sessionStorage?.setItem(oauthReturnStorageKey, '1');
+}
+
+function shouldPromoteLocalOAuthSession() {
+  if (!isLocalWebHost()) return false;
+  const hasOAuthIntent = window.sessionStorage?.getItem(oauthReturnStorageKey) === '1';
+  const hasOAuthCallback =
+    window.location.search.includes('code=') ||
+    window.location.hash.includes('access_token=') ||
+    window.location.hash.includes('refresh_token=');
+  return hasOAuthIntent || hasOAuthCallback;
+}
+
+function promoteLocalOAuthSessionToProduction(currentSession: Session | null) {
+  if (!currentSession || !shouldPromoteLocalOAuthSession()) return false;
+  window.sessionStorage?.removeItem(oauthReturnStorageKey);
+  window.location.replace(webAppUrl);
+  return true;
 }
 
 function projectInviteUrl(token: string) {
@@ -1245,6 +1273,7 @@ export default function HomeScreen() {
 
     supabase.auth.getSession()
       .then(({ data: { session: currentSession } }) => {
+        if (promoteLocalOAuthSessionToProduction(currentSession)) return;
         sessionUserIdRef.current = currentSession?.user.id ?? null;
         setSession(currentSession);
       })
@@ -1264,6 +1293,7 @@ export default function HomeScreen() {
         setMessage('');
         setError('');
       }
+      if (promoteLocalOAuthSessionToProduction(currentSession)) return;
       const previousUserId = sessionUserIdRef.current;
       const nextUserId = currentSession?.user.id ?? null;
       const userChanged = previousUserId !== nextUserId;
@@ -1466,6 +1496,7 @@ export default function HomeScreen() {
     if (data?.url) {
       // On web, redirect to the OAuth provider
       if (Platform.OS === 'web') {
+        markOAuthRedirectIntent();
         window.location.href = forceOAuthRedirectUrl(data.url);
       }
     }
@@ -8714,7 +8745,7 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   assignedToMeSeparator: {
-    height: StyleSheet.hairlineWidth,
+    height: 1,
     backgroundColor: '#e5e7eb',
   },
   incomingAcceptIcon: {

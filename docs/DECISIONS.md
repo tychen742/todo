@@ -147,7 +147,7 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
 - Section headers (TASK, Completed, INBOX): `paddingVertical: 2`, `paddingRight: 2`
 - All row items (todo rows, completed rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
-- Inbox rows must use the same natural row height as Task rows. Both render row content plus a separate one-pixel separator view, rather than folding the separator into row padding or border height.
+- Inbox rows must use the same natural row height as Task rows. Both render row content plus a separate `1px` separator view, rather than folding the separator into row padding or border height.
 - Fixed-height controls inside a row must be no taller than 20px so they do not force rows above the shared measured row height.
 - Row left edge: determined by column structure (drag handle + checkbox), not by a padding value
 - Modals and calendar cards: `padding: 16`

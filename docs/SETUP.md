@@ -50,6 +50,9 @@ http://localhost:8082
 The app's web OAuth, email confirmation, password reset, and invite URLs are
 hardcoded to `https://todo-eight-gamma.vercel.app`, so Google auth started from
 localhost still returns to the deployed app.
+If an upstream OAuth callback still lands on localhost, the web client marks
+OAuth attempts and promotes the restored local session to the deployed Vercel
+URL with `window.location.replace`.
 
 ## Google OAuth
 
