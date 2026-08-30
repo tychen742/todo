@@ -306,16 +306,21 @@ function isLocalWebHost() {
   return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 }
 
+function redirectLocalWebToProduction() {
+  if (!isLocalWebHost()) return false;
+  window.location.replace(webAppUrl);
+  return true;
+}
+
 function markOAuthRedirectIntent() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
   window.sessionStorage?.setItem(oauthReturnStorageKey, '1');
 }
 
 function promoteLocalSessionToProduction(currentSession: Session | null) {
-  if (!currentSession || !isLocalWebHost()) return false;
+  if (!currentSession) return false;
   window.sessionStorage?.removeItem(oauthReturnStorageKey);
-  window.location.replace(webAppUrl);
-  return true;
+  return redirectLocalWebToProduction();
 }
 
 function projectInviteUrl(token: string) {
@@ -1254,6 +1259,8 @@ export default function HomeScreen() {
   }, [loadArchivedTodos]);
 
   useEffect(() => {
+    if (redirectLocalWebToProduction()) return;
+
     if (!isSupabaseConfigured) {
       setAuthInitialized(true);
       setAuthLoading(false);
@@ -1377,6 +1384,8 @@ export default function HomeScreen() {
   }, [loadMembers, loadTodos, selectedTeamId, selectedProjectId, session]);
 
   async function submitAuth() {
+    if (redirectLocalWebToProduction()) return;
+
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) {
       setError('Enter your email and password.');
@@ -1461,6 +1470,8 @@ export default function HomeScreen() {
   }
 
   async function signInWithOAuth(provider: 'google' | 'apple') {
+    if (redirectLocalWebToProduction()) return;
+
     if (!isSupabaseConfigured) {
       setError('Add Supabase env vars to sign in.');
       return;
