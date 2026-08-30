@@ -87,7 +87,7 @@ Workflow status values:
 - `review`
 - `done`
 
-`phase_id` and `position` are the project Plan placement. They answer where the task belongs in the project structure. `workflow_status` and `workflow_position` are the Kanban placement. They answer what is happening to the task now. These fields are intentionally separate.
+`phase_id` and `position` are the project Plan placement. They answer where the task belongs in the project structure. For project-scoped todos, `position` is unique within each project phase/backlog lane, not across the whole project. `workflow_status` and `workflow_position` are the Kanban placement. They answer what is happening to the task now. These fields are intentionally separate.
 
 Deleting a project phase sets affected todo `phase_id` values to `null`, which moves those tasks back to the project Backlog. The app enforces at least one phase column per project and compacts remaining phase `order_index` values after deletion.
 

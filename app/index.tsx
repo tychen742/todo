@@ -2430,7 +2430,7 @@ export default function HomeScreen() {
       .from('todos')
       .update({
         phase_id: targetPhaseId,
-        position: nextPositionById.get(todoId) ?? 0,
+        position: null,
       })
       .eq('id', todoId);
     if (updateError) {
@@ -2512,7 +2512,7 @@ export default function HomeScreen() {
         workflow_status: targetWorkflowStatus,
         done,
         completed_at,
-        workflow_position: nextWorkflowPositionById.get(todoId) ?? 0,
+        workflow_position: null,
       })
       .eq('id', todoId);
     if (updateError) {

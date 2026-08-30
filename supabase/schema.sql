@@ -398,9 +398,16 @@ create unique index if not exists todos_position_personal_active_unique
   where team_id is null and project_id is null and done = false and position is not null;
 
 drop index if exists todos_position_project_active_unique;
-create unique index if not exists todos_position_project_active_unique
-  on todos (project_id, position)
+drop index if exists todos_position_project_phase_active_unique;
+create unique index if not exists todos_position_project_phase_active_unique
+  on todos (project_id, coalesce(phase_id, '00000000-0000-0000-0000-000000000000'::uuid), position)
   where project_id is not null and done = false and position is not null;
+
+-- Team workspace ordering is separate from project plan ordering.
+drop index if exists todos_position_team_active_unique;
+create unique index if not exists todos_position_team_active_unique
+  on todos (team_id, position)
+  where team_id is not null and project_id is null and done = false and position is not null;
 
 drop index if exists todos_workflow_position_project_active_unique;
 create unique index if not exists todos_workflow_position_project_active_unique

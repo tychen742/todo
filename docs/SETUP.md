@@ -85,6 +85,11 @@ npm run db:apply
 ```
 
 This requires `psql` and local database connection details in `.env.local` or `.env`.
+To apply a targeted migration file without replaying the full schema, run:
+
+```bash
+scripts/apply-schema.sh supabase/<migration-file>.sql
+```
 
 Recommended:
 

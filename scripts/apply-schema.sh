@@ -2,8 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SCHEMA_FILE="$ROOT_DIR/supabase/schema.sql"
+SCHEMA_FILE="${1:-$ROOT_DIR/supabase/schema.sql}"
 ENV_FILES=("$ROOT_DIR/.env" "$ROOT_DIR/.env.local")
+
+if [[ "$SCHEMA_FILE" != /* ]]; then
+  SCHEMA_FILE="$ROOT_DIR/$SCHEMA_FILE"
+fi
+
+if [[ ! -f "$SCHEMA_FILE" ]]; then
+  echo "SQL file not found: $SCHEMA_FILE" >&2
+  exit 1
+fi
 
 read_env_value() {
   local key="$1"
