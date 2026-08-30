@@ -202,14 +202,8 @@ export default function TodoItem({
       </Pressable>
 
       <Pressable
-        onPress={() => {
-          if (!done && !startedWorkAt && onStartWork) {
-            onStartWork();
-            return;
-          }
-          onOpenEdit?.();
-        }}
-        disabled={!onOpenEdit && !onStartWork}
+        onPress={onOpenEdit}
+        disabled={!onOpenEdit}
         style={styles.textWrap}
       >
         <View style={styles.textRow}>
