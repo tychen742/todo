@@ -573,7 +573,8 @@ export default function HomeScreen() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState('');
-  const [hoveredInboxId, setHoveredInboxId] = useState<string | null>(null);
+  const [hoveredInboxTodoId, setHoveredInboxTodoId] = useState<string | null>(null);
+  const [hoveredInboxActionId, setHoveredInboxActionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadedTodoScopes, setLoadedTodoScopes] = useState<Record<string, true>>({});
   const loadedTodoScopesRef = useRef<Record<string, true>>({});
@@ -2759,12 +2760,19 @@ export default function HomeScreen() {
     const creatorColor = pickAvatarColor(creatorEmail);
     const creatorAvatarUrl = isCreatorMe ? (profile?.avatar_url ?? null) : (creatorMember?.avatar_url ?? null);
     const creatorTooltip = creatorName ? `From: ${creatorName}` : `From: ${contextLabel}`;
+    const isRowHovered = Platform.OS === 'web' && hoveredInboxTodoId === todo.id;
+    const isActionHovered = Platform.OS === 'web' && hoveredInboxActionId === todo.id;
     return (
-      <View key={todo.id} style={[styles.assignedToMeRow, { paddingVertical: rowPV }]}>
+      <Pressable
+        key={todo.id}
+        onHoverIn={() => setHoveredInboxTodoId(todo.id)}
+        onHoverOut={() => setHoveredInboxTodoId(null)}
+        style={[styles.assignedToMeRow, isRowHovered && styles.assignedToMeRowHovered, { paddingVertical: rowPV }]}
+      >
         <Pressable
           onPress={() => moveInboxTodoToTodos(todo.id)}
-          onHoverIn={() => setHoveredInboxId(todo.id)}
-          onHoverOut={() => setHoveredInboxId(null)}
+          onHoverIn={() => setHoveredInboxActionId(todo.id)}
+          onHoverOut={() => setHoveredInboxActionId(null)}
           style={[
             styles.incomingAcceptIcon,
             { backgroundColor: priorityColors[todo.priority], borderColor: priorityColors[todo.priority] },
@@ -2773,7 +2781,7 @@ export default function HomeScreen() {
           accessibilityLabel="Move to Todos"
         >
           <ArrowLeft size={11} strokeWidth={2.75} color="#fff" />
-          {Platform.OS === 'web' && hoveredInboxId === todo.id && (
+          {isActionHovered && (
             <View style={styles.incomingAcceptTooltip}>
               <Text style={styles.incomingAcceptTooltipText} numberOfLines={1}>Move to Todos · {priorityLabels[todo.priority]}</Text>
             </View>
@@ -2787,7 +2795,13 @@ export default function HomeScreen() {
           </Text>
         )}
         <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} avatarUrl={creatorAvatarUrl} tooltip={creatorTooltip} />
-      </View>
+        {isRowHovered && !isActionHovered && (
+          <View style={styles.assignedToMeTooltip}>
+            <Text style={styles.assignedToMeTooltipText}>{todo.text}</Text>
+            {!!todo.note && <Text style={styles.assignedToMeTooltipNote}>{todo.note}</Text>}
+          </View>
+        )}
+      </Pressable>
     );
   }
 
@@ -8623,6 +8637,11 @@ const styles = StyleSheet.create({
     gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
+    position: 'relative',
+    zIndex: 1,
+  },
+  assignedToMeRowHovered: {
+    zIndex: 50,
   },
   incomingAcceptIcon: {
     width: 18,
@@ -8668,6 +8687,33 @@ const styles = StyleSheet.create({
   assignedToMeDueOverdue: {
     color: '#dc2626',
     fontWeight: '600',
+  },
+  assignedToMeTooltip: {
+    position: 'absolute',
+    top: 34,
+    left: 50,
+    right: 14,
+    zIndex: 80,
+    borderRadius: 6,
+    backgroundColor: '#111827',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  assignedToMeTooltipText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  assignedToMeTooltipNote: {
+    color: '#d1d5db',
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 4,
   },
   assignedToMePriority: {
     width: 20,

@@ -82,6 +82,11 @@ Due date and age are a compact time group. Their fixed slots must stay close tog
 
 Priority squares are fixed-position row controls and must show their priority level in a tooltip on hover.
 
+Inbox rows show the full todo text in a hover tooltip on web. The row itself
+stays single-line and fixed-height so the Inbox panel remains scannable, while
+truncated task names are still inspectable without opening or accepting the
+todo.
+
 ## 2026-06-18: Overdue Rows Use Negative Due Labels
 
 Decision: overdue todos render due-date pills as negative day counts, such as `-7d`, and the entire row gets a red-tinted background.
