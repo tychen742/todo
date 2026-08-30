@@ -117,7 +117,7 @@ Decision: every section or panel header in the app — task list, completed, inb
 
 **Canonical header style:**
 
-- `paddingVertical: 7`, `paddingRight: 16`
+- `paddingVertical: 2`, `paddingRight: 2`
 - `paddingLeft` aligned to where the entry item's text begins in that panel
 - `backgroundColor: '#f3f4f6'`
 - `borderBottomWidth: 1`, `borderBottomColor: '#d1d5db'`
@@ -133,21 +133,24 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 
 | Token   | Value | Used for                                                                    |
 |---------|-------|-----------------------------------------------------------------------------|
-| `micro` | 7px   | Vertical padding on every row item and section header                       |
+| `micro` | 2px   | Vertical padding on every row item and section header                       |
 | `macro` | 12px  | Gap between panes, outer board breathing room                               |
-| `card`  | 16px  | Internal padding for modals and floating cards; right-edge padding on rows  |
+| `card`  | 16px  | Internal padding for modals and floating cards                              |
 
 **Personal view pane rules:**
 
+- Top-level workspace tab band: `paddingTop: 2`, `paddingBottom: 2`, `paddingHorizontal: 2`
+- Top-level workspace tab buttons: `height: 30`, `paddingVertical: 2`, `paddingHorizontal: 2`
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
-- Section headers (TASK, Completed, INBOX): `paddingVertical: 7`, `paddingRight: 16`
-- All row items (todo rows, completed rows, inbox rows): `paddingVertical: 7`, `paddingRight: 16`
+- Section headers (TASK, Completed, INBOX): `paddingVertical: 2`, `paddingRight: 2`
+- All row items (todo rows, completed rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
+- Fixed-height controls inside a row must be no taller than 20px so the final row height can match the 24px Inbox rows.
 - Row left edge: determined by column structure (drag handle + checkbox), not by a padding value
 - Modals and calendar cards: `padding: 16`
 
-**Height consistency rule:** every row in every pane — active tasks, completed, inbox — must use `paddingVertical: 7`. Using any other vertical padding on a row is a bug.
+**Height consistency rule:** every row in every pane — active tasks, completed, inbox — must use `paddingVertical: 2`. Using any other vertical padding on a row is a bug.
 
-Reason: inconsistent vertical padding is the primary cause of rows feeling different heights across panes. A single micro value (7px) applied uniformly makes all rows visually equal regardless of which pane they appear in.
+Reason: inconsistent vertical padding is the primary cause of rows feeling different heights across panes. A single micro value (2px) applied uniformly makes all rows visually equal regardless of which pane they appear in.
 
 ## 2026-06-10: Typography Scale — 5 Sizes
 
@@ -172,6 +175,8 @@ Reason: the codebase had 14 distinct font sizes (9–26px) before this decision.
 React Native `fontSize` values are density-independent points, not literal screen pixels. They behave like `pt` on iOS and `dp` on Android, so they automatically scale across screen densities without using `rem` or `em`. Web best-practice guidance to use `rem`/`em` does not apply here; our integer values are already device-agnostic.
 
 However, Dynamic Type (iOS) and font scaling (Android accessibility settings) are a separate concern. React Native respects the system font scale by default (`allowFontScaling` defaults to `true`). This means our `xs` (11px) items could become unreadably small if a user has reduced their system font size, or overflow their containers if enlarged. To do: audit small-text and fixed-width containers for scaling robustness before the first public release.
+
+Primary list text in todo and Inbox rows uses `#1f2937`, not near-black `#111827`, so dense lists read softer while retaining contrast.
 
 ## 2026-06-10: Use Lucide for UI Icons
 

@@ -102,7 +102,7 @@ const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const defaultVisibleTaskRows = 5;
 const todoRowHeight = 70;
 type Density = 'compact' | 'cozy' | 'roomy';
-const densityPV: Record<Density, number> = { compact: 4, cozy: 7, roomy: 12 };
+const densityPV: Record<Density, number> = { compact: 2, cozy: 2, roomy: 2 };
 const densityRowH: Record<Density, number> = { compact: 56, cozy: 70, roomy: 88 };
 const incomingRowHeight = 106;
 const taskHeaderHeight = 42;
@@ -478,7 +478,7 @@ const ias = StyleSheet.create({
     position: 'absolute', bottom: 26, right: 0, backgroundColor: '#111827',
     borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, zIndex: 100, minWidth: 80,
   },
-  tooltipText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  tooltipText: { color: '#fff', fontSize: 11 },
 });
 
 export default function HomeScreen() {
@@ -4441,7 +4441,7 @@ export default function HomeScreen() {
                           onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
                           onArchive={() => archiveTodo(todo.id)}
                           reserveDragSpace={Platform.OS === 'web'}
-                          rowPaddingRight={done.length > 3 ? 0 : 16}
+                          rowPaddingRight={done.length > 3 ? 0 : 2}
                           rowPV={rowPV}
                         />
                       );
@@ -6339,9 +6339,9 @@ const styles = StyleSheet.create({
   teamPanel: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingHorizontal: 2,
+    paddingTop: 2,
+    paddingBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
   },
@@ -6356,13 +6356,13 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   workspaceTab: {
-    minHeight: 36,
+    height: 30,
     maxWidth: 180,
     borderColor: '#d1d5db',
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
     marginRight: 8,
     justifyContent: 'center',
   },
@@ -6379,8 +6379,8 @@ const styles = StyleSheet.create({
     color: '#4338ca',
   },
   workspaceAddTab: {
-    width: 36,
-    minHeight: 36,
+    width: 30,
+    height: 30,
     borderColor: '#d1d5db',
     borderWidth: 1,
     borderRadius: 8,
@@ -6398,7 +6398,7 @@ const styles = StyleSheet.create({
   },
   teamsBtn: {
     flexShrink: 0,
-    height: 36,
+    height: 30,
     paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -8686,7 +8686,7 @@ const styles = StyleSheet.create({
   assignedToMeText: {
     flex: 1,
     fontSize: 15,
-    color: '#111827',
+    color: '#1f2937',
   },
   assignedToMeContext: {
     fontSize: 11,

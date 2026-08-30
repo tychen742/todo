@@ -127,8 +127,8 @@ export default function TodoItem({
   onDrag,
   reserveDragSpace = false,
   isDragging = false,
-  rowPV = 7,
-  rowPaddingRight = 16,
+  rowPV = 2,
+  rowPaddingRight = 2,
 }: Props) {
   const [priorityHovered, setPriorityHovered] = useState(false);
   const [assignerHovered, setAssignerHovered] = useState(false);
@@ -426,8 +426,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingRight: 16,
+    paddingVertical: 2,
+    paddingRight: 2,
   },
   rowSeparator: {
     height: StyleSheet.hairlineWidth,
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 15,
-    color: '#111827',
+    color: '#1f2937',
   },
   textDone: {
     textDecorationLine: 'line-through',
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
   statusCol: {
     marginLeft: 8,
     width: 56,
-    height: 28,
+    height: 20,
     alignItems: 'flex-start',
     justifyContent: 'center',
     position: 'relative',
@@ -519,8 +519,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   archiveAction: {
-    width: 28,
-    height: 28,
+    width: 20,
+    height: 20,
     marginLeft: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -558,8 +558,8 @@ const styles = StyleSheet.create({
     width: 48,
   },
   priorityControl: {
-    width: 28,
-    height: 28,
+    width: 20,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
   dragHandleText: {
     fontSize: 18,
     color: '#d1d5db',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   inlineControl: {
     marginLeft: 8,
@@ -744,6 +744,5 @@ const styles = StyleSheet.create({
   tooltipText: {
     color: '#fff',
     fontSize: 11,
-    fontWeight: '600',
   },
 });
