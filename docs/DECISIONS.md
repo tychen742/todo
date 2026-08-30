@@ -143,11 +143,11 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 
 - Top-level workspace tab band: `paddingTop: 2`, `paddingBottom: 2`, `paddingHorizontal: 12`
 - Top-level workspace tab buttons: `height: 30`, `paddingVertical: 2`, `paddingHorizontal: 2`
-- Add todo band: `paddingVertical: 12`, `paddingHorizontal: 12`
+- Add todo band: `paddingVertical: 12`, `paddingHorizontal: 12`; input and Add button use `height: 36`
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
 - Section headers (TASK, Completed, INBOX): `paddingVertical: 2`, `paddingRight: 2`
 - All row items (todo rows, completed rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
-- Inbox rows must use the same natural row height as Task rows. Because Inbox uses a border on the row while Task uses a separate separator view, Inbox rows add one pixel of bottom padding to match the measured Task row height.
+- Inbox rows must use the same natural row height as Task rows. Both render row content plus a separate one-pixel separator view, rather than folding the separator into row padding or border height.
 - Fixed-height controls inside a row must be no taller than 20px so they do not force rows above the shared measured row height.
 - Row left edge: determined by column structure (drag handle + checkbox), not by a padding value
 - Modals and calendar cards: `padding: 16`

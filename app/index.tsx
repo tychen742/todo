@@ -2775,45 +2775,47 @@ export default function HomeScreen() {
     const isRowHovered = Platform.OS === 'web' && hoveredInboxTodoId === todo.id;
     const isActionHovered = Platform.OS === 'web' && hoveredInboxActionId === todo.id;
     return (
-      <Pressable
-        key={todo.id}
-        onHoverIn={() => setHoveredInboxTodoId(todo.id)}
-        onHoverOut={() => setHoveredInboxTodoId(null)}
-        style={[styles.assignedToMeRow, isRowHovered && styles.assignedToMeRowHovered, { paddingVertical: rowPV }]}
-      >
+      <View key={todo.id} style={[styles.assignedToMeRowOuter, isRowHovered && styles.assignedToMeRowHovered]}>
         <Pressable
-          onPress={() => moveInboxTodoToTodos(todo.id)}
-          onHoverIn={() => setHoveredInboxActionId(todo.id)}
-          onHoverOut={() => setHoveredInboxActionId(null)}
-          style={[
-            styles.incomingAcceptIcon,
-            { backgroundColor: priorityColors[todo.priority], borderColor: priorityColors[todo.priority] },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Move to Todos"
+          onHoverIn={() => setHoveredInboxTodoId(todo.id)}
+          onHoverOut={() => setHoveredInboxTodoId(null)}
+          style={[styles.assignedToMeRow, { paddingVertical: rowPV }]}
         >
-          <ArrowLeft size={11} strokeWidth={2.75} color="#fff" />
-          {isActionHovered && (
-            <View style={styles.incomingAcceptTooltip}>
-              <Text style={styles.incomingAcceptTooltipText} numberOfLines={1}>Move to Todos · {priorityLabels[todo.priority]}</Text>
+          <Pressable
+            onPress={() => moveInboxTodoToTodos(todo.id)}
+            onHoverIn={() => setHoveredInboxActionId(todo.id)}
+            onHoverOut={() => setHoveredInboxActionId(null)}
+            style={[
+              styles.incomingAcceptIcon,
+              { backgroundColor: priorityColors[todo.priority], borderColor: priorityColors[todo.priority] },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Move to Todos"
+          >
+            <ArrowLeft size={11} strokeWidth={2.75} color="#fff" />
+            {isActionHovered && (
+              <View style={styles.incomingAcceptTooltip}>
+                <Text style={styles.incomingAcceptTooltipText} numberOfLines={1}>Move to Todos · {priorityLabels[todo.priority]}</Text>
+              </View>
+            )}
+          </Pressable>
+          <Text style={styles.assignedToMeText} numberOfLines={1}>{todo.text}</Text>
+          {!!contextLabel && <Text style={styles.assignedToMeContext} numberOfLines={1}>{contextLabel}</Text>}
+          {todo.due_date && (
+            <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]} numberOfLines={1}>
+              {isOverdue ? 'Overdue' : todo.due_date}
+            </Text>
+          )}
+          <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} avatarUrl={creatorAvatarUrl} tooltip={creatorTooltip} />
+          {isRowHovered && !isActionHovered && (
+            <View style={styles.assignedToMeTooltip}>
+              <Text style={styles.assignedToMeTooltipText}>{todo.text}</Text>
+              {!!todo.note && <Text style={styles.assignedToMeTooltipNote}>{todo.note}</Text>}
             </View>
           )}
         </Pressable>
-        <Text style={styles.assignedToMeText} numberOfLines={1}>{todo.text}</Text>
-        {!!contextLabel && <Text style={styles.assignedToMeContext} numberOfLines={1}>{contextLabel}</Text>}
-        {todo.due_date && (
-          <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]} numberOfLines={1}>
-            {isOverdue ? 'Overdue' : todo.due_date}
-          </Text>
-        )}
-        <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} avatarUrl={creatorAvatarUrl} tooltip={creatorTooltip} />
-        {isRowHovered && !isActionHovered && (
-          <View style={styles.assignedToMeTooltip}>
-            <Text style={styles.assignedToMeTooltipText}>{todo.text}</Text>
-            {!!todo.note && <Text style={styles.assignedToMeTooltipNote}>{todo.note}</Text>}
-          </View>
-        )}
-      </Pressable>
+        <View style={styles.assignedToMeSeparator} />
+      </View>
     );
   }
 
@@ -7095,7 +7097,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   input: {
-    height: 44,
+    height: 36,
     backgroundColor: '#f3f4f6',
     borderRadius: 10,
     paddingHorizontal: 14,
@@ -7126,7 +7128,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6366f1',
     borderRadius: 10,
     paddingHorizontal: 18,
-    height: 44,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -8643,20 +8645,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6b7280',
   },
+  assignedToMeRowOuter: {
+    flexDirection: 'column',
+    zIndex: 1,
+  },
   assignedToMeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 2,
-    paddingBottom: 3,
     paddingHorizontal: 2,
     gap: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
     position: 'relative',
-    zIndex: 1,
   },
   assignedToMeRowHovered: {
     zIndex: 50,
+  },
+  assignedToMeSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#e5e7eb',
   },
   incomingAcceptIcon: {
     width: 18,
