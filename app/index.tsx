@@ -6222,7 +6222,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   passwordToggleText: {
-    fontSize: 15,
+    fontSize: 13,
     color: '#9ca3af',
     paddingLeft: 8,
   },
