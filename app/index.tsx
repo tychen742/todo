@@ -2924,7 +2924,7 @@ export default function HomeScreen() {
             {/* Email */}
             <Text style={styles.authLabel}>Email</Text>
             <TextInput
-              style={[styles.authInput, !!error && styles.authInputError]}
+              style={[styles.authInput, styles.authEmailInput, !!error && styles.authInputError]}
               value={email}
               onChangeText={(v) => { setEmail(v); if (error) setError(''); }}
               placeholder="you@example.com"
@@ -6191,6 +6191,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
     marginBottom: 16,
+  },
+  authEmailInput: {
+    marginBottom: 12,
   },
   authInputError: {
     borderColor: '#ef4444',
