@@ -506,6 +506,7 @@ export default function HomeScreen() {
   const [linkingProjectTeam, setLinkingProjectTeam] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [lastSelectedProjectId, setLastSelectedProjectId] = useState<string | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [projectViewMode, setProjectViewMode] = useState<ProjectViewMode>('plan');
   const [workflowColumnLabels, setWorkflowColumnLabels] = useState(defaultWorkflowColumnLabels);
@@ -1250,6 +1251,7 @@ export default function HomeScreen() {
         setProjects([]);
         setSelectedTeamId(null);
         setSelectedProjectId(null);
+        setLastSelectedProjectId(null);
         setPhases([]);
         setMembers([]);
         setTodos([]);
@@ -1630,6 +1632,7 @@ export default function HomeScreen() {
     setProjects((prev) => [...prev, project]);
     setPhases(nextPhases);
     setSelectedProjectId(project.id);
+    setLastSelectedProjectId(project.id);
     setSelectedTeamId(null);
     setCreateTarget(null);
     setMessage('');
@@ -2371,6 +2374,7 @@ export default function HomeScreen() {
     if (updateError) { setError(updateError.message); return; }
     setProjects((prev) => prev.filter((p) => p.id !== id));
     if (selectedProjectId === id) setSelectedProjectId(null);
+    if (lastSelectedProjectId === id) setLastSelectedProjectId(null);
     setError('');
   }
 
@@ -3103,9 +3107,10 @@ export default function HomeScreen() {
 
           <Pressable
             onPress={() => {
+              const rememberedProject = projects.find((project) => project.id === lastSelectedProjectId) ?? projects[0] ?? null;
               setSelectedTeamId(null);
-              setSelectedProjectId(null);
-              setProjectsViewOpen(true);
+              setSelectedProjectId(rememberedProject?.id ?? null);
+              setProjectsViewOpen(!rememberedProject);
               setTeamsViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
@@ -3315,6 +3320,7 @@ export default function HomeScreen() {
                 <Pressable
                   onPress={() => {
                     setSelectedProjectId(project.id);
+                    setLastSelectedProjectId(project.id);
                     setSelectedTeamId(null);
                     setProjectsViewOpen(false);
                     setTeamsViewOpen(false);
@@ -3887,6 +3893,7 @@ export default function HomeScreen() {
                   key={project.id}
                   onPress={() => {
                     setSelectedProjectId(project.id);
+                    setLastSelectedProjectId(project.id);
                     setSelectedTeamId(null);
                   }}
                   style={[

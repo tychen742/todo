@@ -53,9 +53,9 @@ Auth state changes do not clear workspace data unless the signed-in user ID
 changes. Browser tab focus can trigger Supabase token/session events, and those
 must not blank the current page.
 
-The Projects tab opens the cached project overview. It does not automatically
-select the first project, because selecting a project starts project-specific
-todo, phase, and member sync.
+The Projects tab restores the last project selected from the second-level
+project tabs. If there is no remembered project, it falls back to the first
+available project or the project overview when no projects exist.
 
 ## Security Model
 
