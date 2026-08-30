@@ -6052,7 +6052,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 10,
+    marginBottom: 6,
     marginTop: 0,
   },
   authPasswordHeader: {

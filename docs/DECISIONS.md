@@ -182,7 +182,7 @@ However, Dynamic Type (iOS) and font scaling (Android accessibility settings) ar
 
 Primary list text in todo and Inbox rows uses `#374151`, not near-black `#111827`, so dense lists read softer while retaining contrast.
 
-Auth form text inputs, password wrappers, and submit buttons use `height: 48`. The password wrapper keeps `marginBottom: 16`, while the auth submit button has no top margin.
+Auth form labels use `marginBottom: 6`. Auth form text inputs, password wrappers, and submit buttons use `height: 48`. The password wrapper keeps `marginBottom: 16`, while the auth submit button has no top margin.
 
 ## 2026-06-10: Use Lucide for UI Icons
 
