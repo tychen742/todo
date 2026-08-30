@@ -6213,7 +6213,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#c7d2fe',
     paddingHorizontal: 16,
-    marginBottom: 30,
+    marginBottom: 16,
   },
   authPasswordInput: {
     flex: 1,
