@@ -108,6 +108,7 @@ const incomingRowHeight = 106;
 const taskHeaderHeight = 42;
 const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
 const incomingBoxMaxHeight = taskHeaderHeight + incomingRowHeight * defaultVisibleTaskRows;
+const webAppUrl = process.env.EXPO_PUBLIC_APP_URL ?? 'https://todo-eight-gamma.vercel.app';
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0,
@@ -283,12 +284,12 @@ function authRedirectUrl() {
     return undefined;
   }
 
-  return window.location.origin;
+  return webAppUrl;
 }
 
 function projectInviteUrl(token: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return `${window.location.origin}/invite/${token}`;
+    return `${webAppUrl}/invite/${token}`;
   }
   return createURL(`invite/${token}`);
 }

@@ -28,20 +28,29 @@ Fill in:
 ```bash
 EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
+EXPO_PUBLIC_APP_URL=https://todo-eight-gamma.vercel.app
 ```
 
 Use the base project URL, not the `/rest/v1/` URL.
 
-In Supabase Dashboard -> Authentication -> URL Configuration, set the local
-development redirect URLs to the Expo web ports you use, for example:
+In Supabase Dashboard -> Authentication -> URL Configuration, set the site URL
+and redirect URLs to the production app URL:
+
+```text
+https://todo-eight-gamma.vercel.app
+```
+
+You can also keep local development redirect URLs for test-only local auth
+flows, for example:
 
 ```text
 http://localhost:8081
 http://localhost:8082
 ```
 
-Magic links and password reset links will fail if Supabase redirects to a port
-where Expo is not running, such as `http://localhost:3000`.
+The app's web OAuth, email confirmation, password reset, and invite URLs use
+`EXPO_PUBLIC_APP_URL`, defaulting to `https://todo-eight-gamma.vercel.app`, so
+Google auth started from localhost still returns to the deployed app.
 
 ## Google OAuth
 
