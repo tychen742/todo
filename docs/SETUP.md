@@ -83,6 +83,14 @@ browser back to the running app after Google completes. For native Expo Go
 testing, the Google Cloud redirect remains the Supabase callback URL; the Expo
 deep link belongs in Supabase redirect URLs.
 
+If a production Google login redirects to `http://localhost:8081/#access_token=...`,
+the callback did not come from the deployed web redirect. Check Supabase
+Dashboard -> Authentication -> URL Configuration and make sure the Site URL is
+`https://todo-eight-gamma.vercel.app`. Then start a fresh login from
+`https://todo-eight-gamma.vercel.app`, not from a stale localhost tab or an old
+OAuth browser window. The deployed web app sends `redirect_to` as the Vercel
+production URL.
+
 ## Database
 
 Open Supabase SQL Editor and run the full contents of:
