@@ -3103,10 +3103,9 @@ export default function HomeScreen() {
 
           <Pressable
             onPress={() => {
-              const firstProject = projects[0] ?? null;
               setSelectedTeamId(null);
-              setSelectedProjectId(firstProject?.id ?? null);
-              setProjectsViewOpen(!firstProject);
+              setSelectedProjectId(null);
+              setProjectsViewOpen(true);
               setTeamsViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
