@@ -6004,7 +6004,7 @@ const styles = StyleSheet.create({
   authPanel: {
     flex: 1,
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 360,
     alignSelf: 'center',
     paddingHorizontal: 28,
     paddingTop: 56,
