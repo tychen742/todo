@@ -108,7 +108,7 @@ const incomingRowHeight = 106;
 const taskHeaderHeight = 42;
 const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
 const incomingBoxMaxHeight = taskHeaderHeight + incomingRowHeight * defaultVisibleTaskRows;
-const webAppUrl = process.env.EXPO_PUBLIC_APP_URL ?? 'https://todo-eight-gamma.vercel.app';
+const webAppUrl = 'https://todo-eight-gamma.vercel.app';
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0,
@@ -285,6 +285,19 @@ function authRedirectUrl() {
   }
 
   return webAppUrl;
+}
+
+function forceOAuthRedirectUrl(url: string) {
+  const redirectTo = authRedirectUrl();
+  if (!redirectTo) return url;
+
+  try {
+    const oauthUrl = new URL(url);
+    oauthUrl.searchParams.set('redirect_to', redirectTo);
+    return oauthUrl.toString();
+  } catch {
+    return url;
+  }
 }
 
 function projectInviteUrl(token: string) {
@@ -1423,6 +1436,7 @@ export default function HomeScreen() {
       provider,
       options: {
         redirectTo: authRedirectUrl(),
+        skipBrowserRedirect: true,
       },
     });
 
@@ -1436,7 +1450,7 @@ export default function HomeScreen() {
     if (data?.url) {
       // On web, redirect to the OAuth provider
       if (Platform.OS === 'web') {
-        window.location.href = data.url;
+        window.location.href = forceOAuthRedirectUrl(data.url);
       }
     }
   }

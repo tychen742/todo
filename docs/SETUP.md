@@ -28,7 +28,6 @@ Fill in:
 ```bash
 EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-publishable-or-anon-key
-EXPO_PUBLIC_APP_URL=https://todo-eight-gamma.vercel.app
 ```
 
 Use the base project URL, not the `/rest/v1/` URL.
@@ -48,9 +47,9 @@ http://localhost:8081
 http://localhost:8082
 ```
 
-The app's web OAuth, email confirmation, password reset, and invite URLs use
-`EXPO_PUBLIC_APP_URL`, defaulting to `https://todo-eight-gamma.vercel.app`, so
-Google auth started from localhost still returns to the deployed app.
+The app's web OAuth, email confirmation, password reset, and invite URLs are
+hardcoded to `https://todo-eight-gamma.vercel.app`, so Google auth started from
+localhost still returns to the deployed app.
 
 ## Google OAuth
 
