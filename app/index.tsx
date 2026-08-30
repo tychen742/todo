@@ -18,6 +18,7 @@ import { KanbanDragItem, KanbanDragProvider, KanbanDropLane } from '../component
 import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
 import { createURL } from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,6 +26,10 @@ import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+if (Platform.OS === 'web') {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
 type Todo = {
   id: string;
@@ -281,11 +286,11 @@ function isValidEmailAddress(value: string) {
 }
 
 function authRedirectUrl() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return undefined;
+  if (Platform.OS === 'web') {
+    return typeof window === 'undefined' ? undefined : webAppUrl;
   }
 
-  return webAppUrl;
+  return createURL('');
 }
 
 function forceOAuthRedirectUrl(url: string) {
@@ -323,12 +328,8 @@ function promoteLocalSessionToProduction(currentSession: Session | null) {
   return redirectLocalWebToProduction();
 }
 
-function getWebAuthCallbackParams() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return null;
-  }
-
-  const url = new URL(window.location.href);
+function getAuthCallbackParams(callbackUrl: string) {
+  const url = new URL(callbackUrl);
   const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
   const readParam = (name: string) => url.searchParams.get(name) ?? hashParams.get(name);
   const params = {
@@ -343,6 +344,14 @@ function getWebAuthCallbackParams() {
   }
 
   return params;
+}
+
+function getWebAuthCallbackParams() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return null;
+  }
+
+  return getAuthCallbackParams(window.location.href);
 }
 
 function clearWebAuthCallbackParams() {
@@ -367,32 +376,40 @@ function clearWebAuthCallbackParams() {
     'error_description',
   ].forEach((name) => url.searchParams.delete(name));
 
+  url.hash = '';
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`);
 }
 
-async function resolveInitialAuthSession() {
-  const callbackParams = getWebAuthCallbackParams();
-
-  if (callbackParams?.errorDescription) {
-    clearWebAuthCallbackParams();
+async function sessionFromAuthCallbackParams(callbackParams: NonNullable<ReturnType<typeof getAuthCallbackParams>>) {
+  if (callbackParams.errorDescription) {
     throw new Error(callbackParams.errorDescription);
   }
 
-  if (callbackParams?.accessToken && callbackParams.refreshToken) {
+  if (callbackParams.accessToken && callbackParams.refreshToken) {
     const { data, error } = await supabase.auth.setSession({
       access_token: callbackParams.accessToken,
       refresh_token: callbackParams.refreshToken,
     });
     if (error) throw error;
-    clearWebAuthCallbackParams();
     return data.session;
   }
 
-  if (callbackParams?.code) {
+  if (callbackParams.code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(callbackParams.code);
     if (error) throw error;
-    clearWebAuthCallbackParams();
     return data.session;
+  }
+
+  return null;
+}
+
+async function resolveInitialAuthSession() {
+  const callbackParams = getWebAuthCallbackParams();
+
+  if (callbackParams) {
+    const session = await sessionFromAuthCallbackParams(callbackParams);
+    clearWebAuthCallbackParams();
+    return session;
   }
 
   const {
@@ -1558,27 +1575,55 @@ export default function HomeScreen() {
     setAuthLoading(true);
     setError('');
 
-    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: authRedirectUrl(),
-        skipBrowserRedirect: true,
-      },
-    });
+    try {
+      const redirectTo = authRedirectUrl();
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
 
-    setAuthLoading(false);
+      if (oauthError) {
+        setError(oauthError.message);
+        return;
+      }
 
-    if (oauthError) {
-      setError(oauthError.message);
-      return;
-    }
+      if (!data?.url) {
+        setError(`Unable to start ${provider} sign-in.`);
+        return;
+      }
 
-    if (data?.url) {
-      // On web, redirect to the OAuth provider
       if (Platform.OS === 'web') {
         markOAuthRedirectIntent();
         window.location.href = forceOAuthRedirectUrl(data.url);
+        return;
       }
+
+      const authResult = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (authResult.type !== 'success') {
+        if (authResult.type === 'cancel') {
+          setMessage(`${provider === 'google' ? 'Google' : 'Apple'} sign-in canceled.`);
+        }
+        return;
+      }
+
+      const callbackParams = getAuthCallbackParams(authResult.url);
+      if (!callbackParams) {
+        setError(`Unable to complete ${provider} sign-in.`);
+        return;
+      }
+
+      const nextSession = await sessionFromAuthCallbackParams(callbackParams);
+      if (nextSession) {
+        sessionUserIdRef.current = nextSession.user.id;
+        setSession(nextSession);
+      }
+    } catch (oauthError) {
+      setError(oauthError instanceof Error ? oauthError.message : `Unable to complete ${provider} sign-in.`);
+    } finally {
+      setAuthLoading(false);
     }
   }
 

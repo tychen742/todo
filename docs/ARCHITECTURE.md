@@ -38,7 +38,9 @@ explicitly resolves web callback parameters on startup, accepting implicit-flow
 tokens or a PKCE code before it falls back to stored-session lookup. Web OAuth
 uses Supabase's implicit flow so the production Vercel callback can persist the
 returned tokens directly; Native Expo Go keeps URL session detection disabled
-and stores sessions in AsyncStorage.
+and stores sessions in AsyncStorage. Native OAuth opens the Supabase provider
+URL through `expo-web-browser` and exchanges the returned deep-link callback for
+a Supabase session.
 The app waits for the first `getSession()` call to settle before rendering the
 signed-out form, which prevents a brief login-brand flash when a persisted
 session is restored on refresh.

@@ -34,3 +34,12 @@ npm run db:apply
 ```
 
 See [Setup](docs/SETUP.md) for the required local `SUPABASE_DB_URL`.
+
+## Deployment
+
+Production web deploys through Vercel's GitHub integration. Push or merge a
+commit to the GitHub production branch, normally `main`, and Vercel detects the
+change, runs `npm run build`, and serves the generated `dist/` directory.
+
+See [Setup](docs/SETUP.md) for Vercel environment variables and post-deploy
+checks.

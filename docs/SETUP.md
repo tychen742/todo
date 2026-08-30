@@ -45,6 +45,7 @@ flows, for example:
 ```text
 http://localhost:8081
 http://localhost:8082
+todo://**
 ```
 
 The app's web OAuth, email confirmation, password reset, and invite URLs are
@@ -53,6 +54,11 @@ localhost still returns to the deployed app.
 Local web visits redirect to the deployed Vercel URL before auth runs. This
 keeps email/password and OAuth sessions on the production origin instead of
 creating browser-local sessions that cannot be shared with Vercel.
+
+Native OAuth uses `expo-web-browser` with the runtime URL from Expo Linking.
+In Expo Go, add the redirect URL printed by `Linking.createURL('')` or visible
+in the OAuth error to Supabase Authentication -> URL Configuration -> Redirect
+URLs. In standalone or development builds, keep `todo://**` allowlisted.
 
 ## Google OAuth
 
@@ -73,7 +79,9 @@ If Google shows `Error 400: redirect_uri_mismatch`, add that URL under
 Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client IDs
 -> Authorized redirect URIs. Keep the Expo localhost URLs in Supabase
 Authentication -> URL Configuration -> Redirect URLs so Supabase can send the
-browser back to the running app after Google completes.
+browser back to the running app after Google completes. For native Expo Go
+testing, the Google Cloud redirect remains the Supabase callback URL; the Expo
+deep link belongs in Supabase redirect URLs.
 
 ## Database
 
@@ -156,6 +164,39 @@ const supabase = createClient<Database>(url, key);
 Re-run the command after any schema change to keep types in sync. Do not edit `lib/database.types.ts` by hand.
 
 For iPhone, scan the Expo QR code or open the LAN `exp://...` URL in Expo Go.
+
+## Deployment
+
+The production web app deploys through Vercel's GitHub integration. When the
+Vercel project is connected to this repository, pushing or merging to the
+production branch, normally `main`, triggers Vercel to build and deploy the
+latest commit automatically.
+
+This project keeps the Vercel build settings in `vercel.json`:
+
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
+}
+```
+
+`npm run build` runs `expo export --platform web`, which writes the static web
+build to `dist/`. Vercel serves that directory and rewrites app routes to
+`/index.html`.
+
+Before deploying, confirm the Vercel project has these environment variables:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_ANON_KEY
+```
+
+After deployment, verify the production URL loads and run the keep-alive check:
+
+```bash
+curl https://<deployment-host>/api/keep-supabase-awake
+```
 
 ## Vercel Cron Supabase Keep-Alive
 
