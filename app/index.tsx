@@ -6091,7 +6091,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 6,
   },
   authLink: {
     color: '#6366f1',
