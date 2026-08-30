@@ -33,8 +33,11 @@ The project is intentionally on Expo SDK 54 because the App Store version of Exp
 ## Auth Runtime Notes
 
 Supabase Auth URL session detection is enabled on web so OAuth callbacks from
-Google can exchange the returned URL code for a browser session. Native Expo Go
-keeps URL session detection disabled and stores sessions in AsyncStorage.
+Google can exchange the returned URL credentials for a browser session. The app
+also explicitly resolves web callback parameters on startup, accepting either
+implicit-flow tokens or a PKCE code before it falls back to stored-session
+lookup. Native Expo Go keeps URL session detection disabled and stores sessions
+in AsyncStorage.
 The app waits for the first `getSession()` call to settle before rendering the
 signed-out form, which prevents a brief login-brand flash when a persisted
 session is restored on refresh.

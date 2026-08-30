@@ -323,6 +323,84 @@ function promoteLocalSessionToProduction(currentSession: Session | null) {
   return redirectLocalWebToProduction();
 }
 
+function getWebAuthCallbackParams() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return null;
+  }
+
+  const url = new URL(window.location.href);
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+  const readParam = (name: string) => url.searchParams.get(name) ?? hashParams.get(name);
+  const params = {
+    code: readParam('code'),
+    accessToken: readParam('access_token'),
+    refreshToken: readParam('refresh_token'),
+    errorDescription: readParam('error_description') ?? readParam('error'),
+  };
+
+  if (!params.code && !params.accessToken && !params.refreshToken && !params.errorDescription) {
+    return null;
+  }
+
+  return params;
+}
+
+function clearWebAuthCallbackParams() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  [
+    'access_token',
+    'expires_at',
+    'expires_in',
+    'provider_refresh_token',
+    'provider_token',
+    'refresh_token',
+    'token_type',
+    'type',
+    'code',
+    'state',
+    'error',
+    'error_code',
+    'error_description',
+  ].forEach((name) => url.searchParams.delete(name));
+
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`);
+}
+
+async function resolveInitialAuthSession() {
+  const callbackParams = getWebAuthCallbackParams();
+
+  if (callbackParams?.errorDescription) {
+    clearWebAuthCallbackParams();
+    throw new Error(callbackParams.errorDescription);
+  }
+
+  if (callbackParams?.accessToken && callbackParams.refreshToken) {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: callbackParams.accessToken,
+      refresh_token: callbackParams.refreshToken,
+    });
+    if (error) throw error;
+    clearWebAuthCallbackParams();
+    return data.session;
+  }
+
+  if (callbackParams?.code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(callbackParams.code);
+    if (error) throw error;
+    clearWebAuthCallbackParams();
+    return data.session;
+  }
+
+  const {
+    data: { session: currentSession },
+  } = await supabase.auth.getSession();
+  return currentSession;
+}
+
 function projectInviteUrl(token: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return `${webAppUrl}/invite/${token}`;
@@ -1268,8 +1346,8 @@ export default function HomeScreen() {
       return;
     }
 
-    supabase.auth.getSession()
-      .then(({ data: { session: currentSession } }) => {
+    resolveInitialAuthSession()
+      .then((currentSession) => {
         if (promoteLocalSessionToProduction(currentSession)) return;
         sessionUserIdRef.current = currentSession?.user.id ?? null;
         setSession(currentSession);
