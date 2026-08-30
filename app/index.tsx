@@ -311,18 +311,8 @@ function markOAuthRedirectIntent() {
   window.sessionStorage?.setItem(oauthReturnStorageKey, '1');
 }
 
-function shouldPromoteLocalOAuthSession() {
-  if (!isLocalWebHost()) return false;
-  const hasOAuthIntent = window.sessionStorage?.getItem(oauthReturnStorageKey) === '1';
-  const hasOAuthCallback =
-    window.location.search.includes('code=') ||
-    window.location.hash.includes('access_token=') ||
-    window.location.hash.includes('refresh_token=');
-  return hasOAuthIntent || hasOAuthCallback;
-}
-
-function promoteLocalOAuthSessionToProduction(currentSession: Session | null) {
-  if (!currentSession || !shouldPromoteLocalOAuthSession()) return false;
+function promoteLocalSessionToProduction(currentSession: Session | null) {
+  if (!currentSession || !isLocalWebHost()) return false;
   window.sessionStorage?.removeItem(oauthReturnStorageKey);
   window.location.replace(webAppUrl);
   return true;
@@ -1273,7 +1263,7 @@ export default function HomeScreen() {
 
     supabase.auth.getSession()
       .then(({ data: { session: currentSession } }) => {
-        if (promoteLocalOAuthSessionToProduction(currentSession)) return;
+        if (promoteLocalSessionToProduction(currentSession)) return;
         sessionUserIdRef.current = currentSession?.user.id ?? null;
         setSession(currentSession);
       })
@@ -1293,7 +1283,7 @@ export default function HomeScreen() {
         setMessage('');
         setError('');
       }
-      if (promoteLocalOAuthSessionToProduction(currentSession)) return;
+      if (promoteLocalSessionToProduction(currentSession)) return;
       const previousUserId = sessionUserIdRef.current;
       const nextUserId = currentSession?.user.id ?? null;
       const userChanged = previousUserId !== nextUserId;
@@ -1434,6 +1424,7 @@ export default function HomeScreen() {
     }
 
     if (result.data.session) {
+      if (promoteLocalSessionToProduction(result.data.session)) return;
       sessionUserIdRef.current = result.data.session.user.id;
       setSession(result.data.session);
     }
