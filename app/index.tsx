@@ -1390,17 +1390,23 @@ export default function HomeScreen() {
             },
           });
 
-    setAuthLoading(false);
-
     if (result.error) {
+      setAuthLoading(false);
       setError(result.error.message);
       return;
     }
 
     if (authMode === 'signUp' && !result.data.session) {
+      setAuthLoading(false);
       setMessage('Account created! Check your email to confirm, then sign in.');
       return;
     }
+
+    if (result.data.session) {
+      sessionUserIdRef.current = result.data.session.user.id;
+      setSession(result.data.session);
+    }
+    setAuthLoading(false);
   }
 
   async function sendPasswordReset() {
