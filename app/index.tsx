@@ -498,6 +498,7 @@ const ias = StyleSheet.create({
 export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const [session, setSession] = useState<Session | null>(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState<'signIn' | 'signUp'>('signIn');
   const [now, setNow] = useState(() => new Date());
@@ -1235,16 +1236,24 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
+      setAuthInitialized(true);
       setAuthLoading(false);
       setError('Add Supabase env vars to sync todos.');
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      sessionUserIdRef.current = currentSession?.user.id ?? null;
-      setSession(currentSession);
-      setAuthLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session: currentSession } }) => {
+        sessionUserIdRef.current = currentSession?.user.id ?? null;
+        setSession(currentSession);
+      })
+      .catch((sessionError: unknown) => {
+        setError(sessionError instanceof Error ? sessionError.message : 'Unable to restore your session.');
+      })
+      .finally(() => {
+        setAuthInitialized(true);
+        setAuthLoading(false);
+      });
 
     const {
       data: { subscription },
@@ -2896,6 +2905,15 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+    );
+  }
+
+  if (!authInitialized) {
+    return (
+      <View style={styles.root}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <StatusBar style="dark" />
+      </View>
     );
   }
 
