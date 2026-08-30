@@ -8816,6 +8816,7 @@ const styles = StyleSheet.create({
   assignedToMeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 24,
     paddingVertical: 2,
     paddingHorizontal: 2,
     gap: 8,
