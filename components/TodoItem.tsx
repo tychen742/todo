@@ -442,7 +442,8 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 5,
     borderWidth: 2,
-    borderColor: '#6366f1',
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -461,7 +462,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 15,
-    color: '#1f2937',
+    color: '#374151',
   },
   textDone: {
     textDecorationLine: 'line-through',

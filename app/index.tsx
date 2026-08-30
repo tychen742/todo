@@ -382,7 +382,7 @@ const kcs = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', padding: 10, marginHorizontal: 8, marginBottom: 6, gap: 8 },
   cardMilestone: { backgroundColor: '#fefce8', borderColor: '#fde68a' },
   checkbox: { paddingTop: 1 },
-  box: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#6366f1', alignItems: 'center', justifyContent: 'center' },
+  box: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#d1d5db', backgroundColor: '#f9fafb', alignItems: 'center', justifyContent: 'center' },
   boxDone: { backgroundColor: '#9ca3af', borderColor: '#9ca3af' },
   checkmark: { color: '#fff', fontSize: 11, fontWeight: '700' },
   body: { flex: 1, minWidth: 0 },
@@ -6339,7 +6339,7 @@ const styles = StyleSheet.create({
   teamPanel: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 2,
+    paddingHorizontal: 12,
     paddingTop: 2,
     paddingBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -7084,7 +7084,7 @@ const styles = StyleSheet.create({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
@@ -7338,7 +7338,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   sortCheckboxSpacer: {
-    width: 34,
+    width: 30,
     flexShrink: 0,
   },
   sortColInner: {
@@ -8646,8 +8646,9 @@ const styles = StyleSheet.create({
   assignedToMeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 16,
+    paddingVertical: 2,
+    paddingBottom: 3,
+    paddingHorizontal: 2,
     gap: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e5e7eb',
@@ -8686,7 +8687,7 @@ const styles = StyleSheet.create({
   assignedToMeText: {
     flex: 1,
     fontSize: 15,
-    color: '#1f2937',
+    color: '#374151',
   },
   assignedToMeContext: {
     fontSize: 11,

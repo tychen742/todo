@@ -78,6 +78,8 @@ Missing optional entity slots must not collapse when neighboring columns depend 
 
 The Kanban/status column is fixed-width even when a row is completed. Completed rows must reserve this space so priority, due date, age, and delete action columns line up with active task rows.
 
+Unchecked task checkboxes use a light gray outline (`#d1d5db`) and fill (`#f9fafb`) so they do not dominate the row.
+
 Due date and age are a compact time group. Their fixed slots must stay close together and the corresponding header spacers must use the same widths so short due labels (`+`, `2d`, `-7d`) do not look disconnected from the age pill.
 
 Priority squares are fixed-position row controls and must show their priority level in a tooltip on hover.
@@ -139,12 +141,14 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 
 **Personal view pane rules:**
 
-- Top-level workspace tab band: `paddingTop: 2`, `paddingBottom: 2`, `paddingHorizontal: 2`
+- Top-level workspace tab band: `paddingTop: 2`, `paddingBottom: 2`, `paddingHorizontal: 12`
 - Top-level workspace tab buttons: `height: 30`, `paddingVertical: 2`, `paddingHorizontal: 2`
+- Add todo band: `paddingVertical: 12`, `paddingHorizontal: 12`
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
 - Section headers (TASK, Completed, INBOX): `paddingVertical: 2`, `paddingRight: 2`
 - All row items (todo rows, completed rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
-- Fixed-height controls inside a row must be no taller than 20px so the final row height can match the 24px Inbox rows.
+- Inbox rows must use the same natural row height as Task rows. Because Inbox uses a border on the row while Task uses a separate separator view, Inbox rows add one pixel of bottom padding to match the measured Task row height.
+- Fixed-height controls inside a row must be no taller than 20px so they do not force rows above the shared measured row height.
 - Row left edge: determined by column structure (drag handle + checkbox), not by a padding value
 - Modals and calendar cards: `padding: 16`
 
@@ -176,7 +180,7 @@ React Native `fontSize` values are density-independent points, not literal scree
 
 However, Dynamic Type (iOS) and font scaling (Android accessibility settings) are a separate concern. React Native respects the system font scale by default (`allowFontScaling` defaults to `true`). This means our `xs` (11px) items could become unreadably small if a user has reduced their system font size, or overflow their containers if enlarged. To do: audit small-text and fixed-width containers for scaling robustness before the first public release.
 
-Primary list text in todo and Inbox rows uses `#1f2937`, not near-black `#111827`, so dense lists read softer while retaining contrast.
+Primary list text in todo and Inbox rows uses `#374151`, not near-black `#111827`, so dense lists read softer while retaining contrast.
 
 ## 2026-06-10: Use Lucide for UI Icons
 
