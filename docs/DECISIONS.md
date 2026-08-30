@@ -182,6 +182,8 @@ However, Dynamic Type (iOS) and font scaling (Android accessibility settings) ar
 
 Primary list text in todo and Inbox rows uses `#374151`, not near-black `#111827`, so dense lists read softer while retaining contrast.
 
+Auth form text inputs, password wrappers, and submit buttons use `height: 48`. The auth submit button has no top margin; spacing between the password field, any error text, and the submit button is controlled by the surrounding elements.
+
 ## 2026-06-10: Use Lucide for UI Icons
 
 Decision: use `lucide-react-native` as the app's default icon library.

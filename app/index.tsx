@@ -6181,7 +6181,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   authInput: {
-    height: 56,
+    height: 48,
     backgroundColor: '#eef2ff',
     borderRadius: 8,
     borderWidth: 1,
@@ -6198,18 +6198,18 @@ const styles = StyleSheet.create({
   authFieldError: {
     color: '#ef4444',
     fontSize: 13,
-    marginBottom: 10,
+    marginBottom: 0,
   },
   authPasswordWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 56,
+    height: 48,
     backgroundColor: '#eef2ff',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#c7d2fe',
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 0,
   },
   authPasswordInput: {
     flex: 1,
@@ -6223,12 +6223,12 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
   },
   authSubmitBtn: {
-    height: 56,
+    height: 48,
     backgroundColor: '#6366f1',
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 14,
+    marginTop: 0,
   },
   authSubmitBtnMuted: {
     backgroundColor: '#9ca3af',
