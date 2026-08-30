@@ -49,6 +49,10 @@ Todo pages track whether each personal/team/project scope has loaded once.
 Returning to an already loaded scope keeps the current rows mounted and syncs
 quietly instead of showing a visible loading refresh.
 
+Auth state changes do not clear workspace data unless the signed-in user ID
+changes. Browser tab focus can trigger Supabase token/session events, and those
+must not blank the current page.
+
 ## Security Model
 
 Supabase Row Level Security is the main security boundary.

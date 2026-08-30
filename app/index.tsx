@@ -578,6 +578,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [loadedTodoScopes, setLoadedTodoScopes] = useState<Record<string, true>>({});
   const loadedTodoScopesRef = useRef<Record<string, true>>({});
+  const sessionUserIdRef = useRef<string | null>(null);
   const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [density, setDensity] = useState<Density>('cozy');
@@ -1225,6 +1226,7 @@ export default function HomeScreen() {
     }
 
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      sessionUserIdRef.current = currentSession?.user.id ?? null;
       setSession(currentSession);
       setAuthLoading(false);
     });
@@ -1237,17 +1239,23 @@ export default function HomeScreen() {
         setMessage('');
         setError('');
       }
+      const previousUserId = sessionUserIdRef.current;
+      const nextUserId = currentSession?.user.id ?? null;
+      const userChanged = previousUserId !== nextUserId;
+      sessionUserIdRef.current = nextUserId;
       setSession(currentSession);
-      setOrganizations([]);
-      setTeams([]);
-      setProjects([]);
-      setSelectedTeamId(null);
-      setSelectedProjectId(null);
-      setPhases([]);
-      setMembers([]);
-      setTodos([]);
-      loadedTodoScopesRef.current = {};
-      setLoadedTodoScopes({});
+      if (userChanged) {
+        setOrganizations([]);
+        setTeams([]);
+        setProjects([]);
+        setSelectedTeamId(null);
+        setSelectedProjectId(null);
+        setPhases([]);
+        setMembers([]);
+        setTodos([]);
+        loadedTodoScopesRef.current = {};
+        setLoadedTodoScopes({});
+      }
       setError('');
       setMessage('');
     });
