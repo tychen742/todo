@@ -184,6 +184,10 @@ Primary list text in todo and Inbox rows uses `#374151`, not near-black `#111827
 
 Auth form labels use `marginBottom: 6`. Auth form text inputs, password wrappers, and submit buttons use `height: 48`. The password wrapper keeps `marginBottom: 16`, while the auth submit button has no top margin.
 
+Auth input text uses `14px`, and the password visibility toggle uses `15px`, so placeholder text and `Show`/`Hide` controls stay visually subordinate to the form labels and actions.
+
+The Google auth button uses a `22px` text G mark so the provider logo reads at the same visual weight as the button label.
+
 ## 2026-06-10: Use Lucide for UI Icons
 
 Decision: use `lucide-react-native` as the app's default icon library.

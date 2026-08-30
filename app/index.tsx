@@ -6128,9 +6128,10 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   googleG: {
-    fontSize: 15,
+    fontSize: 22,
     fontWeight: '700',
     color: '#4285F4',
+    lineHeight: 24,
   },
   appleIcon: {
     fontSize: 18,
@@ -6187,7 +6188,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#c7d2fe',
     paddingHorizontal: 16,
-    fontSize: 16,
+    fontSize: 14,
     color: '#111827',
     marginBottom: 16,
   },
@@ -6214,11 +6215,11 @@ const styles = StyleSheet.create({
   authPasswordInput: {
     flex: 1,
     height: '100%',
-    fontSize: 16,
+    fontSize: 14,
     color: '#111827',
   },
   passwordToggleText: {
-    fontSize: 18,
+    fontSize: 15,
     color: '#9ca3af',
     paddingLeft: 8,
   },
