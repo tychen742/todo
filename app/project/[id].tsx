@@ -1128,14 +1128,18 @@ const styles = StyleSheet.create({
   editModalInput: {
     backgroundColor: '#f3f4f6',
     borderRadius: 8,
+    height: 36,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 0,
     fontSize: 15,
     color: '#111827',
     marginBottom: 10,
   },
   editModalNoteInput: {
-    minHeight: 70,
+    height: 36,
+    minHeight: 36,
+    paddingVertical: 0,
+    marginBottom: 0,
     textAlignVertical: 'top',
   },
   editModalActions: {
