@@ -5426,6 +5426,7 @@ export default function HomeScreen() {
           <Pressable style={[styles.calendarCard, styles.editTodoCard]}>
             <Text style={styles.editModalTitle}>Edit Todo</Text>
             <ScrollView
+              style={styles.editTodoScroll}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.editTodoScrollContent}
@@ -5549,21 +5550,6 @@ export default function HomeScreen() {
                 placeholder="e.g. 30m, 2h, 1d"
                 placeholderTextColor="#9ca3af"
                 returnKeyType="done"
-              />
-
-              <View style={styles.pickerSectionDivider}>
-                <View style={styles.pickerSectionLine} />
-                <Text style={styles.pickerSectionLabel}>Start Working</Text>
-                <View style={styles.pickerSectionLine} />
-              </View>
-              <TextInput
-                style={styles.editModalInput}
-                value={editDraftScheduledStartAt}
-                onChangeText={setEditDraftScheduledStartAt}
-                placeholder="YYYY-MM-DDTHH:mm"
-                placeholderTextColor="#9ca3af"
-                autoCapitalize="none"
-                autoCorrect={false}
               />
 
               {!isProject && activeProjects.length > 0 && (
@@ -7433,8 +7419,12 @@ const styles = StyleSheet.create({
   },
   editTodoCard: {
     width: 340,
+    height: '92%',
     maxHeight: '92%',
     padding: 14,
+  },
+  editTodoScroll: {
+    flex: 1,
   },
   editTodoScrollContent: {
     paddingBottom: 2,
