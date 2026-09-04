@@ -1064,9 +1064,9 @@ const styles = StyleSheet.create({
   },
   calendarDay: {
     width: `${100 / 7}%` as unknown as number,
-    height: 28,
-    minHeight: 28,
-    maxHeight: 28,
+    height: 24,
+    minHeight: 24,
+    maxHeight: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 100,

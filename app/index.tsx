@@ -5423,9 +5423,13 @@ export default function HomeScreen() {
         onRequestClose={closeEditModal}
       >
         <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
-          <Pressable style={[styles.calendarCard, { width: 340, maxHeight: '85%' }]}>
+          <Pressable style={[styles.calendarCard, styles.editTodoCard]}>
             <Text style={styles.editModalTitle}>Edit Todo</Text>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.editTodoScrollContent}
+            >
               <TextInput
                 style={styles.editModalInput}
                 value={editDraftText}
@@ -5528,7 +5532,7 @@ export default function HomeScreen() {
                 })}
               </View>
               {editDraftDueDate && (
-                <Pressable onPress={() => setEditDraftDueDate(null)} style={{ alignItems: 'center', paddingVertical: 6 }}>
+                <Pressable onPress={() => setEditDraftDueDate(null)} style={styles.clearDateButton}>
                   <Text style={styles.calendarCancelText}>Clear date</Text>
                 </Pressable>
               )}
@@ -5569,7 +5573,7 @@ export default function HomeScreen() {
                     <Text style={styles.pickerSectionLabel}>Project</Text>
                     <View style={styles.pickerSectionLine} />
                   </View>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.editModalPillRow}>
                     <Pressable
                       onPress={() => setEditDraftProjectId(null)}
                       style={[styles.phasePill, !editDraftProjectId && styles.phasePillActive]}
@@ -5600,7 +5604,7 @@ export default function HomeScreen() {
                     <Text style={styles.pickerSectionLabel}>Assign to</Text>
                     <View style={styles.pickerSectionLine} />
                   </View>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.editModalPillRow}>
                     <Pressable
                       onPress={() => setEditDraftAssignedTo(null)}
                       style={[styles.phasePill, !editDraftAssignedTo && styles.phasePillActive]}
@@ -5635,7 +5639,7 @@ export default function HomeScreen() {
               )}
             </ScrollView>
 
-            <View style={[styles.editModalActions, { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#e5e7eb', paddingTop: 12 }]}>
+            <View style={[styles.editModalActions, styles.editTodoFooter]}>
               <Pressable onPress={() => editTodo && archiveTodo(editTodo.id)}>
                 <Text style={styles.archiveBtnText}>Delete</Text>
               </Pressable>
@@ -7427,11 +7431,19 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+  editTodoCard: {
+    width: 340,
+    maxHeight: '92%',
+    padding: 14,
+  },
+  editTodoScrollContent: {
+    paddingBottom: 2,
+  },
   calendarHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 6,
   },
   calendarNavBtn: {
     padding: 8,
@@ -7449,7 +7461,7 @@ const styles = StyleSheet.create({
   },
   weekdayRow: {
     flexDirection: 'row',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   weekdayText: {
     width: '14.2857%',
@@ -7457,7 +7469,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#9ca3af',
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   calendarGrid: {
     flexDirection: 'row',
@@ -7465,9 +7477,9 @@ const styles = StyleSheet.create({
   },
   calendarDay: {
     width: '14.2857%',
-    height: 28,
-    minHeight: 28,
-    maxHeight: 28,
+    height: 24,
+    minHeight: 24,
+    maxHeight: 24,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
@@ -7516,7 +7528,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   editModalInput: {
     backgroundColor: '#f3f4f6',
@@ -7526,7 +7538,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     fontSize: 15,
     color: '#111827',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   editModalNoteInput: {
     height: 36,
@@ -7540,6 +7552,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 4,
+  },
+  editTodoFooter: {
+    marginTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#e5e7eb',
+    paddingTop: 8,
+  },
+  editModalPillRow: {
+    marginBottom: 4,
+  },
+  clearDateButton: {
+    alignItems: 'center',
+    paddingVertical: 2,
   },
   sortBar: {
     flexDirection: 'row',
@@ -8778,7 +8803,7 @@ const styles = StyleSheet.create({
   pickerSectionDivider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 12,
+    marginVertical: 8,
     gap: 8,
   },
   pickerSectionLine: {
@@ -8968,11 +8993,12 @@ const styles = StyleSheet.create({
   priorityPickerRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   priorityPickerBtn: {
     flex: 1,
-    paddingVertical: 8,
+    height: 34,
+    justifyContent: 'center',
     borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1.5,
