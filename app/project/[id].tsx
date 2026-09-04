@@ -1032,10 +1032,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    height: 30,
+    marginBottom: 0,
   },
   calendarNavBtn: {
-    padding: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   calendarNavText: {
     fontSize: 22,
