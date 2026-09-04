@@ -614,7 +614,7 @@ const ias = StyleSheet.create({
 });
 
 export default function HomeScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [session, setSession] = useState<Session | null>(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -790,7 +790,6 @@ export default function HomeScreen() {
       ? `team:${selectedTeamId}`
       : `personal:${session?.user.id ?? 'anonymous'}`;
   const hasLoadedCurrentTodos = loadedTodoScopes[todoScopeKey] === true;
-  const hasLoadedAnyTodoScope = Object.keys(loadedTodoScopes).length > 0;
 
   function projectAvatarFor(project: Project): { label: string; initials: string; color: string } {
     return {
@@ -3080,7 +3079,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (session && !hasLoadedAnyTodoScope) {
+  if (session && !hasLoadedCurrentTodos) {
     return (
       <View style={styles.root}>
         <Stack.Screen options={{ headerShown: false }} />
@@ -5426,7 +5425,7 @@ export default function HomeScreen() {
           <Pressable style={[styles.calendarCard, styles.editTodoCard]}>
             <Text style={styles.editModalTitle}>Edit Todo</Text>
             <ScrollView
-              style={styles.editTodoScroll}
+              style={[styles.editTodoScroll, { maxHeight: Math.max(320, Math.min(560, height - 240)) }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.editTodoScrollContent}
@@ -7405,12 +7404,11 @@ const styles = StyleSheet.create({
   },
   editTodoCard: {
     width: 340,
-    height: '92%',
-    maxHeight: '92%',
+    maxWidth: '92%',
     padding: 14,
   },
   editTodoScroll: {
-    flex: 1,
+    flexGrow: 0,
   },
   editTodoScrollContent: {
     paddingBottom: 2,
