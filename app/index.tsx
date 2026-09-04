@@ -5538,20 +5538,6 @@ export default function HomeScreen() {
                 </Pressable>
               )}
 
-              <View style={styles.pickerSectionDivider}>
-                <View style={styles.pickerSectionLine} />
-                <Text style={styles.pickerSectionLabel}>Estimate</Text>
-                <View style={styles.pickerSectionLine} />
-              </View>
-              <TextInput
-                style={styles.editModalInput}
-                value={editDraftEstimate}
-                onChangeText={setEditDraftEstimate}
-                placeholder="e.g. 30m, 2h, 1d"
-                placeholderTextColor="#9ca3af"
-                returnKeyType="done"
-              />
-
               {!isProject && activeProjects.length > 0 && (
                 <>
                   <View style={styles.pickerSectionDivider}>
