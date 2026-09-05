@@ -143,7 +143,7 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 
 - Top-level workspace tab band: `paddingTop: 2`, `paddingBottom: 2`, `paddingHorizontal: 12`
 - Top-level workspace tab buttons: `height: 30`, `paddingVertical: 2`, `paddingHorizontal: 2`
-- Add todo band: `paddingVertical: 12`, `paddingHorizontal: 12`; input and Add button use `height: 36`
+- Add todo band: `paddingTop: 12`, `paddingBottom: 0`, `paddingHorizontal: 12`; input and Add button use `height: 36`
 - Header band separators keep their hairline border width but use a transparent border color so the header spacing stays stable without visible divider lines.
 - The title bar, workspace tab band, add todo band, and todo board share a centered `960px` max width on web-sized layouts so the task text column does not create a large empty center gap on ultrawide screens.
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
