@@ -4576,6 +4576,13 @@ export default function HomeScreen() {
 
           <View style={[styles.todoBoard, showInboxSidePanel && styles.todoBoardWithAssigned]}>
             <View style={styles.todoListPane}>
+              {isPersonal && assignedToMe.length > 0 && !showInboxSidePanel && (
+                <View style={styles.assignedToMeInlinePanel}>
+                  <Text style={[styles.assignedToMePanelTitle, { paddingVertical: rowPV }]}>INBOX ({assignedToMe.length})</Text>
+                  {assignedToMe.map(renderAssignedToMeTodo)}
+                </View>
+              )}
+
               <View style={styles.activeTasksBox}>
                 <View style={[styles.sortBar, { paddingVertical: rowPV }]}>
                   {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
@@ -4640,16 +4647,6 @@ export default function HomeScreen() {
                   }
                   ListFooterComponent={
                     <>
-                      {isPersonal && assignedToMe.length > 0 && !showInboxSidePanel && (
-                        <>
-                          <View style={styles.sectionDivider}>
-                            <View style={styles.sectionDividerLine} />
-                            <Text style={styles.sectionLabel}>Inbox</Text>
-                            <View style={styles.sectionDividerLine} />
-                          </View>
-                          {assignedToMe.map(renderAssignedToMeTodo)}
-                        </>
-                      )}
                       {archivedTodos.length > 0 && (
                         <>
                           <Pressable
@@ -6215,6 +6212,14 @@ const styles = StyleSheet.create({
   assignedToMePanelList: {
     maxHeight: incomingRowHeight * defaultVisibleTaskRows,
     flexGrow: 0,
+  },
+  assignedToMeInlinePanel: {
+    maxHeight: incomingBoxMaxHeight,
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    overflow: 'hidden',
   },
   inboxView: {
     flex: 1,
