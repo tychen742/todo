@@ -144,6 +144,7 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 - Top-level workspace tab band: `paddingTop: 2`, `paddingBottom: 2`, `paddingHorizontal: 12`
 - Top-level workspace tab buttons: `height: 30`, `paddingVertical: 2`, `paddingHorizontal: 2`
 - Add todo band: `paddingVertical: 12`, `paddingHorizontal: 12`; input and Add button use `height: 36`
+- The add todo band and todo board share a `1600px` max width on web-sized layouts so the task text column does not create a large empty center gap on ultrawide screens.
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
 - The active task pane is capped to the default visible active rows; the completed pane grows into the remaining board height when completed tasks exist.
 - Inbox renders as a right-side panel on wide web screens. Below that breakpoint, Inbox renders as a full-width panel above the active task pane, not as a footer after tasks.
