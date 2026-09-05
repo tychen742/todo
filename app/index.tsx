@@ -5494,11 +5494,9 @@ export default function HomeScreen() {
               <View style={styles.editTodoSection}>
                 <View style={styles.editTodoSectionHeader}>
                   <Text style={styles.editTodoSectionLabel}>Due date</Text>
-                  {editDraftDueDate && (
-                    <Pressable onPress={() => setEditDraftDueDate(null)} style={styles.clearDateInlineButton}>
-                      <Text style={styles.calendarCancelText}>Clear date</Text>
-                    </Pressable>
-                  )}
+                  <Pressable onPress={() => setEditDraftDueDate(null)} style={styles.clearDateInlineButton}>
+                    <Text style={styles.calendarCancelText}>Clear Date</Text>
+                  </Pressable>
                 </View>
                 <View style={styles.editTodoCalendarPanel}>
                   <View style={styles.calendarHeader}>
