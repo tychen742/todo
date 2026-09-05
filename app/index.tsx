@@ -6700,7 +6700,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 0,
     borderRightWidth: 0,
     borderLeftColor: '#6366f1',
-    borderBottomColor: '#6366f1',
+    borderBottomColor: 'transparent',
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
     borderBottomLeftRadius: 0,
