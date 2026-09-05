@@ -152,14 +152,14 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 - Inbox renders as a right-side panel on wide web screens. Below that breakpoint, Inbox renders as a full-width panel above the active task pane, not as a footer after tasks.
 - Deleted is a tab alongside Completed in the Completed panel. It must not appear inside the active task pane footer.
 - Pane headers (TASK, Completed, INBOX): `height: 24`, `paddingRight: 2`
-- All row items (todo rows, completed rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
+- All row items (todo rows, completed rows, deleted rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
 - Inbox rows must use the same natural row height as Task rows. Both render row content plus a separate `1px` separator view, rather than folding the separator into row padding or border height.
 - Fixed-height controls inside a row must be no taller than 20px so they do not force rows above the shared measured row height.
 - Row left edge: determined by column structure (drag handle + checkbox), not by a padding value
 - Modals and calendar cards: `padding: 16`
 - The Edit Todo modal must always show assignment controls. Personal tasks use `None` plus the signed-in user when no team/project roster is available.
 
-**Height consistency rule:** every row in every pane — active tasks, completed, inbox — must use `paddingVertical: 2`. Using any other vertical padding on a row is a bug.
+**Height consistency rule:** every row in every pane — active tasks, completed, deleted, inbox — must use `paddingVertical: 2`. Using any other vertical padding on a row is a bug.
 
 Reason: inconsistent vertical padding is the primary cause of rows feeling different heights across panes. A single micro value (2px) applied uniformly makes all rows visually equal regardless of which pane they appear in.
 

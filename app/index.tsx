@@ -8993,8 +8993,9 @@ const styles = StyleSheet.create({
   archivedRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 2,
+    paddingLeft: 62,
+    paddingRight: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#f3f4f6',
     gap: 8,
@@ -9007,7 +9008,7 @@ const styles = StyleSheet.create({
   },
   unarchiveBtn: {
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 1,
     borderRadius: 6,
     backgroundColor: '#f3f4f6',
   },
