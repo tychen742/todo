@@ -110,7 +110,7 @@ type Density = 'compact' | 'cozy' | 'roomy';
 const densityPV: Record<Density, number> = { compact: 2, cozy: 2, roomy: 2 };
 const densityRowH: Record<Density, number> = { compact: 56, cozy: 70, roomy: 88 };
 const incomingRowHeight = 106;
-const taskHeaderHeight = 42;
+const taskHeaderHeight = 24;
 const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
 const incomingBoxMaxHeight = taskHeaderHeight + incomingRowHeight * defaultVisibleTaskRows;
 const workspaceContentMaxWidth = 960;
@@ -3619,7 +3619,7 @@ export default function HomeScreen() {
       {inboxViewOpen && (
         <ScrollView style={styles.inboxView} contentContainerStyle={styles.inboxViewContent}>
           <View style={styles.inboxViewPanel}>
-            <Text style={[styles.assignedToMePanelTitle, { paddingVertical: rowPV }]}>INBOX ({assignedToMe.length})</Text>
+            <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
             {assignedToMe.length === 0 ? (
               <Text style={styles.inboxViewEmpty}>No assigned tasks right now.</Text>
             ) : (
@@ -4581,13 +4581,13 @@ export default function HomeScreen() {
             <View style={styles.todoListPane}>
               {isPersonal && assignedToMe.length > 0 && !showInboxSidePanel && (
                 <View style={styles.assignedToMeInlinePanel}>
-                  <Text style={[styles.assignedToMePanelTitle, { paddingVertical: rowPV }]}>INBOX ({assignedToMe.length})</Text>
+                  <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
                   {assignedToMe.map(renderAssignedToMeTodo)}
                 </View>
               )}
 
               <View style={styles.activeTasksBox}>
-                <View style={[styles.sortBar, { paddingVertical: rowPV }]}>
+                <View style={styles.sortBar}>
                   {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
                   <View style={styles.sortCheckboxSpacer} />
                   <Pressable onPress={() => toggleSort('text')} style={[styles.sortColTask, styles.sortColInner]}>
@@ -4653,7 +4653,7 @@ export default function HomeScreen() {
 
               {(done.length > 0 || archivedTodos.length > 0) && (
                 <View style={styles.completedBox}>
-                  <Text style={[styles.completedBoxHeader, { paddingVertical: rowPV }]}>Completed ({done.length})</Text>
+                  <Text style={styles.completedBoxHeader}>Completed ({done.length})</Text>
                   <ScrollView style={styles.completedBoxScroll} scrollEnabled={completedPanelRowCount * rowH > rowH * 3}>
                     {done.map((todo) => {
                       const assigner = getAssignerInfo(todo);
@@ -4713,7 +4713,7 @@ export default function HomeScreen() {
 
             {showInboxSidePanel && (
               <View style={styles.assignedToMePanel}>
-                <Text style={[styles.assignedToMePanelTitle, { paddingVertical: rowPV }]}>INBOX ({assignedToMe.length})</Text>
+                <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
                 <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
                   {assignedToMe.map(renderAssignedToMeTodo)}
                 </ScrollView>
@@ -6169,7 +6169,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   completedBoxHeader: {
-    paddingVertical: 7,
+    height: taskHeaderHeight,
     paddingLeft: 62,
     paddingRight: 16,
     borderBottomWidth: 1,
@@ -6179,6 +6179,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#9ca3af',
     letterSpacing: 0.3,
+    lineHeight: taskHeaderHeight - 1,
   },
   completedPillText: {
     fontSize: 11,
@@ -6201,8 +6202,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   assignedToMePanelTitle: {
+    height: taskHeaderHeight,
     paddingHorizontal: 16,
-    paddingVertical: 7,
     borderBottomWidth: 1,
     borderBottomColor: '#d1d5db',
     backgroundColor: '#f3f4f6',
@@ -6210,6 +6211,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.3,
+    lineHeight: taskHeaderHeight - 1,
   },
   assignedToMePanelList: {
     maxHeight: incomingRowHeight * defaultVisibleTaskRows,
@@ -7670,8 +7672,8 @@ const styles = StyleSheet.create({
   sortBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: taskHeaderHeight,
     paddingRight: 16,
-    paddingVertical: 7,
     borderBottomWidth: 1,
     borderBottomColor: '#d1d5db',
     backgroundColor: '#f3f4f6',
