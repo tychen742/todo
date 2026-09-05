@@ -113,7 +113,7 @@ const incomingRowHeight = 106;
 const taskHeaderHeight = 42;
 const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
 const incomingBoxMaxHeight = taskHeaderHeight + incomingRowHeight * defaultVisibleTaskRows;
-const workspaceContentMaxWidth = 1200;
+const workspaceContentMaxWidth = 960;
 const webAppUrl = 'https://todo-eight-gamma.vercel.app';
 const oauthReturnStorageKey = 'todo:oauth-return-to-production';
 
