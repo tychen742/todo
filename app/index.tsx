@@ -793,6 +793,16 @@ export default function HomeScreen() {
 
   const isProject = selectedProjectId !== null;
   const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
+  const workspaceTabActive = isPersonal && !teamsViewOpen;
+  const projectsTabActive = (isProject || projectsViewOpen) && !teamsViewOpen;
+  const inboxTabActive = inboxViewOpen;
+  const calendarTabActive = calendarViewOpen;
+  const resourcesTabActive = resourcesViewOpen;
+  const dashboardTabActive = dashboardViewOpen;
+  const peopleTabActive = teamsViewOpen;
+  const renderWorkspaceTabDivider = (active: boolean, nextActive: boolean, isLast = false) => (
+    !active && !nextActive && !isLast ? <View pointerEvents="none" style={styles.workspaceTabDivider} /> : null
+  );
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal && assignedToMe.length > 0;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
@@ -3332,11 +3342,12 @@ export default function HomeScreen() {
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
             }}
-            style={[styles.workspaceTab, styles.workspaceTabFirst, isPersonal && !teamsViewOpen && styles.workspaceTabActive]}
+            style={[styles.workspaceTab, styles.workspaceTabFirst, workspaceTabActive && styles.workspaceTabActive]}
           >
-            <Text style={[styles.workspaceTabText, isPersonal && !teamsViewOpen && styles.workspaceTabTextActive]}>
+            <Text style={[styles.workspaceTabText, workspaceTabActive && styles.workspaceTabTextActive]}>
               Workspace
             </Text>
+            {renderWorkspaceTabDivider(workspaceTabActive, projectsTabActive)}
           </Pressable>
 
           <Pressable
@@ -3351,11 +3362,12 @@ export default function HomeScreen() {
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
             }}
-            style={[styles.workspaceTab, styles.workspaceTabJoined, (isProject || projectsViewOpen) && !teamsViewOpen && styles.workspaceTabActive]}
+            style={[styles.workspaceTab, styles.workspaceTabJoined, projectsTabActive && styles.workspaceTabActive]}
           >
-            <Text style={[styles.workspaceTabText, (isProject || projectsViewOpen) && !teamsViewOpen && styles.workspaceTabTextActive]}>
+            <Text style={[styles.workspaceTabText, projectsTabActive && styles.workspaceTabTextActive]}>
               Projects
             </Text>
+            {renderWorkspaceTabDivider(projectsTabActive, inboxTabActive)}
           </Pressable>
 
           <Pressable
@@ -3369,11 +3381,12 @@ export default function HomeScreen() {
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
             }}
-            style={[styles.workspaceTab, styles.workspaceTabJoined, inboxViewOpen && styles.workspaceTabActive]}
+            style={[styles.workspaceTab, styles.workspaceTabJoined, inboxTabActive && styles.workspaceTabActive]}
           >
-            <Text style={[styles.workspaceTabText, inboxViewOpen && styles.workspaceTabTextActive]}>
+            <Text style={[styles.workspaceTabText, inboxTabActive && styles.workspaceTabTextActive]}>
               Inbox
             </Text>
+            {renderWorkspaceTabDivider(inboxTabActive, calendarTabActive)}
           </Pressable>
 
           <Pressable
@@ -3387,11 +3400,12 @@ export default function HomeScreen() {
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
             }}
-            style={[styles.workspaceTab, styles.workspaceTabJoined, calendarViewOpen && styles.workspaceTabActive]}
+            style={[styles.workspaceTab, styles.workspaceTabJoined, calendarTabActive && styles.workspaceTabActive]}
           >
-            <Text style={[styles.workspaceTabText, calendarViewOpen && styles.workspaceTabTextActive]}>
+            <Text style={[styles.workspaceTabText, calendarTabActive && styles.workspaceTabTextActive]}>
               Calendar
             </Text>
+            {renderWorkspaceTabDivider(calendarTabActive, resourcesTabActive)}
           </Pressable>
 
           <Pressable
@@ -3405,11 +3419,12 @@ export default function HomeScreen() {
               setResourcesViewOpen(true);
               setDashboardViewOpen(false);
             }}
-            style={[styles.workspaceTab, styles.workspaceTabJoined, resourcesViewOpen && styles.workspaceTabActive]}
+            style={[styles.workspaceTab, styles.workspaceTabJoined, resourcesTabActive && styles.workspaceTabActive]}
           >
-            <Text style={[styles.workspaceTabText, resourcesViewOpen && styles.workspaceTabTextActive]}>
+            <Text style={[styles.workspaceTabText, resourcesTabActive && styles.workspaceTabTextActive]}>
               Resources
             </Text>
+            {renderWorkspaceTabDivider(resourcesTabActive, dashboardTabActive)}
           </Pressable>
 
           <Pressable
@@ -3423,11 +3438,12 @@ export default function HomeScreen() {
               setResourcesViewOpen(false);
               setDashboardViewOpen(true);
             }}
-            style={[styles.workspaceTab, styles.workspaceTabJoined, dashboardViewOpen && styles.workspaceTabActive]}
+            style={[styles.workspaceTab, styles.workspaceTabJoined, dashboardTabActive && styles.workspaceTabActive]}
           >
-            <Text style={[styles.workspaceTabText, dashboardViewOpen && styles.workspaceTabTextActive]}>
+            <Text style={[styles.workspaceTabText, dashboardTabActive && styles.workspaceTabTextActive]}>
               Dashboard
             </Text>
+            {renderWorkspaceTabDivider(dashboardTabActive, peopleTabActive)}
           </Pressable>
 
           <Pressable
@@ -3439,9 +3455,10 @@ export default function HomeScreen() {
               setDashboardViewOpen(false);
               setTeamsViewOpen((v) => !v);
             }}
-            style={[styles.workspaceTab, styles.workspaceTabJoined, styles.workspaceTabLast, teamsViewOpen && styles.workspaceTabActive]}
+            style={[styles.workspaceTab, styles.workspaceTabJoined, styles.workspaceTabLast, peopleTabActive && styles.workspaceTabActive]}
           >
-            <Text style={[styles.workspaceTabText, teamsViewOpen && styles.workspaceTabTextActive]}>People</Text>
+            <Text style={[styles.workspaceTabText, peopleTabActive && styles.workspaceTabTextActive]}>People</Text>
+            {renderWorkspaceTabDivider(peopleTabActive, false, true)}
           </Pressable>
 
         </ScrollView>
@@ -6659,35 +6676,40 @@ const styles = StyleSheet.create({
   workspaceTabs: {
     alignItems: 'center',
     paddingBottom: 0,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
   },
   workspaceTab: {
     height: 30,
     maxWidth: 180,
-    backgroundColor: '#fff',
-    borderColor: '#d1d5db',
-    borderWidth: 1,
-    borderRadius: 0,
+    backgroundColor: 'transparent',
     paddingHorizontal: 6,
     paddingVertical: 2,
     justifyContent: 'center',
     position: 'relative',
     zIndex: 1,
   },
-  workspaceTabFirst: {
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
-  },
-  workspaceTabJoined: {
-    marginLeft: -1,
-  },
-  workspaceTabLast: {
-    borderTopRightRadius: 8,
-    borderBottomRightRadius: 8,
-  },
+  workspaceTabFirst: {},
+  workspaceTabJoined: {},
+  workspaceTabLast: {},
   workspaceTabActive: {
     backgroundColor: '#eef2ff',
+    borderWidth: 1,
     borderColor: '#6366f1',
+    borderRadius: 10,
+    margin: -1,
     zIndex: 2,
+  },
+  workspaceTabDivider: {
+    position: 'absolute',
+    right: 0,
+    top: 6,
+    width: 1,
+    height: 18,
+    backgroundColor: '#d1d5db',
   },
   workspaceTabText: {
     color: '#374151',
