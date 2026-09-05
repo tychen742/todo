@@ -6697,10 +6697,15 @@ const styles = StyleSheet.create({
   workspaceTabLast: {},
   workspaceTabActive: {
     backgroundColor: '#eef2ff',
-    borderWidth: 1,
-    borderColor: '#6366f1',
+    borderLeftWidth: 1,
+    borderBottomWidth: 1,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+    borderLeftColor: '#6366f1',
+    borderBottomColor: '#6366f1',
     borderRadius: 10,
-    margin: -1,
+    marginLeft: -1,
+    marginBottom: -1,
     zIndex: 2,
   },
   workspaceTabDivider: {
