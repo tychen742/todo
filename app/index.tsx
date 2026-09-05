@@ -114,6 +114,9 @@ const taskHeaderHeight = 24;
 const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
 const incomingBoxMaxHeight = taskHeaderHeight + incomingRowHeight * defaultVisibleTaskRows;
 const workspaceContentMaxWidth = 960;
+const workspaceInboxColumnWidth = 340;
+const workspacePaneGap = 12;
+const workspaceBoardPadding = 12;
 const webAppUrl = 'https://todo-eight-gamma.vercel.app';
 const oauthReturnStorageKey = 'todo:oauth-return-to-production';
 
@@ -4536,7 +4539,7 @@ export default function HomeScreen() {
         )
       ) : (
         <>
-          <View style={styles.inputBar}>
+          <View style={[styles.inputBar, showInboxSidePanel && styles.inputBarWithInboxSidePanel]}>
             <View style={styles.todoInputWrap}>
               <TextInput
                 style={styles.input}
@@ -6192,7 +6195,7 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   assignedToMePanel: {
-    width: 340,
+    width: workspaceInboxColumnWidth,
     maxWidth: '36%',
     maxHeight: incomingBoxMaxHeight,
     flexShrink: 0,
@@ -7365,6 +7368,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'transparent',
     backgroundColor: '#fff',
+  },
+  inputBarWithInboxSidePanel: {
+    paddingRight: workspaceBoardPadding + workspacePaneGap + workspaceInboxColumnWidth,
   },
   todoInputWrap: {
     flex: 1,
