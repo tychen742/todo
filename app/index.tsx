@@ -663,6 +663,7 @@ export default function HomeScreen() {
   const [aboutVisible, setAboutVisible] = useState(false);
   const [projectsViewOpen, setProjectsViewOpen] = useState(false);
   const [teamsViewOpen, setTeamsViewOpen] = useState(false);
+  const [inboxViewOpen, setInboxViewOpen] = useState(false);
   const [calendarViewOpen, setCalendarViewOpen] = useState(false);
   const [resourcesViewOpen, setResourcesViewOpen] = useState(false);
   const [dashboardViewOpen, setDashboardViewOpen] = useState(false);
@@ -780,7 +781,7 @@ export default function HomeScreen() {
   }, [session]);
 
   const isProject = selectedProjectId !== null;
-  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
+  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal && assignedToMe.length > 0;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
@@ -3314,6 +3315,7 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
+              setInboxViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
@@ -3332,6 +3334,7 @@ export default function HomeScreen() {
               setSelectedProjectId(rememberedProject?.id ?? null);
               setProjectsViewOpen(!rememberedProject);
               setTeamsViewOpen(false);
+              setInboxViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
@@ -3349,6 +3352,25 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
+              setInboxViewOpen(true);
+              setCalendarViewOpen(false);
+              setResourcesViewOpen(false);
+              setDashboardViewOpen(false);
+            }}
+            style={[styles.workspaceTab, inboxViewOpen && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabText, inboxViewOpen && styles.workspaceTabTextActive]}>
+              Inbox
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              setSelectedTeamId(null);
+              setSelectedProjectId(null);
+              setProjectsViewOpen(false);
+              setTeamsViewOpen(false);
+              setInboxViewOpen(false);
               setCalendarViewOpen(true);
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
@@ -3366,6 +3388,7 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
+              setInboxViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(true);
               setDashboardViewOpen(false);
@@ -3383,6 +3406,7 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
+              setInboxViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
               setDashboardViewOpen(true);
@@ -3397,7 +3421,10 @@ export default function HomeScreen() {
           <Pressable
             onPress={() => {
               setProjectsViewOpen(false);
+              setInboxViewOpen(false);
               setCalendarViewOpen(false);
+              setResourcesViewOpen(false);
+              setDashboardViewOpen(false);
               setTeamsViewOpen((v) => !v);
             }}
             style={[styles.workspaceTab, teamsViewOpen && styles.workspaceTabActive]}
@@ -3448,6 +3475,7 @@ export default function HomeScreen() {
                           setSelectedTeamId(team.id);
                           setSelectedProjectId(null);
                           setTeamsViewOpen(false);
+                          setInboxViewOpen(false);
                           setCalendarViewOpen(false);
                         }}
                         style={[styles.organizationTeamTab, selectedTeamId === team.id && styles.organizationTeamTabActive]}
@@ -3499,6 +3527,7 @@ export default function HomeScreen() {
                       setSelectedTeamId(team.id);
                       setSelectedProjectId(null);
                       setTeamsViewOpen(false);
+                      setInboxViewOpen(false);
                       setCalendarViewOpen(false);
                     }}
                     style={[styles.organizationTeamTab, selectedTeamId === team.id && styles.organizationTeamTabActive]}
@@ -3544,6 +3573,7 @@ export default function HomeScreen() {
                     setSelectedTeamId(null);
                     setProjectsViewOpen(false);
                     setTeamsViewOpen(false);
+                    setInboxViewOpen(false);
                     setCalendarViewOpen(false);
                   }}
                   accessibilityRole="button"
@@ -3572,7 +3602,7 @@ export default function HomeScreen() {
             );
           })}
           <Pressable
-            onPress={() => { setTeamsViewOpen(false); setCalendarViewOpen(false); openCreateTarget('project'); }}
+            onPress={() => { setTeamsViewOpen(false); setInboxViewOpen(false); setCalendarViewOpen(false); openCreateTarget('project'); }}
             style={styles.projectCardNew}
             accessibilityRole="button"
             accessibilityLabel="Create project"
@@ -3580,6 +3610,19 @@ export default function HomeScreen() {
             <Text style={styles.projectCardNewIcon}>+</Text>
             <Text style={styles.projectCardNewText}>New Project</Text>
           </Pressable>
+        </ScrollView>
+      )}
+
+      {inboxViewOpen && (
+        <ScrollView style={styles.inboxView} contentContainerStyle={styles.inboxViewContent}>
+          <View style={styles.inboxViewPanel}>
+            <Text style={[styles.assignedToMePanelTitle, { paddingVertical: rowPV }]}>INBOX ({assignedToMe.length})</Text>
+            {assignedToMe.length === 0 ? (
+              <Text style={styles.inboxViewEmpty}>No assigned tasks right now.</Text>
+            ) : (
+              assignedToMe.map(renderAssignedToMeTodo)
+            )}
+          </View>
         </ScrollView>
       )}
 
@@ -4047,7 +4090,7 @@ export default function HomeScreen() {
         );
       })()}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && selectedTeam && (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && selectedTeam && (
         <View style={styles.memberPanel}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={styles.panelTitle}>{selectedTeam.name}</Text>
@@ -4085,7 +4128,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && nextMilestone && (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && nextMilestone && (
         <View style={[styles.milestoneBanner, nextMilestone.daysLeft < 0 && styles.milestoneBannerOverdue]}>
           <Text style={styles.milestoneBannerText}>
             ◆ {nextMilestone.text}
@@ -4098,7 +4141,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectSwitchBar}>
           <ScrollView
             horizontal
@@ -4151,7 +4194,7 @@ export default function HomeScreen() {
       )}
 
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectViewModeBar}>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             {(['plan', 'kanban'] as ProjectViewMode[]).map((mode) => (
@@ -4223,7 +4266,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && (isProject ? (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && (isProject ? (
         projectViewMode === 'plan' ? (
         <KanbanDragProvider onMove={(todoId, targetPhaseId, _targetWorkflowStatus, overTodoId) => movePlanTodo(todoId, targetPhaseId, overTodoId)}>
           {/* Backlog strip — one-line capture bar; tasks land here by default */}
@@ -6172,6 +6215,27 @@ const styles = StyleSheet.create({
   assignedToMePanelList: {
     maxHeight: incomingRowHeight * defaultVisibleTaskRows,
     flexGrow: 0,
+  },
+  inboxView: {
+    flex: 1,
+  },
+  inboxViewContent: {
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 36,
+  },
+  inboxViewPanel: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+  },
+  inboxViewEmpty: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   authScroll: {
     flexGrow: 1,
