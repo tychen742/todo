@@ -719,7 +719,7 @@ export default function HomeScreen() {
   const loadedTodoScopesRef = useRef<Record<string, true>>({});
   const sessionUserIdRef = useRef<string | null>(null);
   const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
-  const [archivedExpanded, setArchivedExpanded] = useState(false);
+  const [completedPaneTab, setCompletedPaneTab] = useState<'completed' | 'deleted'>('completed');
   const [density, setDensity] = useState<Density>('cozy');
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [renamingTeam, setRenamingTeam] = useState<Team | null>(null);
@@ -837,8 +837,7 @@ export default function HomeScreen() {
   }, [todos, sortField, sortDir]);
 
   const done = useMemo(() => todos.filter((t) => t.done), [todos]);
-  const completedPanelRowCount =
-    done.length + (archivedTodos.length > 0 ? 1 : 0) + (archivedExpanded ? archivedTodos.length : 0);
+  const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
   const memberById = useMemo(
     () => new Map(members.map((member) => [member.user_id, member])),
     [members]
@@ -4656,9 +4655,26 @@ export default function HomeScreen() {
 
               {(done.length > 0 || archivedTodos.length > 0) && (
                 <View style={styles.completedBox}>
-                  <Text style={styles.completedBoxHeader}>Completed ({done.length})</Text>
+                  <View style={styles.completedBoxHeader}>
+                    <Pressable
+                      onPress={() => setCompletedPaneTab('completed')}
+                      style={[styles.completedPaneTab, completedPaneTab === 'completed' && styles.completedPaneTabActive]}
+                    >
+                      <Text style={[styles.completedPaneTabText, completedPaneTab === 'completed' && styles.completedPaneTabTextActive]}>
+                        Completed ({done.length})
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setCompletedPaneTab('deleted')}
+                      style={[styles.completedPaneTab, completedPaneTab === 'deleted' && styles.completedPaneTabActive]}
+                    >
+                      <Text style={[styles.completedPaneTabText, completedPaneTab === 'deleted' && styles.completedPaneTabTextActive]}>
+                        Deleted ({archivedTodos.length})
+                      </Text>
+                    </Pressable>
+                  </View>
                   <ScrollView style={styles.completedBoxScroll} scrollEnabled={completedPanelRowCount * rowH > rowH * 3}>
-                    {done.map((todo) => {
+                    {completedPaneTab === 'completed' && done.map((todo) => {
                       const assigner = getAssignerInfo(todo);
                       return (
                         <TodoItem
@@ -4686,28 +4702,14 @@ export default function HomeScreen() {
                         />
                       );
                     })}
-                    {archivedTodos.length > 0 && (
-                      <>
-                        <Pressable
-                          onPress={() => setArchivedExpanded((v) => !v)}
-                          style={styles.sectionDivider}
-                        >
-                          <View style={styles.sectionDividerLine} />
-                          <Text style={styles.sectionLabel}>
-                            Deleted ({archivedTodos.length}) {archivedExpanded ? '↑' : '↓'}
-                          </Text>
-                          <View style={styles.sectionDividerLine} />
+                    {completedPaneTab === 'deleted' && archivedTodos.map((todo) => (
+                      <View key={todo.id} style={styles.archivedRow}>
+                        <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
+                        <Pressable onPress={() => unarchiveTodo(todo.id)} style={styles.unarchiveBtn}>
+                          <Text style={styles.unarchiveBtnText}>Restore</Text>
                         </Pressable>
-                        {archivedExpanded && archivedTodos.map((todo) => (
-                          <View key={todo.id} style={styles.archivedRow}>
-                            <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
-                            <Pressable onPress={() => unarchiveTodo(todo.id)} style={styles.unarchiveBtn}>
-                              <Text style={styles.unarchiveBtnText}>Restore</Text>
-                            </Pressable>
-                          </View>
-                        ))}
-                      </>
-                    )}
+                      </View>
+                    ))}
                   </ScrollView>
                 </View>
               )}
@@ -6172,17 +6174,33 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   completedBoxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     height: taskHeaderHeight,
-    paddingLeft: 62,
-    paddingRight: 16,
+    paddingHorizontal: 8,
+    gap: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#d1d5db',
     backgroundColor: '#f3f4f6',
+  },
+  completedPaneTab: {
+    height: 20,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+  },
+  completedPaneTabActive: {
+    backgroundColor: '#fff',
+  },
+  completedPaneTabText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#9ca3af',
     letterSpacing: 0.3,
-    lineHeight: taskHeaderHeight - 1,
+  },
+  completedPaneTabTextActive: {
+    color: '#6b7280',
   },
   completedPillText: {
     fontSize: 11,
