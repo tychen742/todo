@@ -793,6 +793,12 @@ export default function HomeScreen() {
 
   const isProject = selectedProjectId !== null;
   const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
+  const renderWorkspaceTabCurves = (active: boolean) => active ? (
+    <>
+      <View pointerEvents="none" style={[styles.workspaceTabCurve, styles.workspaceTabCurveLeft]} />
+      <View pointerEvents="none" style={[styles.workspaceTabCurve, styles.workspaceTabCurveRight]} />
+    </>
+  ) : null;
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal && assignedToMe.length > 0;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
@@ -3334,6 +3340,7 @@ export default function HomeScreen() {
             }}
             style={[styles.workspaceTab, isPersonal && !teamsViewOpen && styles.workspaceTabActive]}
           >
+            {renderWorkspaceTabCurves(isPersonal && !teamsViewOpen)}
             <Text style={[styles.workspaceTabText, isPersonal && !teamsViewOpen && styles.workspaceTabTextActive]}>
               Workspace
             </Text>
@@ -3353,6 +3360,7 @@ export default function HomeScreen() {
             }}
             style={[styles.workspaceTab, (isProject || projectsViewOpen) && !teamsViewOpen && styles.workspaceTabActive]}
           >
+            {renderWorkspaceTabCurves((isProject || projectsViewOpen) && !teamsViewOpen)}
             <Text style={[styles.workspaceTabText, (isProject || projectsViewOpen) && !teamsViewOpen && styles.workspaceTabTextActive]}>
               Projects
             </Text>
@@ -3371,6 +3379,7 @@ export default function HomeScreen() {
             }}
             style={[styles.workspaceTab, inboxViewOpen && styles.workspaceTabActive]}
           >
+            {renderWorkspaceTabCurves(inboxViewOpen)}
             <Text style={[styles.workspaceTabText, inboxViewOpen && styles.workspaceTabTextActive]}>
               Inbox
             </Text>
@@ -3389,6 +3398,7 @@ export default function HomeScreen() {
             }}
             style={[styles.workspaceTab, calendarViewOpen && styles.workspaceTabActive]}
           >
+            {renderWorkspaceTabCurves(calendarViewOpen)}
             <Text style={[styles.workspaceTabText, calendarViewOpen && styles.workspaceTabTextActive]}>
               Calendar
             </Text>
@@ -3407,6 +3417,7 @@ export default function HomeScreen() {
             }}
             style={[styles.workspaceTab, resourcesViewOpen && styles.workspaceTabActive]}
           >
+            {renderWorkspaceTabCurves(resourcesViewOpen)}
             <Text style={[styles.workspaceTabText, resourcesViewOpen && styles.workspaceTabTextActive]}>
               Resources
             </Text>
@@ -3425,6 +3436,7 @@ export default function HomeScreen() {
             }}
             style={[styles.workspaceTab, dashboardViewOpen && styles.workspaceTabActive]}
           >
+            {renderWorkspaceTabCurves(dashboardViewOpen)}
             <Text style={[styles.workspaceTabText, dashboardViewOpen && styles.workspaceTabTextActive]}>
               Dashboard
             </Text>
@@ -3441,6 +3453,7 @@ export default function HomeScreen() {
             }}
             style={[styles.workspaceTab, teamsViewOpen && styles.workspaceTabActive]}
           >
+            {renderWorkspaceTabCurves(teamsViewOpen)}
             <Text style={[styles.workspaceTabText, teamsViewOpen && styles.workspaceTabTextActive]}>People</Text>
           </Pressable>
 
@@ -6639,13 +6652,13 @@ const styles = StyleSheet.create({
   },
   teamPanel: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     width: '100%',
     maxWidth: workspaceContentMaxWidth,
     alignSelf: 'center',
     paddingHorizontal: 12,
     paddingTop: 2,
-    paddingBottom: 2,
+    paddingBottom: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'transparent',
   },
@@ -6657,27 +6670,59 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   workspaceTabs: {
-    paddingBottom: 2,
+    alignItems: 'flex-end',
+    paddingBottom: 0,
   },
   workspaceTab: {
     height: 30,
     maxWidth: 180,
+    backgroundColor: '#f9fafb',
     borderColor: '#d1d5db',
     borderWidth: 1,
-    borderRadius: 8,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     paddingHorizontal: 2,
     paddingVertical: 2,
     marginRight: 8,
     justifyContent: 'center',
+    position: 'relative',
+    overflow: 'visible',
+    zIndex: 1,
   },
   workspaceTabActive: {
-    backgroundColor: '#eef2ff',
+    backgroundColor: '#fff',
     borderColor: '#6366f1',
+    borderBottomColor: '#fff',
+    zIndex: 2,
+  },
+  workspaceTabCurve: {
+    position: 'absolute',
+    bottom: -1,
+    width: 12,
+    height: 12,
+    backgroundColor: '#fff',
+    borderColor: '#6366f1',
+    zIndex: 0,
+  },
+  workspaceTabCurveLeft: {
+    left: -12,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderBottomRightRadius: 12,
+  },
+  workspaceTabCurveRight: {
+    right: -12,
+    borderLeftWidth: 1,
+    borderBottomWidth: 1,
+    borderBottomLeftRadius: 12,
   },
   workspaceTabText: {
     color: '#374151',
     fontWeight: '600',
     fontSize: 13,
+    zIndex: 1,
   },
   workspaceTabTextActive: {
     color: '#4338ca',
