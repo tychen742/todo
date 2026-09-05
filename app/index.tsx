@@ -113,7 +113,7 @@ const incomingRowHeight = 106;
 const taskHeaderHeight = 42;
 const taskBoxMaxHeight = taskHeaderHeight + todoRowHeight * defaultVisibleTaskRows;
 const incomingBoxMaxHeight = taskHeaderHeight + incomingRowHeight * defaultVisibleTaskRows;
-const workspaceContentMaxWidth = 1600;
+const workspaceContentMaxWidth = 1200;
 const webAppUrl = 'https://todo-eight-gamma.vercel.app';
 const oauthReturnStorageKey = 'todo:oauth-return-to-production';
 
@@ -6130,7 +6130,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     maxWidth: workspaceContentMaxWidth,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     padding: 12,
     gap: 12,
   },
@@ -7353,7 +7353,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
     maxWidth: workspaceContentMaxWidth,
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
