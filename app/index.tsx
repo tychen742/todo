@@ -193,6 +193,13 @@ function parseDateValue(value: string | null) {
   return date;
 }
 
+function formatArchiveDate(value: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 function toDateTimeInputValue(value: string | null) {
   if (!value) return '';
   const date = new Date(value);
@@ -4708,6 +4715,7 @@ export default function HomeScreen() {
                     {completedPaneTab === 'deleted' && archivedTodos.map((todo) => (
                       <View key={todo.id} style={styles.archivedRow}>
                         <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
+                        <Text style={styles.archivedDateText}>{formatArchiveDate(todo.archived_at)}</Text>
                         <Pressable onPress={() => unarchiveTodo(todo.id)} style={styles.unarchiveBtn}>
                           <Text style={styles.unarchiveBtnText}>Restore</Text>
                         </Pressable>
@@ -9005,6 +9013,13 @@ const styles = StyleSheet.create({
   },
   archivedText: {
     flex: 1,
+    fontSize: 11,
+    fontWeight: '400',
+    color: '#9ca3af',
+  },
+  archivedDateText: {
+    width: 54,
+    textAlign: 'right',
     fontSize: 11,
     fontWeight: '400',
     color: '#9ca3af',

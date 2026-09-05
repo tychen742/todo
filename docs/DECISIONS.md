@@ -152,7 +152,7 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 - The Completed/Deleted pane body is capped to three visible rows; overflow must scroll inside the pane for both tabs.
 - Inbox renders as a right-side panel on wide web screens. Below that breakpoint, Inbox renders as a full-width panel above the active task pane, not as a footer after tasks.
 - Deleted is a tab alongside Completed in the Completed panel. It must not appear inside the active task pane footer.
-- Deleted row text and Restore actions use the same light, regular-weight tone as task description text.
+- Deleted row text, deleted dates, and Restore actions use the same light, regular-weight tone as task description text.
 - Pane headers (TASK, Completed, INBOX): `height: 24`, `paddingRight: 2`
 - All row items (todo rows, completed rows, deleted rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
 - Inbox rows must use the same natural row height as Task rows. Both render row content plus a separate `1px` separator view, rather than folding the separator into row padding or border height.
