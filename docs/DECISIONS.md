@@ -142,7 +142,7 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 **Personal view pane rules:**
 
 - Top-level workspace tab band: `paddingTop: 2`, `paddingBottom: 0`, `paddingHorizontal: 12`
-- Top-level workspace tab buttons: `height: 30`, `paddingVertical: 2`, `paddingHorizontal: 6`; tabs use `10px` browser-style rounded top corners and active-tab round-out bottom shoulders.
+- Top-level workspace tab buttons: `height: 30`, `paddingVertical: 2`, `paddingHorizontal: 6`; tabs render as a connected segmented control with collapsed borders and rounded outer ends.
 - Add todo band: `paddingTop: 12`, `paddingBottom: 0`, `paddingHorizontal: 12`; input and Add button use `height: 36`
 - When the right-side Inbox panel is visible, the add todo band reserves the Inbox column width plus pane gap on the right so the input and Add button match the Task pane width.
 - Header band separators keep their hairline border width but use a transparent border color so the header spacing stays stable without visible divider lines.
