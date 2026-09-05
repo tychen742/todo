@@ -4673,7 +4673,10 @@ export default function HomeScreen() {
                       </Text>
                     </Pressable>
                   </View>
-                  <ScrollView style={styles.completedBoxScroll} scrollEnabled={completedPanelRowCount * rowH > rowH * 3}>
+                  <ScrollView
+                    style={[styles.completedBoxScroll, { maxHeight: rowH * 3 }]}
+                    scrollEnabled={completedPanelRowCount * rowH > rowH * 3}
+                  >
                     {completedPaneTab === 'completed' && done.map((todo) => {
                       const assigner = getAssignerInfo(todo);
                       return (

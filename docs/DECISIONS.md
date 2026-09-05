@@ -149,6 +149,7 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 - The title bar, workspace tab band, add todo band, and todo board share a centered `960px` max width on web-sized layouts so the task text column does not create a large empty center gap on ultrawide screens.
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
 - The active task pane is capped to the default visible active rows; the completed pane grows into the remaining board height when completed tasks exist.
+- The Completed/Deleted pane body is capped to three visible rows; overflow must scroll inside the pane for both tabs.
 - Inbox renders as a right-side panel on wide web screens. Below that breakpoint, Inbox renders as a full-width panel above the active task pane, not as a footer after tasks.
 - Deleted is a tab alongside Completed in the Completed panel. It must not appear inside the active task pane footer.
 - Pane headers (TASK, Completed, INBOX): `height: 24`, `paddingRight: 2`
