@@ -6606,6 +6606,9 @@ const styles = StyleSheet.create({
   teamPanel: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: '100%',
+    maxWidth: workspaceContentMaxWidth,
+    alignSelf: 'center',
     paddingHorizontal: 12,
     paddingTop: 2,
     paddingBottom: 2,
@@ -7738,6 +7741,9 @@ const styles = StyleSheet.create({
   titleBar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    width: '100%',
+    maxWidth: workspaceContentMaxWidth,
+    alignSelf: 'center',
     paddingHorizontal: 14,
     paddingTop: Platform.OS === 'ios' ? 52 : 12,
     paddingBottom: 10,
