@@ -6615,7 +6615,7 @@ const styles = StyleSheet.create({
     paddingTop: 2,
     paddingBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: 'transparent',
   },
   workspaceLabel: {
     color: '#6b7280',
@@ -7362,7 +7362,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: 'transparent',
     backgroundColor: '#fff',
   },
   todoInputWrap: {
@@ -7750,7 +7750,7 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 52 : 12,
     paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: 'transparent',
     backgroundColor: '#fff',
     gap: 10,
   },
