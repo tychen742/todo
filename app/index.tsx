@@ -5492,7 +5492,14 @@ export default function HomeScreen() {
               </View>
 
               <View style={styles.editTodoSection}>
-                <Text style={styles.editTodoSectionLabel}>Due date</Text>
+                <View style={styles.editTodoSectionHeader}>
+                  <Text style={styles.editTodoSectionLabel}>Due date</Text>
+                  {editDraftDueDate && (
+                    <Pressable onPress={() => setEditDraftDueDate(null)} style={styles.clearDateInlineButton}>
+                      <Text style={styles.calendarCancelText}>Clear date</Text>
+                    </Pressable>
+                  )}
+                </View>
                 <View style={styles.editTodoCalendarPanel}>
                   <View style={styles.calendarHeader}>
                     <Pressable
@@ -5545,11 +5552,6 @@ export default function HomeScreen() {
                       );
                     })}
                   </View>
-                  {editDraftDueDate && (
-                    <Pressable onPress={() => setEditDraftDueDate(null)} style={styles.clearDateButton}>
-                      <Text style={styles.calendarCancelText}>Clear date</Text>
-                    </Pressable>
-                  )}
                 </View>
               </View>
 
@@ -7433,6 +7435,12 @@ const styles = StyleSheet.create({
   editTodoSection: {
     gap: 8,
   },
+  editTodoSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 16,
+  },
   editTodoSectionLabel: {
     color: '#6b7280',
     fontSize: 11,
@@ -7445,9 +7453,13 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 10,
     paddingHorizontal: 10,
-    paddingTop: 8,
+    paddingTop: 6,
     paddingBottom: 6,
     backgroundColor: '#f9fafb',
+  },
+  clearDateInlineButton: {
+    paddingVertical: 0,
+    paddingLeft: 12,
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -7579,10 +7591,6 @@ const styles = StyleSheet.create({
   },
   editModalPillRow: {
     marginBottom: 0,
-  },
-  clearDateButton: {
-    alignItems: 'center',
-    paddingVertical: 2,
   },
   sortBar: {
     flexDirection: 'row',
