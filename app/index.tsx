@@ -983,6 +983,20 @@ export default function HomeScreen() {
   const accountDisplayName = profile
     ? profileDisplayName(profile)
     : emailDisplayName(session?.user.email);
+  const editAssigneeOptions = useMemo<Member[]>(() => {
+    const options = [...members];
+    const isPersonalTodo = !editTodo?.team_id && !editTodo?.project_id;
+    if (session && isPersonalTodo && !options.some((member) => member.user_id === session.user.id)) {
+      options.unshift({
+        user_id: session.user.id,
+        email: profile?.email ?? session.user.email ?? '',
+        display_name: profile?.display_name ?? accountDisplayName,
+        avatar_url: profile?.avatar_url ?? null,
+        role: 'member',
+      });
+    }
+    return options;
+  }, [accountDisplayName, editTodo?.project_id, editTodo?.team_id, members, profile, session]);
   const currentOrgRole = orgModalId
     ? (orgModalMembers.find((m) => m.user_id === session?.user.id)?.role ?? null)
     : null;
@@ -4623,7 +4637,7 @@ export default function HomeScreen() {
               {done.length > 0 && (
                 <View style={styles.completedBox}>
                   <Text style={[styles.completedBoxHeader, { paddingVertical: rowPV }]}>Completed ({done.length})</Text>
-                  <ScrollView style={[styles.completedBoxScroll, { maxHeight: rowH * 3 }]} scrollEnabled={done.length > 3}>
+                  <ScrollView style={styles.completedBoxScroll} scrollEnabled={done.length * rowH > rowH * 3}>
                     {done.map((todo) => {
                       const assigner = getAssignerInfo(todo);
                       return (
@@ -5423,127 +5437,125 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
           <Pressable style={[styles.calendarCard, styles.editTodoCard]}>
-            <Text style={styles.editModalTitle}>Edit Todo</Text>
+            <View style={styles.editTodoHeader}>
+              <Text style={styles.editModalTitle}>Edit Todo</Text>
+            </View>
             <ScrollView
               style={[styles.editTodoScroll, { maxHeight: Math.max(320, Math.min(560, height - 240)) }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.editTodoScrollContent}
             >
-              <TextInput
-                style={styles.editModalInput}
-                value={editDraftText}
-                onChangeText={setEditDraftText}
-                placeholder="Task"
-                placeholderTextColor="#9ca3af"
-                returnKeyType="done"
-                autoFocus
-              />
-              <TextInput
-                style={[styles.editModalInput, styles.editModalNoteInput]}
-                value={editDraftNote}
-                onChangeText={setEditDraftNote}
-                placeholder="Add a note..."
-                placeholderTextColor="#9ca3af"
-                multiline
-              />
-
-              <View style={styles.pickerSectionDivider}>
-                <View style={styles.pickerSectionLine} />
-                <Text style={styles.pickerSectionLabel}>Priority</Text>
-                <View style={styles.pickerSectionLine} />
-              </View>
-              <View style={styles.priorityPickerRow}>
-                {priorities.map((p) => {
-                  const isActive = editDraftPriority === p;
-                  return (
-                    <Pressable
-                      key={p}
-                      onPress={() => setEditDraftPriority(p)}
-                      style={[
-                        styles.priorityPickerBtn,
-                        isActive
-                          ? { backgroundColor: priorityColors[p], borderColor: priorityColors[p] }
-                          : { backgroundColor: '#f3f4f6', borderColor: 'transparent' },
-                      ]}
-                    >
-                      <Text style={[styles.priorityPickerLabel, { color: isActive ? '#fff' : priorityColors[p] }]}>
-                        {p[0].toUpperCase() + p.slice(1)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+              <View style={styles.editTodoFieldGroup}>
+                <TextInput
+                  style={[styles.editModalInput, styles.editTodoTaskInput]}
+                  value={editDraftText}
+                  onChangeText={setEditDraftText}
+                  placeholder="Task"
+                  placeholderTextColor="#9ca3af"
+                  returnKeyType="done"
+                  autoFocus
+                />
+                <TextInput
+                  style={[styles.editModalInput, styles.editModalNoteInput]}
+                  value={editDraftNote}
+                  onChangeText={setEditDraftNote}
+                  placeholder="Add a note..."
+                  placeholderTextColor="#9ca3af"
+                  multiline
+                />
               </View>
 
-              <View style={styles.pickerSectionDivider}>
-                <View style={styles.pickerSectionLine} />
-                <Text style={styles.pickerSectionLabel}>Due Date</Text>
-                <View style={styles.pickerSectionLine} />
+              <View style={styles.editTodoSection}>
+                <Text style={styles.editTodoSectionLabel}>Priority</Text>
+                <View style={styles.priorityPickerRow}>
+                  {priorities.map((p) => {
+                    const isActive = editDraftPriority === p;
+                    return (
+                      <Pressable
+                        key={p}
+                        onPress={() => setEditDraftPriority(p)}
+                        style={[
+                          styles.priorityPickerBtn,
+                          isActive
+                            ? { backgroundColor: priorityColors[p], borderColor: priorityColors[p] }
+                            : { backgroundColor: '#f3f4f6', borderColor: 'transparent' },
+                        ]}
+                      >
+                        <Text style={[styles.priorityPickerLabel, { color: isActive ? '#fff' : priorityColors[p] }]}>
+                          {p[0].toUpperCase() + p.slice(1)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
-              <View style={styles.calendarHeader}>
-                <Pressable
-                  onPress={() => setEditDraftDueDateMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-                  style={styles.calendarNavBtn}
-                >
-                  <Text style={styles.calendarNavText}>‹</Text>
-                </Pressable>
-                <Text style={styles.calendarTitle}>{monthLabel(editDraftDueDateMonth)}</Text>
-                <Pressable
-                  onPress={() => setEditDraftDueDateMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-                  style={styles.calendarNavBtn}
-                >
-                  <Text style={styles.calendarNavText}>›</Text>
-                </Pressable>
-              </View>
-              <View style={styles.weekdayRow}>
-                {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
-                  <Text key={d} style={styles.weekdayText}>{d}</Text>
-                ))}
-              </View>
-              <View style={styles.calendarGrid}>
-                {editDraftCalendarDays.map((date, index) => {
-                  const selectedDate = parseDateValue(editDraftDueDate);
-                  const isSelected = !!date && !!selectedDate && isSameDate(date, selectedDate);
-                  const todayDate = new Date(); todayDate.setHours(0,0,0,0);
-                  const isCurrentDay = !!date && isSameDate(date, todayDate);
-                  return (
+
+              <View style={styles.editTodoSection}>
+                <Text style={styles.editTodoSectionLabel}>Due date</Text>
+                <View style={styles.editTodoCalendarPanel}>
+                  <View style={styles.calendarHeader}>
                     <Pressable
-                      key={date ? formatDateValue(date) : `blank-${index}`}
-                      onPress={() => date && setEditDraftDueDate(
-                        editDraftDueDate && isSameDate(date, parseDateValue(editDraftDueDate)!)
-                          ? null : formatDateValue(date)
-                      )}
-                      style={[
-                        styles.calendarDay,
-                        !date && styles.calendarDayBlank,
-                        isCurrentDay && styles.calendarDayToday,
-                        isSelected && styles.calendarDaySelected,
-                      ]}
+                      onPress={() => setEditDraftDueDateMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+                      style={styles.calendarNavBtn}
                     >
-                      <Text style={[
-                        styles.calendarDayText,
-                        isCurrentDay && styles.calendarDayTodayText,
-                        isSelected && styles.calendarDaySelectedText,
-                      ]}>
-                        {date?.getDate() ?? ''}
-                      </Text>
+                      <Text style={styles.calendarNavText}>‹</Text>
                     </Pressable>
-                  );
-                })}
+                    <Text style={styles.calendarTitle}>{monthLabel(editDraftDueDateMonth)}</Text>
+                    <Pressable
+                      onPress={() => setEditDraftDueDateMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+                      style={styles.calendarNavBtn}
+                    >
+                      <Text style={styles.calendarNavText}>›</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.weekdayRow}>
+                    {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+                      <Text key={d} style={styles.weekdayText}>{d}</Text>
+                    ))}
+                  </View>
+                  <View style={styles.calendarGrid}>
+                    {editDraftCalendarDays.map((date, index) => {
+                      const selectedDate = parseDateValue(editDraftDueDate);
+                      const isSelected = !!date && !!selectedDate && isSameDate(date, selectedDate);
+                      const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+                      const isCurrentDay = !!date && isSameDate(date, todayDate);
+                      return (
+                        <Pressable
+                          key={date ? formatDateValue(date) : `blank-${index}`}
+                          onPress={() => date && setEditDraftDueDate(
+                            editDraftDueDate && isSameDate(date, parseDateValue(editDraftDueDate)!)
+                              ? null : formatDateValue(date)
+                          )}
+                          style={[
+                            styles.calendarDay,
+                            !date && styles.calendarDayBlank,
+                            isCurrentDay && styles.calendarDayToday,
+                            isSelected && styles.calendarDaySelected,
+                          ]}
+                        >
+                          <Text style={[
+                            styles.calendarDayText,
+                            isCurrentDay && styles.calendarDayTodayText,
+                            isSelected && styles.calendarDaySelectedText,
+                          ]}>
+                            {date?.getDate() ?? ''}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {editDraftDueDate && (
+                    <Pressable onPress={() => setEditDraftDueDate(null)} style={styles.clearDateButton}>
+                      <Text style={styles.calendarCancelText}>Clear date</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
-              {editDraftDueDate && (
-                <Pressable onPress={() => setEditDraftDueDate(null)} style={styles.clearDateButton}>
-                  <Text style={styles.calendarCancelText}>Clear date</Text>
-                </Pressable>
-              )}
 
               {!isProject && activeProjects.length > 0 && (
-                <>
-                  <View style={styles.pickerSectionDivider}>
-                    <View style={styles.pickerSectionLine} />
-                    <Text style={styles.pickerSectionLabel}>Project</Text>
-                    <View style={styles.pickerSectionLine} />
-                  </View>
+                <View style={styles.editTodoSection}>
+                  <Text style={styles.editTodoSectionLabel}>Project</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.editModalPillRow}>
                     <Pressable
                       onPress={() => setEditDraftProjectId(null)}
@@ -5565,16 +5577,12 @@ export default function HomeScreen() {
                       </Pressable>
                     ))}
                   </ScrollView>
-                </>
+                </View>
               )}
 
-              {members.length > 0 && (
-                <>
-                  <View style={styles.pickerSectionDivider}>
-                    <View style={styles.pickerSectionLine} />
-                    <Text style={styles.pickerSectionLabel}>Assign to</Text>
-                    <View style={styles.pickerSectionLine} />
-                  </View>
+              {editAssigneeOptions.length > 0 && (
+                <View style={styles.editTodoSection}>
+                  <Text style={styles.editTodoSectionLabel}>Assign to</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.editModalPillRow}>
                     <Pressable
                       onPress={() => setEditDraftAssignedTo(null)}
@@ -5584,7 +5592,7 @@ export default function HomeScreen() {
                         None
                       </Text>
                     </Pressable>
-                    {members.map((m) => (
+                    {editAssigneeOptions.map((m) => (
                       <Pressable
                         key={m.user_id}
                         onPress={() => setEditDraftAssignedTo(m.user_id)}
@@ -5596,7 +5604,7 @@ export default function HomeScreen() {
                       </Pressable>
                     ))}
                   </ScrollView>
-                </>
+                </View>
               )}
               {isProject && (
                 <Pressable
@@ -6111,11 +6119,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
   },
   completedBox: {
+    flex: 1,
+    minHeight: todoRowHeight * 3,
     borderWidth: 1,
     borderColor: '#d1d5db',
     backgroundColor: '#fafafa',
     overflow: 'hidden',
-    flexShrink: 0,
   },
   completedBoxHeader: {
     paddingVertical: 7,
@@ -6136,7 +6145,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   completedBoxScroll: {
-    maxHeight: todoRowHeight * 3,
+    flex: 1,
+    minHeight: 0,
   },
   assignedToMePanel: {
     width: 340,
@@ -7403,15 +7413,41 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   editTodoCard: {
-    width: 340,
+    width: 380,
     maxWidth: '92%',
-    padding: 14,
+    padding: 16,
+  },
+  editTodoHeader: {
+    marginBottom: 10,
   },
   editTodoScroll: {
     flexGrow: 0,
   },
   editTodoScrollContent: {
-    paddingBottom: 2,
+    paddingBottom: 4,
+    gap: 10,
+  },
+  editTodoFieldGroup: {
+    gap: 8,
+  },
+  editTodoSection: {
+    gap: 8,
+  },
+  editTodoSectionLabel: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  editTodoCalendarPanel: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 6,
+    backgroundColor: '#f9fafb',
   },
   calendarHeader: {
     flexDirection: 'row',
@@ -7501,24 +7537,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   editModalTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '800',
     color: '#111827',
-    marginBottom: 10,
+    marginBottom: 0,
   },
   editModalInput: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#f9fafb',
     borderRadius: 8,
-    height: 36,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    height: 40,
     paddingHorizontal: 12,
     paddingVertical: 0,
-    fontSize: 15,
+    fontSize: 14,
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 0,
+  },
+  editTodoTaskInput: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   editModalNoteInput: {
-    height: 36,
-    minHeight: 36,
+    height: 48,
+    minHeight: 48,
     paddingVertical: 0,
     marginBottom: 0,
     textAlignVertical: 'top',
@@ -7530,13 +7572,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   editTodoFooter: {
-    marginTop: 8,
+    marginTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#e5e7eb',
-    paddingTop: 8,
+    paddingTop: 10,
   },
   editModalPillRow: {
-    marginBottom: 4,
+    marginBottom: 0,
   },
   clearDateButton: {
     alignItems: 'center',
