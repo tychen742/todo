@@ -9005,9 +9005,9 @@ const styles = StyleSheet.create({
   },
   archivedText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 11,
+    fontWeight: '400',
     color: '#9ca3af',
-    textDecorationLine: 'line-through',
   },
   unarchiveBtn: {
     paddingHorizontal: 8,
@@ -9017,8 +9017,8 @@ const styles = StyleSheet.create({
   },
   unarchiveBtnText: {
     fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
+    fontWeight: '400',
+    color: '#9ca3af',
   },
   assignedToMeRowOuter: {
     flexDirection: 'column',
