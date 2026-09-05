@@ -147,6 +147,7 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
 - The active task pane is capped to the default visible active rows; the completed pane grows into the remaining board height when completed tasks exist.
 - Inbox renders as a right-side panel on wide web screens. Below that breakpoint, Inbox renders as a full-width panel above the active task pane, not as a footer after tasks.
+- Deleted renders at the bottom of the Completed panel. It must not appear inside the active task pane footer.
 - Section headers (TASK, Completed, INBOX): `paddingVertical: 2`, `paddingRight: 2`
 - All row items (todo rows, completed rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
 - Inbox rows must use the same natural row height as Task rows. Both render row content plus a separate `1px` separator view, rather than folding the separator into row padding or border height.

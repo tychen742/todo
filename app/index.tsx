@@ -833,6 +833,8 @@ export default function HomeScreen() {
   }, [todos, sortField, sortDir]);
 
   const done = useMemo(() => todos.filter((t) => t.done), [todos]);
+  const completedPanelRowCount =
+    done.length + (archivedTodos.length > 0 ? 1 : 0) + (archivedExpanded ? archivedTodos.length : 0);
   const memberById = useMemo(
     () => new Map(members.map((member) => [member.user_id, member])),
     [members]
@@ -4645,39 +4647,13 @@ export default function HomeScreen() {
                       )}
                     </>
                   }
-                  ListFooterComponent={
-                    <>
-                      {archivedTodos.length > 0 && (
-                        <>
-                          <Pressable
-                            onPress={() => setArchivedExpanded((v) => !v)}
-                            style={styles.sectionDivider}
-                          >
-                            <View style={styles.sectionDividerLine} />
-                            <Text style={styles.sectionLabel}>
-                              Deleted ({archivedTodos.length}) {archivedExpanded ? '↑' : '↓'}
-                            </Text>
-                            <View style={styles.sectionDividerLine} />
-                          </Pressable>
-                          {archivedExpanded && archivedTodos.map((todo) => (
-                            <View key={todo.id} style={styles.archivedRow}>
-                              <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
-                              <Pressable onPress={() => unarchiveTodo(todo.id)} style={styles.unarchiveBtn}>
-                                <Text style={styles.unarchiveBtnText}>Restore</Text>
-                              </Pressable>
-                            </View>
-                          ))}
-                        </>
-                      )}
-                    </>
-                  }
                 />
               </View>
 
-              {done.length > 0 && (
+              {(done.length > 0 || archivedTodos.length > 0) && (
                 <View style={styles.completedBox}>
                   <Text style={[styles.completedBoxHeader, { paddingVertical: rowPV }]}>Completed ({done.length})</Text>
-                  <ScrollView style={styles.completedBoxScroll} scrollEnabled={done.length * rowH > rowH * 3}>
+                  <ScrollView style={styles.completedBoxScroll} scrollEnabled={completedPanelRowCount * rowH > rowH * 3}>
                     {done.map((todo) => {
                       const assigner = getAssignerInfo(todo);
                       return (
@@ -4706,6 +4682,28 @@ export default function HomeScreen() {
                         />
                       );
                     })}
+                    {archivedTodos.length > 0 && (
+                      <>
+                        <Pressable
+                          onPress={() => setArchivedExpanded((v) => !v)}
+                          style={styles.sectionDivider}
+                        >
+                          <View style={styles.sectionDividerLine} />
+                          <Text style={styles.sectionLabel}>
+                            Deleted ({archivedTodos.length}) {archivedExpanded ? '↑' : '↓'}
+                          </Text>
+                          <View style={styles.sectionDividerLine} />
+                        </Pressable>
+                        {archivedExpanded && archivedTodos.map((todo) => (
+                          <View key={todo.id} style={styles.archivedRow}>
+                            <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
+                            <Pressable onPress={() => unarchiveTodo(todo.id)} style={styles.unarchiveBtn}>
+                              <Text style={styles.unarchiveBtnText}>Restore</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                      </>
+                    )}
                   </ScrollView>
                 </View>
               )}
