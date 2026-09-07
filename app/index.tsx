@@ -803,7 +803,7 @@ export default function HomeScreen() {
   const renderWorkspaceTabDivider = (active: boolean, nextActive: boolean, isLast = false) => (
     !active && !nextActive && !isLast ? <View pointerEvents="none" style={styles.workspaceTabDivider} /> : null
   );
-  const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal && assignedToMe.length > 0;
+  const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
   const todoScopeKey = selectedProjectId
@@ -4618,10 +4618,14 @@ export default function HomeScreen() {
 
           <View style={[styles.todoBoard, showInboxSidePanel && styles.todoBoardWithAssigned]}>
             <View style={styles.todoListPane}>
-              {isPersonal && assignedToMe.length > 0 && !showInboxSidePanel && (
+              {isPersonal && !showInboxSidePanel && (
                 <View style={styles.assignedToMeInlinePanel}>
                   <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
-                  {assignedToMe.map(renderAssignedToMeTodo)}
+                  {assignedToMe.length > 0 ? (
+                    assignedToMe.map(renderAssignedToMeTodo)
+                  ) : (
+                    <Text style={styles.assignedToMeEmpty}>No assigned tasks right now.</Text>
+                  )}
                 </View>
               )}
 
@@ -4761,7 +4765,11 @@ export default function HomeScreen() {
               <View style={styles.assignedToMePanel}>
                 <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
                 <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
-                  {assignedToMe.map(renderAssignedToMeTodo)}
+                  {assignedToMe.length > 0 ? (
+                    assignedToMe.map(renderAssignedToMeTodo)
+                  ) : (
+                    <Text style={styles.assignedToMeEmpty}>No assigned tasks right now.</Text>
+                  )}
                 </ScrollView>
               </View>
             )}
@@ -6286,6 +6294,14 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
     backgroundColor: '#fff',
     overflow: 'hidden',
+  },
+  assignedToMeEmpty: {
+    minHeight: 34,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
   },
   inboxView: {
     flex: 1,

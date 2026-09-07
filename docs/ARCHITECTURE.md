@@ -60,6 +60,23 @@ so the default `Todos` navigation bar cannot appear before the screen hydrates.
 5. Writes go directly through Supabase with RLS enforcing access.
 6. Realtime subscriptions refresh todos and team members across web and iPhone.
 
+Workspace and project planning share the same `todos` table. Workspace is the
+execution view; Projects are planning views over project-scoped todos.
+
+- A todo created in Workspace starts as a normal todo and may later receive a
+  `project_id`.
+- When a Workspace todo receives a `project_id`, it remains part of the
+  creator's Workspace query and also appears in the project's Backlog when
+  `phase_id` is null.
+- `project_id` is a single nullable foreign key, so a todo has at most one
+  primary project.
+- A todo created in a project is inserted into the same table with `project_id`
+  set, optional `phase_id`, and `workflow_status = backlog` by default.
+- Project Plan placement uses `phase_id` and `position`.
+- Project Kanban placement uses `workflow_status` and `workflow_position`.
+- Workspace rows show project context with the project avatar and workflow
+  status icon, so users can execute project work without leaving Workspace.
+
 Todo pages track whether each personal/team/project scope has loaded once.
 Returning to an already loaded scope keeps the current rows mounted and syncs
 quietly instead of showing a visible loading refresh.
@@ -129,6 +146,7 @@ Likely architecture:
 - An optional `blocks_id` reference on a todo can make explicit dependencies available later without changing the core model.
 - Surface overdue milestone todos prominently on the project screen; show a countdown to the next upcoming milestone.
 - Keep project-scoped todos in the existing todo workflow, linked to a project and optionally to a phase. Plan uses `phase_id`; Kanban uses `workflow_status`. ✓ Done.
+- Preserve Workspace/Project interplay: Workspace-created todos can join projects, and project-created tasks can surface back in Workspace as executable todos. ✓ Done.
 - Add a project health view: current phase, overdue items, next milestone countdown, and blocked items in one screen.
 - Add project closure: closing a project produces a lightweight summary — phases completed, todos completed vs dropped, milestones hit or missed.
 - Use todo annotations for task-level resource notes, risk notes, blockers, assumptions, and mitigation details.

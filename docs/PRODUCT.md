@@ -47,6 +47,8 @@ The product model is therefore bidirectional:
 
 This interplay is core to the app. Users should not have to choose between "todo mode" and "project mode." Todos are the unit of work; projects add planning context, phases, milestones, and workflow state around those todos.
 
+A todo belongs to at most one primary project. This keeps ownership, phase placement, Kanban status, reporting, and closure simple. If the same real-world work affects another project, the product should model that as a related todo, dependency, blocker, or cross-reference rather than placing one todo in multiple projects. Multi-project todos are out of scope unless there is a proven need strong enough to justify a join table and more complex completion semantics.
+
 ## People Model: Members vs Collaborators
 
 There are two distinct participation types in this product:
@@ -116,6 +118,7 @@ Rules:
 - Resource management and risk management should start as lightweight planning and annotation workflows, not as a heavy enterprise module.
 - Todo annotations and project planning/annotation should capture resource constraints, risks, assumptions, blockers, and mitigation notes.
 - Assignment only makes sense in a team or project context with multiple users.
+- Inbox should remain visible from Workspace as the home for incoming assignments, handoffs, and management communication, even when there are no current items.
 - Priority should default to Normal on creation, stay visible on each todo row, and be changeable from that row.
 - Due dates are central to time management and project management; they should support planning, workload visibility, reminders, calendars, and milestone tracking.
 - Adding todos should stay as quick capture: the add area should have one text input for the todo text.

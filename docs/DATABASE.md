@@ -73,6 +73,8 @@ Personal or team-scoped tasks.
 - `workflow_status`
 - `workflow_position`
 
+`project_id` is nullable and singular. A todo can have no project or one primary project, but not multiple projects. Cross-project relationships should be modeled later as related todos, blockers, dependencies, or references rather than changing the core todo into a multi-project record.
+
 Priority values:
 
 - `low`

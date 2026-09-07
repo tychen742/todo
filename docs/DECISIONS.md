@@ -54,6 +54,8 @@ Reason: both web and iPhone clients talk directly to Supabase, so database polic
 
 **Self-assignment rule:** A task assigned to the signed-in user by that same user is accepted immediately. Inbox is for incoming work from someone else, not a holding area for tasks the user created for themself.
 
+Inbox still belongs in Workspace as a persistent communication and management pane. It may be empty, but the Workspace layout should keep it visible on wide screens so assigned work and handoffs have a stable place to appear.
+
 **Pre-acceptance rule:** Before a task is accepted, the assignee cannot mutate any task field (priority, due date, text, phase). The only actions available are: comment, accept, or decline.
 
 **Communication mechanism (Task Thread):** Every task has a comment thread (`task_comments` table). Comments are available to all parties at any lifecycle stage, including before acceptance. This is the channel for negotiation, clarification, and coordination. It is NOT a general chat — it is scoped strictly to the task.
@@ -234,6 +236,32 @@ Implementation rules:
 - Keep the indicator compact enough to preserve one-line task titles.
 - Provide an accessibility label and a web hover tooltip with the stage name.
 - Do not derive Kanban stage from `phase_id`; Plan and Kanban are separate views over the same task.
+
+## 2026-09-07: Workspace and Projects Are Bidirectional Todo Views
+
+Decision: Workspace and Projects are different views over the same todos. Workspace is for execution; Projects are for planning.
+
+Reason: users often capture work before they know where it belongs, and they also plan project work before executing it. The app should support both paths without making duplicate task systems.
+
+Implementation rules:
+
+- A todo created in Workspace stays in Workspace after a project is attached.
+- Attaching a project places that todo in the project's Backlog until `phase_id` is set.
+- A todo created in a project is still a normal todo and can appear in Workspace when it belongs to the signed-in user's active work.
+- Workspace rows for project todos must preserve project context, including project avatar and Kanban/workflow status.
+
+## 2026-09-07: Todos Have One Primary Project
+
+Decision: a todo can belong to zero or one primary project, not multiple projects.
+
+Reason: one project per todo keeps phase placement, Kanban status, ownership, completion, reporting, and project closure understandable. Multi-project membership would require a join table and would make it unclear which project owns the task's phase, status, milestone meaning, and completion record.
+
+Implementation rules:
+
+- Keep `todos.project_id` as the single project association.
+- Use `null` for no project.
+- Do not add a project/todo join table until there is a proven product need.
+- Cross-project work should be represented as related todos, blockers, dependencies, or references.
 
 ## 2026-06-11: Project Plan and Kanban Are Separate Axes
 
