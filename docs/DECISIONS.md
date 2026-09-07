@@ -291,7 +291,7 @@ Implementation rules:
 - Show an up/down arrow only for the active sort column.
 - Header column widths and margins must mirror task-row column widths; avoid header-only padding that shifts the sort targets.
 - Task-text sorting keeps priority groups first, then sorts alphabetically within each priority group.
-- Status sorting ranks currently working tasks first, then review, backlog, and done.
+- Status sorting ranks currently working tasks first, then review, backlog, and done. For project tasks, this uses the Kanban-backed `workflow_status`; personal tasks without project workflow fall back to `started_work_at`.
 - Task Age sorting uses the timestamp shown in the row: `assigned_at` when present, otherwise `created_at`.
 - Dragging after a header sort exits sorted view and returns to manual ordering.
 

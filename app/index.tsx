@@ -918,6 +918,7 @@ export default function HomeScreen() {
     };
     const statusForTodo = (todo: Todo): WorkflowLaneKey => {
       if (todo.done) return 'done';
+      if (todo.project_id || isProject) return workflowStageForTodo(todo);
       if (todo.started_work_at) return 'doing';
       return workflowStageForTodo(todo);
     };
@@ -966,7 +967,7 @@ export default function HomeScreen() {
       if (delta === 0) delta = a.text.localeCompare(b.text);
       return sortDir === 'asc' ? delta : -delta;
     });
-  }, [todos, sortField, sortDir, projects, selectedProject, session?.user.id, accountDisplayName, memberById]);
+  }, [todos, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
 
   const done = useMemo(() => todos.filter((t) => t.done), [todos]);
   const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
@@ -3151,6 +3152,7 @@ export default function HomeScreen() {
         onPress={() => toggleSort(field)}
         onHoverIn={() => setHoveredSortField(field)}
         onHoverOut={() => setHoveredSortField((current) => current === field ? null : current)}
+        hitSlop={4}
         accessibilityRole="button"
         accessibilityLabel={label}
         style={[
