@@ -65,10 +65,11 @@ execution view; Projects are planning views over project-scoped todos.
 
 - A todo created in Workspace starts as a normal todo and may later receive a
   `project_id`.
-- Workspace quick capture may include a `to:` routing token. That token is
-  parsed before insert, resolved against system-generated project
-  abbreviations or an unambiguous full project name, and then stripped from the
-  stored todo text.
+- Workspace quick capture supports a leading project-prefix token, such as
+  `re:` or `te:`. That token is parsed before insert, resolved against
+  system-generated project abbreviations or an unambiguous full project name
+  in the current personal/team project scope, and then stripped from the stored
+  todo text.
 - When a Workspace todo receives a `project_id`, it remains part of the
   creator's Workspace query and also appears in the project's Backlog when
   `phase_id` is null.

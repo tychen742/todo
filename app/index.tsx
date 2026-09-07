@@ -574,6 +574,48 @@ function projectInitials(name: string): string {
   return `${words[0][0] ?? ''}${words[1][0] ?? ''}`.toUpperCase();
 }
 
+function normalizeProjectCaptureKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function resolveProjectQuickCapture(text: string, availableProjects: Project[]) {
+  const match = text.match(/^([^:\n]{1,80}):\s*(.*)$/);
+  if (!match) return { text, project: null as Project | null, error: '' };
+
+  const rawPrefix = match[1].trim();
+  const body = match[2].trim();
+  if (!rawPrefix) return { text, project: null as Project | null, error: '' };
+
+  const prefix = normalizeProjectCaptureKey(rawPrefix);
+  const exactNameMatches = availableProjects.filter(
+    (project) => normalizeProjectCaptureKey(project.name) === prefix
+  );
+  const abbreviationMatches = availableProjects.filter(
+    (project) => normalizeProjectCaptureKey(projectInitials(project.name)) === prefix
+  );
+
+  const matchingProjects = exactNameMatches.length > 0 ? exactNameMatches : abbreviationMatches;
+  if (matchingProjects.length === 0) return { text, project: null as Project | null, error: '' };
+
+  if (!body) {
+    return {
+      text,
+      project: null as Project | null,
+      error: `Add task text after "${rawPrefix}:".`,
+    };
+  }
+
+  if (matchingProjects.length > 1) {
+    return {
+      text,
+      project: null as Project | null,
+      error: `Project shortcut "${rawPrefix}" matches multiple projects. Type the full project name before the colon.`,
+    };
+  }
+
+  return { text: body, project: matchingProjects[0], error: '' };
+}
+
 const priorityLabels: Record<string, string> = {
   low: 'Low',
   normal: 'Normal',
@@ -701,7 +743,7 @@ export default function HomeScreen() {
   const [memberEmail, setMemberEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [newTodoAssignee, setNewTodoAssignee] = useState<string | null>(null);
-  const [newTodoProjectId, setNewTodoProjectId] = useState<string | null>(null);
+  const [newTodoProjectId] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState('');
   const [dueTodo, setDueTodo] = useState<Todo | null>(null);
@@ -884,6 +926,13 @@ export default function HomeScreen() {
   const activeProjects = useMemo(
     () => projects.filter((project) => !project.archived_at),
     [projects]
+  );
+  const quickCaptureProjects = useMemo(
+    () => activeProjects.filter((project) => {
+      if (selectedTeamId) return project.team_id === selectedTeamId;
+      return project.team_id === null && project.created_by === session?.user.id;
+    }),
+    [activeProjects, selectedTeamId, session?.user.id]
   );
   const projectAccessInviteEmail = useMemo(() => {
     const query = projectAccessQuery.trim().toLowerCase();
@@ -2182,15 +2231,23 @@ export default function HomeScreen() {
   async function addTodo() {
     const text = input.trim();
     if (!text || !session) return;
+    const quickCapture = isProject
+      ? { text, project: null as Project | null, error: '' }
+      : resolveProjectQuickCapture(text, quickCaptureProjects);
+    if (quickCapture.error) {
+      setError(quickCapture.error);
+      return;
+    }
+    const targetProjectId = isProject ? selectedProjectId : quickCapture.project?.id ?? newTodoProjectId;
     const assignedTo = selectedTeamId && !isProject ? newTodoAssignee : null;
     const assignedAt = assignedTo ? new Date().toISOString() : null;
 
     const { data, error: insertError } = await supabase
       .from('todos')
       .insert({
-        text,
-        team_id: isProject ? null : selectedTeamId,
-        project_id: selectedProjectId,
+        text: quickCapture.text,
+        team_id: targetProjectId ? null : isProject ? null : selectedTeamId,
+        project_id: targetProjectId,
         created_by: session.user.id,
         assigned_to: assignedTo,
         assigned_at: assignedAt,

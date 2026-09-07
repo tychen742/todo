@@ -4,6 +4,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Recently Completed
 
+- Quick project routing from add-todo text: leading project prefixes in Workspace quick capture now route todos directly into matching projects. Examples: `re: do something` routes `do something` to Research; `te: prepare this` routes `prepare this` to Teaching. Ambiguous abbreviations require the full project name prefix, and the routing prefix is stripped from the saved todo text.
 - Default "Individual" project seeded on first sign-in: `loadProjects` checks for empty projects list and inserts a default "Individual" project so new users always have a project to route tasks to.
 - Default "Individual" project seeded on first sign-in: `loadProjects` checks for empty projects list and inserts a default "Individual" project so new users always have a project to route tasks to.
 
@@ -27,7 +28,6 @@ This file collects product and implementation TODOs from working sessions. Move 
 ## Personal Workspace
 
 - **Project assignment icon on task rows** — in Personal view, add a small icon/button on each todo row to assign it to a project. Tapping opens a compact picker listing existing projects. Preferred over a global pill row above the task list (removed — too prominent for an optional field). The icon should be subtle when no project is assigned and show the project name/initial when one is set.
-- **Quick project routing from add-todo text** — support `to:` in the add field so a user can create a todo directly in a project using the system-generated project abbreviation, for example `draft agenda to:RE`. If abbreviations collide, require the full project name instead of guessing. Strip the routing token from the saved todo text after assignment.
 
 - In the Personal workspace header/toolbar, add a toggle button with tooltip "Show personal items" that filters the list to todos belonging to the user's personal account (not assigned from other workspaces, not team todos). Useful when the inbox is crowded and the user just wants to focus on their own private work.
 - The filter should be remembered per session (or persisted in user prefs). A filled/highlighted icon indicates the filter is active.

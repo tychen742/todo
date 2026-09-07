@@ -249,7 +249,7 @@ Implementation rules:
 - A todo created in a project is still a normal todo and can appear in Workspace when it belongs to the signed-in user's active work.
 - Workspace rows for project todos must preserve project context, including project avatar and Kanban/workflow status.
 
-Quick-capture project routing should use a `to:` token in the add-todo text. The token resolves against system-generated project abbreviations first. If exactly one project abbreviation matches, the new todo is created with that `project_id` and the `to:` token is removed from the saved task text. If multiple projects share the same abbreviation, the app must not guess; it should require the full project name after `to:` before assigning the project.
+Quick-capture project routing uses a leading project-prefix token in the add-todo text. The token is a system-generated project abbreviation followed by a colon, such as `re:` for Research or `te:` for Teaching. If exactly one project abbreviation matches in the current personal/team project scope, the new todo is created with that `project_id` and the prefix token is removed from the saved task text. If multiple projects share the same abbreviation, the app must not guess; it requires the full project name as the prefix before assigning the project. Unknown prefixes are treated as ordinary task text so normal colon usage does not block capture.
 
 ## 2026-09-07: Todos Have One Primary Project
 
