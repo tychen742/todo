@@ -285,8 +285,8 @@ Reason: users need to sort by task text, priority, project, status, and due date
 
 Implementation rules:
 
-- Use the visible `TASK` and `Due` labels as clickable sort headers.
-- Use blank but accessible hit targets over compact icon columns for Priority, Project, and Status.
+- Use the visible `TASK` label as a clickable sort header.
+- Use blank but accessible hit targets over compact columns for Priority, Project, Status, and Due Date.
 - Highlight a header target only on hover or when active.
 - Show an up/down arrow only for the active sort column.
 - Task-text sorting keeps priority groups first, then sorts alphabetically within each priority group.

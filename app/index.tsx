@@ -4831,19 +4831,7 @@ export default function HomeScreen() {
                     {renderIconSortHeader('project', 'Sort by project', styles.sortColProject)}
                     {renderIconSortHeader('status', 'Sort by status', styles.sortColStatus)}
                   </View>
-                  <Pressable
-                    onPress={() => toggleSort('due_date')}
-                    onHoverIn={() => setHoveredSortField('due_date')}
-                    onHoverOut={() => setHoveredSortField((current) => current === 'due_date' ? null : current)}
-                    style={[
-                      styles.sortColDue,
-                      styles.sortColInner,
-                      hoveredSortField === 'due_date' && styles.sortTextHeaderHovered,
-                    ]}
-                  >
-                    <Text style={[styles.sortColLabel, sortField === 'due_date' && styles.sortColLabelActive]}>Due</Text>
-                    {sortField === 'due_date' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortIndicatorFor('due_date')}</Text>}
-                  </Pressable>
+                  {renderIconSortHeader('due_date', 'Sort by due date', styles.sortColDue)}
                   <View style={styles.sortColAgeGap} />
                   <View style={styles.sortArchiveGap} />
                 </View>
