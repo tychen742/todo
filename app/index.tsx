@@ -98,7 +98,7 @@ type Profile = {
 type ProfileSummary = Pick<Profile, 'id' | 'email' | 'display_name'>;
 
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
-type SortField = 'text' | 'priority' | 'status' | 'project' | 'due_date' | 'created_at';
+type SortField = 'text' | 'priority' | 'assigned_by' | 'status' | 'project' | 'due_date' | 'age' | 'created_at';
 type CreateTarget = 'team' | 'organization' | 'project';
 type ProjectViewMode = 'plan' | 'kanban';
 type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
@@ -121,6 +121,18 @@ const workspaceInboxColumnWidth = 340;
 const workspacePaneGap = 12;
 const workspaceBoardPadding = 12;
 const completedDropTargetId = 'todo-completed-drop-target';
+const taskHandleColumnWidth = 32;
+const taskCheckboxColumnWidth = 30;
+const taskPriorityColumnWidth = 48;
+const taskPriorityColumnMarginLeft = 8;
+const taskStatusColumnWidth = 56;
+const taskStatusColumnMarginLeft = 8;
+const taskDueColumnWidth = 50;
+const taskDueColumnMarginLeft = 8;
+const taskAgeColumnWidth = 46;
+const taskArchiveColumnWidth = 20;
+const taskArchiveColumnMarginLeft = 2;
+const taskRowPaddingRight = 2;
 const webAppUrl = 'https://todo-eight-gamma.vercel.app';
 const oauthReturnStorageKey = 'todo:oauth-return-to-production';
 
@@ -861,6 +873,9 @@ export default function HomeScreen() {
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
+  const accountDisplayName = profile
+    ? profileDisplayName(profile)
+    : emailDisplayName(session?.user.email);
   const todoScopeKey = selectedProjectId
     ? `project:${selectedProjectId}`
     : selectedTeamId
@@ -888,6 +903,10 @@ export default function HomeScreen() {
     if (!project) return undefined;
     return projectAvatarFor(project);
   }
+  const memberById = useMemo(
+    () => new Map(members.map((member) => [member.user_id, member])),
+    [members]
+  );
   const active = useMemo(() => {
     const items = todos.filter((t) => !t.done);
     if (!sortField) return items;
@@ -902,6 +921,13 @@ export default function HomeScreen() {
       if (todo.started_work_at) return 'doing';
       return workflowStageForTodo(todo);
     };
+    const assignedByNameForTodo = (todo: Todo) => {
+      if (!todo.assigned_to || !todo.created_by) return '';
+      if (todo.created_by === session?.user.id) return accountDisplayName.toLowerCase();
+      const creator = memberById.get(todo.created_by);
+      return creator ? profileDisplayName(creator).toLowerCase() : '';
+    };
+    const ageTimestampForTodo = (todo: Todo) => Date.parse(todo.assigned_at ?? todo.created_at);
     return [...items].sort((a, b) => {
       let delta = 0;
       if (sortField === 'text') {
@@ -919,6 +945,14 @@ export default function HomeScreen() {
         if (!aProjectName && bProjectName) delta = 1;
         else if (aProjectName && !bProjectName) delta = -1;
         else delta = aProjectName.localeCompare(bProjectName);
+      } else if (sortField === 'assigned_by') {
+        const aAssignedBy = assignedByNameForTodo(a);
+        const bAssignedBy = assignedByNameForTodo(b);
+        if (!aAssignedBy && bAssignedBy) delta = 1;
+        else if (aAssignedBy && !bAssignedBy) delta = -1;
+        else delta = aAssignedBy.localeCompare(bAssignedBy);
+      } else if (sortField === 'age') {
+        delta = ageTimestampForTodo(a) - ageTimestampForTodo(b);
       } else if (sortField === 'due_date') {
         delta =
           (a.due_date ? Date.parse(a.due_date) : Infinity) -
@@ -932,14 +966,10 @@ export default function HomeScreen() {
       if (delta === 0) delta = a.text.localeCompare(b.text);
       return sortDir === 'asc' ? delta : -delta;
     });
-  }, [todos, sortField, sortDir, projects, selectedProject]);
+  }, [todos, sortField, sortDir, projects, selectedProject, session?.user.id, accountDisplayName, memberById]);
 
   const done = useMemo(() => todos.filter((t) => t.done), [todos]);
   const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
-  const memberById = useMemo(
-    () => new Map(members.map((member) => [member.user_id, member])),
-    [members]
-  );
   const selectedProjectOwner = useMemo(() => {
     if (!selectedProject?.created_by) return null;
     return memberById.get(selectedProject.created_by) ?? null;
@@ -1103,9 +1133,6 @@ export default function HomeScreen() {
         ),
       }
     : null;
-  const accountDisplayName = profile
-    ? profileDisplayName(profile)
-    : emailDisplayName(session?.user.email);
   const editAssigneeOptions = useMemo<Member[]>(() => {
     const options = [...members];
     const isPersonalTodo = !editTodo?.team_id && !editTodo?.project_id;
@@ -4826,13 +4853,16 @@ export default function HomeScreen() {
                     <Text style={[styles.sortColLabel, sortField === 'text' && styles.sortColLabelActive]}>TASK ({active.length})</Text>
                     {sortField === 'text' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortIndicatorFor('text')}</Text>}
                   </Pressable>
-                  {renderIconSortHeader('priority', 'Sort by priority', styles.sortColPriority)}
+                  <View style={styles.sortPriorityGroup}>
+                    {renderIconSortHeader('priority', 'Sort by priority', styles.sortColPriority)}
+                    {renderIconSortHeader('assigned_by', 'Sort by assigned by', styles.sortColAssignedBy)}
+                  </View>
                   <View style={styles.sortStatusGap}>
                     {renderIconSortHeader('project', 'Sort by project', styles.sortColProject)}
                     {renderIconSortHeader('status', 'Sort by status', styles.sortColStatus)}
                   </View>
                   {renderIconSortHeader('due_date', 'Sort by due date', styles.sortColDue)}
-                  <View style={styles.sortColAgeGap} />
+                  {renderIconSortHeader('age', 'Sort by task age', styles.sortColAgeGap)}
                   <View style={styles.sortArchiveGap} />
                 </View>
 
@@ -8052,17 +8082,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     height: taskHeaderHeight,
-    paddingRight: 16,
+    paddingRight: taskRowPaddingRight,
     borderBottomWidth: 1,
     borderBottomColor: '#d1d5db',
     backgroundColor: '#f3f4f6',
   },
   sortHandleSpacer: {
-    width: 32,
+    width: taskHandleColumnWidth,
     flexShrink: 0,
   },
   sortCheckboxSpacer: {
-    width: 30,
+    width: taskCheckboxColumnWidth,
     flexShrink: 0,
   },
   sortColInner: {
@@ -8090,14 +8120,25 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 20,
   },
+  sortPriorityGroup: {
+    width: taskPriorityColumnWidth,
+    marginLeft: taskPriorityColumnMarginLeft,
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   sortColPriority: {
-    width: 48,
-    marginLeft: 8,
+    width: 20,
+    flexShrink: 0,
+  },
+  sortColAssignedBy: {
+    width: 20,
     flexShrink: 0,
   },
   sortStatusGap: {
-    width: 56,
-    marginLeft: 8,
+    width: taskStatusColumnWidth,
+    marginLeft: taskStatusColumnMarginLeft,
     flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
@@ -8117,18 +8158,18 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   sortColDue: {
-    width: 50,
-    marginLeft: 8,
+    width: taskDueColumnWidth,
+    marginLeft: taskDueColumnMarginLeft,
     height: 20,
   },
   sortColAgeGap: {
-    width: 46,
+    width: taskAgeColumnWidth,
     marginLeft: 0,
     flexShrink: 0,
   },
   sortArchiveGap: {
-    width: 22,
-    marginLeft: 2,
+    width: taskArchiveColumnWidth,
+    marginLeft: taskArchiveColumnMarginLeft,
     flexShrink: 0,
   },
   sortColAdded: {

@@ -281,15 +281,18 @@ Implementation rules:
 
 Decision: Task pane column headers should support sorting without adding a toolbar or visible icon clutter.
 
-Reason: users need to sort by task text, priority, project, status, and due date, but the pane should not feel like a dense spreadsheet. Existing row columns already communicate the available sort dimensions.
+Reason: users need to sort by task text, priority, assigned-by, project, status, due date, and task age, but the pane should not feel like a dense spreadsheet. Existing row columns already communicate the available sort dimensions.
 
 Implementation rules:
 
 - Use the visible `TASK` label as a clickable sort header.
-- Use blank but accessible hit targets over compact columns for Priority, Project, Status, and Due Date.
+- Use blank but accessible hit targets over compact columns for Priority, Assigned By, Project, Status, Due Date, and Task Age.
 - Highlight a header target only on hover or when active.
 - Show an up/down arrow only for the active sort column.
+- Header column widths and margins must mirror task-row column widths; avoid header-only padding that shifts the sort targets.
 - Task-text sorting keeps priority groups first, then sorts alphabetically within each priority group.
+- Status sorting ranks currently working tasks first, then review, backlog, and done.
+- Task Age sorting uses the timestamp shown in the row: `assigned_at` when present, otherwise `created_at`.
 - Dragging after a header sort exits sorted view and returns to manual ordering.
 
 ## 2026-06-11: Project Plan and Kanban Are Separate Axes
