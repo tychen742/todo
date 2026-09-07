@@ -277,6 +277,21 @@ Implementation rules:
 - On web, dropping an active task onto the Completed pane marks that task complete.
 - If a platform cannot support a drag destination yet, reserve the layout space but do not show a handle glyph as if it were actionable.
 
+## 2026-09-07: Task Pane Headers Are Quiet Sort Controls
+
+Decision: Task pane column headers should support sorting without adding a toolbar or visible icon clutter.
+
+Reason: users need to sort by task text, priority, project, status, and due date, but the pane should not feel like a dense spreadsheet. Existing row columns already communicate the available sort dimensions.
+
+Implementation rules:
+
+- Use the visible `TASK` and `Due` labels as clickable sort headers.
+- Use blank but accessible hit targets over compact icon columns for Priority, Project, and Status.
+- Highlight a header target only on hover or when active.
+- Show an up/down arrow only for the active sort column.
+- Task-text sorting keeps priority groups first, then sorts alphabetically within each priority group.
+- Dragging after a header sort exits sorted view and returns to manual ordering.
+
 ## 2026-06-11: Project Plan and Kanban Are Separate Axes
 
 Decision: project Plan and Kanban workflow are separate fields.

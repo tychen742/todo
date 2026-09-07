@@ -98,7 +98,7 @@ type Profile = {
 type ProfileSummary = Pick<Profile, 'id' | 'email' | 'display_name'>;
 
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
-type SortField = 'text' | 'priority' | 'due_date' | 'created_at';
+type SortField = 'text' | 'priority' | 'status' | 'project' | 'due_date' | 'created_at';
 type CreateTarget = 'team' | 'organization' | 'project';
 type ProjectViewMode = 'plan' | 'kanban';
 type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
@@ -129,6 +129,13 @@ const priorityRank: Record<Priority, number> = {
   high: 1,
   normal: 2,
   low: 3,
+};
+
+const workflowSortRank: Record<WorkflowLaneKey, number> = {
+  doing: 0,
+  review: 1,
+  backlog: 2,
+  done: 3,
 };
 
 const priorityColors: Record<Priority, string> = {
@@ -762,6 +769,7 @@ export default function HomeScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [hoveredSortField, setHoveredSortField] = useState<SortField | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -883,22 +891,48 @@ export default function HomeScreen() {
   const active = useMemo(() => {
     const items = todos.filter((t) => !t.done);
     if (!sortField) return items;
+    const projectNameForTodo = (todo: Todo) => {
+      const project = todo.project_id
+        ? projects.find((item) => item.id === todo.project_id)
+        : selectedProject;
+      return project?.name.toLowerCase() ?? '';
+    };
+    const statusForTodo = (todo: Todo): WorkflowLaneKey => {
+      if (todo.done) return 'done';
+      if (todo.started_work_at) return 'doing';
+      return workflowStageForTodo(todo);
+    };
     return [...items].sort((a, b) => {
-      if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
-      if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
       let delta = 0;
-      if (sortField === 'text') delta = a.text.localeCompare(b.text);
-      else if (sortField === 'priority') delta = priorityRank[a.priority] - priorityRank[b.priority];
-      else if (sortField === 'due_date') {
+      if (sortField === 'text') {
+        const priorityDelta = priorityRank[a.priority] - priorityRank[b.priority];
+        if (priorityDelta !== 0) return priorityDelta;
+        delta = a.text.localeCompare(b.text);
+        return sortDir === 'asc' ? delta : -delta;
+      } else if (sortField === 'priority') {
+        delta = priorityRank[a.priority] - priorityRank[b.priority];
+      } else if (sortField === 'status') {
+        delta = workflowSortRank[statusForTodo(a)] - workflowSortRank[statusForTodo(b)];
+      } else if (sortField === 'project') {
+        const aProjectName = projectNameForTodo(a);
+        const bProjectName = projectNameForTodo(b);
+        if (!aProjectName && bProjectName) delta = 1;
+        else if (aProjectName && !bProjectName) delta = -1;
+        else delta = aProjectName.localeCompare(bProjectName);
+      } else if (sortField === 'due_date') {
         delta =
           (a.due_date ? Date.parse(a.due_date) : Infinity) -
           (b.due_date ? Date.parse(b.due_date) : Infinity);
       } else {
         delta = Date.parse(a.created_at) - Date.parse(b.created_at);
       }
+      if (delta === 0 && sortField !== 'priority') {
+        delta = priorityRank[a.priority] - priorityRank[b.priority];
+      }
+      if (delta === 0) delta = a.text.localeCompare(b.text);
       return sortDir === 'asc' ? delta : -delta;
     });
-  }, [todos, sortField, sortDir]);
+  }, [todos, sortField, sortDir, projects, selectedProject]);
 
   const done = useMemo(() => todos.filter((t) => t.done), [todos]);
   const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
@@ -3077,6 +3111,35 @@ export default function HomeScreen() {
     }
   }
 
+  function sortIndicatorFor(field: SortField) {
+    if (sortField !== field) return '';
+    return sortDir === 'asc' ? '↑' : '↓';
+  }
+
+  function renderIconSortHeader(field: SortField, label: string, style: object) {
+    const isActiveSort = sortField === field;
+    const isHovered = hoveredSortField === field;
+    return (
+      <Pressable
+        onPress={() => toggleSort(field)}
+        onHoverIn={() => setHoveredSortField(field)}
+        onHoverOut={() => setHoveredSortField((current) => current === field ? null : current)}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={[
+          style,
+          styles.sortIconHeader,
+          isHovered && styles.sortIconHeaderHovered,
+          isActiveSort && styles.sortIconHeaderActive,
+        ]}
+      >
+        <Text style={[styles.sortColIndicator, isActiveSort && styles.sortColLabelActive]}>
+          {sortIndicatorFor(field)}
+        </Text>
+      </Pressable>
+    );
+  }
+
   function assigneeLabel(userId: string | null) {
     if (isPersonal) return '';
     if (!userId) return 'Unassigned';
@@ -4750,15 +4813,36 @@ export default function HomeScreen() {
                 <View style={styles.sortBar}>
                   {Platform.OS === 'web' && <View style={styles.sortHandleSpacer} />}
                   <View style={styles.sortCheckboxSpacer} />
-                  <Pressable onPress={() => toggleSort('text')} style={[styles.sortColTask, styles.sortColInner]}>
+                  <Pressable
+                    onPress={() => toggleSort('text')}
+                    onHoverIn={() => setHoveredSortField('text')}
+                    onHoverOut={() => setHoveredSortField((current) => current === 'text' ? null : current)}
+                    style={[
+                      styles.sortColTask,
+                      styles.sortColInner,
+                      hoveredSortField === 'text' && styles.sortTextHeaderHovered,
+                    ]}
+                  >
                     <Text style={[styles.sortColLabel, sortField === 'text' && styles.sortColLabelActive]}>TASK ({active.length})</Text>
-                    {sortField === 'text' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
+                    {sortField === 'text' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortIndicatorFor('text')}</Text>}
                   </Pressable>
-                  <View style={[styles.sortColPriority, { flexShrink: 0 }]} />
-                  <View style={styles.sortStatusGap} />
-                  <Pressable onPress={() => toggleSort('due_date')} style={[styles.sortColDue, styles.sortColInner]}>
+                  {renderIconSortHeader('priority', 'Sort by priority', styles.sortColPriority)}
+                  <View style={styles.sortStatusGap}>
+                    {renderIconSortHeader('project', 'Sort by project', styles.sortColProject)}
+                    {renderIconSortHeader('status', 'Sort by status', styles.sortColStatus)}
+                  </View>
+                  <Pressable
+                    onPress={() => toggleSort('due_date')}
+                    onHoverIn={() => setHoveredSortField('due_date')}
+                    onHoverOut={() => setHoveredSortField((current) => current === 'due_date' ? null : current)}
+                    style={[
+                      styles.sortColDue,
+                      styles.sortColInner,
+                      hoveredSortField === 'due_date' && styles.sortTextHeaderHovered,
+                    ]}
+                  >
                     <Text style={[styles.sortColLabel, sortField === 'due_date' && styles.sortColLabelActive]}>Due</Text>
-                    {sortField === 'due_date' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortDir === 'asc' ? '↑' : '↓'}</Text>}
+                    {sortField === 'due_date' && <Text style={[styles.sortColIndicator, styles.sortColLabelActive]}>{sortIndicatorFor('due_date')}</Text>}
                   </Pressable>
                   <View style={styles.sortColAgeGap} />
                   <View style={styles.sortArchiveGap} />
@@ -7998,16 +8082,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
   },
+  sortTextHeaderHovered: {
+    backgroundColor: '#eef2ff',
+    borderRadius: 5,
+  },
+  sortIconHeader: {
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 5,
+  },
+  sortIconHeaderHovered: {
+    backgroundColor: '#eef2ff',
+  },
+  sortIconHeaderActive: {
+    backgroundColor: '#e0e7ff',
+  },
   sortColTask: {
     flex: 1,
+    height: 20,
+    paddingLeft: 4,
   },
   sortColPriority: {
     width: 48,
     marginLeft: 8,
+    flexShrink: 0,
   },
   sortStatusGap: {
     width: 56,
     marginLeft: 8,
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  sortColProject: {
+    width: 18,
+    flexShrink: 0,
+  },
+  sortColStatus: {
+    width: 18,
     flexShrink: 0,
   },
   prioritySortSquare: {
@@ -8019,6 +8133,7 @@ const styles = StyleSheet.create({
     width: 50,
     marginLeft: 8,
     paddingLeft: 6,
+    height: 20,
   },
   sortColAgeGap: {
     width: 46,
