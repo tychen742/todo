@@ -8101,7 +8101,6 @@ const styles = StyleSheet.create({
   sortColTask: {
     flex: 1,
     height: 20,
-    paddingLeft: 4,
   },
   sortColPriority: {
     width: 48,
@@ -8132,7 +8131,6 @@ const styles = StyleSheet.create({
   sortColDue: {
     width: 50,
     marginLeft: 8,
-    paddingLeft: 6,
     height: 20,
   },
   sortColAgeGap: {
@@ -8141,7 +8139,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   sortArchiveGap: {
-    width: 28,
+    width: 22,
     marginLeft: 2,
     flexShrink: 0,
   },
