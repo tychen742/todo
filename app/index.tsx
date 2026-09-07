@@ -105,8 +105,8 @@ type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
 type CalendarViewMode = 'day' | 'week' | 'month';
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
-const priorityPopoverWidth = 156;
-const priorityPopoverHeight = 172;
+const priorityPopoverWidth = 120;
+const priorityPopoverHeight = 108;
 const defaultVisibleTaskRows = 5;
 const todoRowHeight = 70;
 type Density = 'compact' | 'cozy' | 'roomy';
@@ -7727,7 +7727,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   priorityPopoverOption: {
-    height: 38,
+    height: 24,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,

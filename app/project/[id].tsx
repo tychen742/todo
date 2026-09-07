@@ -52,8 +52,8 @@ type Todo = {
 };
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
-const priorityPopoverWidth = 156;
-const priorityPopoverHeight = 172;
+const priorityPopoverWidth = 120;
+const priorityPopoverHeight = 108;
 const MAX_PROJECT_PHASES = 5;
 const projectAvatarColors = ['#e74c3c', '#e67e22', '#16a34a', '#2563eb', '#7c3aed', '#db2777', '#0891b2', '#d97706'];
 
@@ -1107,7 +1107,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   priorityPopoverOption: {
-    height: 38,
+    height: 24,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
