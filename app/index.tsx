@@ -1310,7 +1310,7 @@ export default function HomeScreen() {
       } else if (session) {
         const personalProjectIds = projects.filter((p) => p.team_id === null && p.created_by === session.user.id).map((p) => p.id);
         const orClauses = [
-          `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id})`,
+          `and(team_id.is.null,created_by.eq.${session.user.id})`,
           `and(assigned_to.eq.${session.user.id},accepted_at.not.is.null)`
         ];
         if (personalProjectIds.length > 0) {
@@ -1341,6 +1341,7 @@ export default function HomeScreen() {
       .from('todos')
       .select(todoSelectColumns)
       .eq('assigned_to', session.user.id)
+      .neq('created_by', session.user.id)
       .is('accepted_at', null)
       .is('archived_at', null)
       .eq('done', false)
@@ -1368,7 +1369,7 @@ export default function HomeScreen() {
     } else if (session) {
       const personalProjectIds = projects.filter((p) => p.team_id === null && p.created_by === session.user.id).map((p) => p.id);
       const orClauses = [
-        `and(team_id.is.null,project_id.is.null,created_by.eq.${session.user.id})`,
+        `and(team_id.is.null,created_by.eq.${session.user.id})`,
         `and(assigned_to.eq.${session.user.id})`
       ];
       if (personalProjectIds.length > 0) {
@@ -2166,6 +2167,7 @@ export default function HomeScreen() {
     const text = input.trim();
     if (!text || !session) return;
     const assignedTo = selectedTeamId && !isProject ? newTodoAssignee : null;
+    const assignedAt = assignedTo ? new Date().toISOString() : null;
 
     const { data, error: insertError } = await supabase
       .from('todos')
@@ -2175,7 +2177,8 @@ export default function HomeScreen() {
         project_id: selectedProjectId,
         created_by: session.user.id,
         assigned_to: assignedTo,
-        assigned_at: assignedTo ? new Date().toISOString() : null,
+        assigned_at: assignedAt,
+        accepted_at: assignedTo === session.user.id ? assignedAt : null,
         priority: 'normal',
         workflow_status: 'backlog',
       })
@@ -2201,6 +2204,7 @@ export default function HomeScreen() {
 
     const assigned_to = columnAssignees[key] ?? null;
     const assigned_at = assigned_to ? new Date().toISOString() : null;
+    const accepted_at = assigned_to === session.user.id ? assigned_at : null;
 
     const { data, error: insertError } = await supabase
       .from('todos')
@@ -2211,6 +2215,7 @@ export default function HomeScreen() {
         created_by: session.user.id,
         assigned_to,
         assigned_at,
+        accepted_at,
         priority: 'normal',
         workflow_status: 'backlog',
       })
@@ -2268,10 +2273,11 @@ export default function HomeScreen() {
   }
 
   async function setAssignee(todo: Todo, userId: string | null) {
+    const assignedAt = userId ? new Date().toISOString() : null;
     const updates = {
       assigned_to: userId,
-      assigned_at: userId ? new Date().toISOString() : null,
-      accepted_at: null,
+      assigned_at: assignedAt,
+      accepted_at: userId === session?.user.id ? assignedAt : null,
     };
     const { error: updateError } = await supabase
       .from('todos')
@@ -2306,12 +2312,17 @@ export default function HomeScreen() {
   async function confirmAssignment() {
     if (!assigneeTodo) return;
     const assigneeChanged = assigneePickerUserId !== assigneeTodo.assigned_to;
+    const assignedAt = assigneeChanged
+      ? (assigneePickerUserId ? new Date().toISOString() : null)
+      : assigneeTodo.assigned_at;
     const updates = {
       assigned_to: assigneePickerUserId,
       due_date: assigneePickerDueDate,
       priority: assigneePickerPriority,
-      assigned_at: assigneeChanged ? (assigneePickerUserId ? new Date().toISOString() : null) : assigneeTodo.assigned_at,
-      accepted_at: assigneeChanged ? null : assigneeTodo.accepted_at,
+      assigned_at: assignedAt,
+      accepted_at: assigneeChanged
+        ? (assigneePickerUserId === session?.user.id ? assignedAt : null)
+        : assigneeTodo.accepted_at,
     };
     const { error: updateError } = await supabase.from('todos').update(updates).eq('id', assigneeTodo.id);
     if (updateError) { setError(updateError.message); return; }
@@ -2501,7 +2512,9 @@ export default function HomeScreen() {
     const assigned_at = assigneeChanged
       ? (assigned_to ? new Date().toISOString() : null)
       : editTodo.assigned_at;
-    const accepted_at = assigneeChanged ? null : editTodo.accepted_at;
+    const accepted_at = assigneeChanged
+      ? (assigned_to === session?.user.id ? assigned_at : null)
+      : editTodo.accepted_at;
 
     const { error: updateError } = await supabase
       .from('todos')

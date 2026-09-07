@@ -93,6 +93,7 @@ Deleting a project phase sets affected todo `phase_id` values to `null`, which m
 
 Personal todos have `team_id = null`. Team todos have `team_id` set and can be assigned to a team member.
 Assigned tasks start as incoming work until the assignee accepts them. `assigned_at` records when the task was assigned, `accepted_at` records when the assignee accepted it into their todo list, and `completed_at` records when the task was marked done.
+When the creator assigns a task to themself, the app sets `accepted_at` immediately so the task stays in Todos instead of appearing in Inbox.
 
 `due_date` is optional. Todos without a due date should store `null`.
 

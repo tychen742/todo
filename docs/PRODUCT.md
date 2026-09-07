@@ -32,6 +32,21 @@ The product should compete through simplicity and genuine usefulness — a tool 
 - **Customization**: user, team, and company branding such as logos, colors, and workspace appearance.
 - **Business Model**: free personal and small-team use, with paid upgrades for advanced features.
 
+## Workspace and Project Interplay
+
+Workspace and Projects are two views over the same work, not separate task systems.
+
+Workspace is the execution surface for todos. It is where a user quickly captures work, reviews what is active, changes priority or due dates, starts work, and completes tasks. A todo created in Workspace can later be attached to a project. When that happens, it stays visible in Workspace and also appears in the project's Backlog until it is placed into a phase.
+
+Projects are the planning surface for bounded work. A user can plan inside a project by creating backlog items, phase tasks, milestones, and Kanban work. Those items are still todos. When a project task is assigned to or owned by the current user, it should surface in Workspace so the user can execute it alongside personal work.
+
+The product model is therefore bidirectional:
+
+- Workspace → Project: quick-captured todos can be organized into projects later.
+- Project → Workspace: planned project tasks become actionable todos in the user's Workspace.
+
+This interplay is core to the app. Users should not have to choose between "todo mode" and "project mode." Todos are the unit of work; projects add planning context, phases, milestones, and workflow state around those todos.
+
 ## People Model: Members vs Collaborators
 
 There are two distinct participation types in this product:
@@ -92,6 +107,9 @@ Rules:
 - Team pages should support co-editing one page of shared team context, closer to a lightweight team dashboard than a formal document.
 - Team pages should reduce the need to maintain separate Google Docs or Sheets for basic shared notes, links, status, and coordination.
 - Projects are bounded and should support lifecycle states such as active, paused, completed, and closed.
+- Projects add planning context to todos; they do not create a separate class of work item.
+- Todos created in Workspace should stay in Workspace when attached to a project, while also becoming part of the project's Backlog or phase plan.
+- Todos created in Projects should appear in Workspace when they belong to the signed-in user's active work.
 - Projects should support lifecycle planning through phases, milestones, schedule views, and critical path identification.
 - Project names should be editable from an explicit project planning or settings surface rather than relying on double-click, because project naming is tied to planning metadata and must work well on mobile.
 - Project phase columns should be editable and deletable per project. Deleting a phase moves its tasks back to Backlog, and every project must keep at least one phase column.

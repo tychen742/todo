@@ -52,6 +52,8 @@ Reason: both web and iPhone clients talk directly to Supabase, so database polic
 - `declined_at` set → task removed from Inbox; assigner is notified and can reassign or modify
 - `archived_at` set → task hidden from all active views; recoverable from an Archived section
 
+**Self-assignment rule:** A task assigned to the signed-in user by that same user is accepted immediately. Inbox is for incoming work from someone else, not a holding area for tasks the user created for themself.
+
 **Pre-acceptance rule:** Before a task is accepted, the assignee cannot mutate any task field (priority, due date, text, phase). The only actions available are: comment, accept, or decline.
 
 **Communication mechanism (Task Thread):** Every task has a comment thread (`task_comments` table). Comments are available to all parties at any lifecycle stage, including before acceptance. This is the channel for negotiation, clarification, and coordination. It is NOT a general chat — it is scoped strictly to the task.
@@ -222,6 +224,8 @@ Decision: normal TASK list rows should show a compact Kanban-stage icon when the
 Reason: accepted project tasks can appear in a user's personal todo list, so the row must reveal whether the task is in Backlog, Doing, Review, or Done without forcing the user to open the project board.
 
 Project-scoped rows also show a deterministic project avatar derived from the project name and id. This keeps project identity visible in mixed personal/workspace task lists without adding avatar storage to the schema.
+
+Todos created in the personal Workspace stay in the personal Workspace when a project is attached. The same todo also appears in the project Backlog until it is moved into a phase.
 
 Implementation rules:
 
