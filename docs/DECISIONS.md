@@ -264,6 +264,19 @@ Implementation rules:
 - Do not add a project/todo join table until there is a proven product need.
 - Cross-project work should be represented as related todos, blockers, dependencies, or references.
 
+## 2026-09-07: Drag Handles Are Functional Controls
+
+Decision: task-row drag handles should remain visible and functional across default and sorted task views.
+
+Reason: users interpret the dotted handle as a movement control. Hiding it after sorting makes the row layout inconsistent; showing it without behavior makes the control misleading.
+
+Implementation rules:
+
+- Workspace task rows keep the drag-handle column visible in default and sorted views.
+- Dragging within the active task list updates manual ordering and exits the sorted view so the user's new order is visible.
+- On web, dropping an active task onto the Completed pane marks that task complete.
+- If a platform cannot support a drag destination yet, reserve the layout space but do not show a handle glyph as if it were actionable.
+
 ## 2026-06-11: Project Plan and Kanban Are Separate Axes
 
 Decision: project Plan and Kanban workflow are separate fields.

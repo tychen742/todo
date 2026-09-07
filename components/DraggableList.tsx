@@ -12,6 +12,8 @@ type Props<T> = {
   keyExtractor: (item: T) => string;
   renderItem: (params: DragRenderItem<T>) => React.ReactElement | null;
   onDragEnd: (data: T[]) => void;
+  onExternalDrop?: (item: T, targetId: string) => void;
+  externalDropTargetId?: string;
   draggable?: boolean;
   ListHeaderComponent?: React.ReactElement | null;
   ListFooterComponent?: React.ReactElement | null;

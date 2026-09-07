@@ -29,6 +29,8 @@ type Props<T> = {
   keyExtractor: (item: T) => string;
   renderItem: (params: DragRenderItem<T>) => React.ReactElement | null;
   onDragEnd: (data: T[]) => void;
+  onExternalDrop?: (item: T, targetId: string) => void;
+  externalDropTargetId?: string;
   draggable?: boolean;
   ListHeaderComponent?: React.ReactElement | null;
   ListFooterComponent?: React.ReactElement | null;
@@ -65,18 +67,18 @@ function SortableItem<T>({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    cursor: 'grab',
+    cursor: draggable ? 'grab' : 'default',
     color: '#d1d5db',
     fontSize: 18,
     userSelect: 'none',
     touchAction: 'none',
   };
 
+  const handleProps = draggable ? { ...listeners, ...attributes } : {};
+
   return (
     <div ref={setNodeRef} style={wrapperStyle}>
-      {draggable && (
-        <span {...listeners} {...attributes} style={handleStyle}>⠿</span>
-      )}
+      <span {...handleProps} style={handleStyle}>⠿</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         {renderItem({ item, drag: undefined, isActive: isDragging })}
       </div>
@@ -94,7 +96,10 @@ export function DraggableList<T>({
   ListFooterComponent,
   style,
   keyboardShouldPersistTaps,
+  onExternalDrop,
+  externalDropTargetId,
 }: Props<T>) {
+  const pointerPositionRef = React.useRef<{ x: number; y: number } | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -102,9 +107,40 @@ export function DraggableList<T>({
 
   const ids = data.map(keyExtractor);
 
+  React.useEffect(() => {
+    function trackPointer(event: PointerEvent) {
+      pointerPositionRef.current = { x: event.clientX, y: event.clientY };
+    }
+    function trackTouch(event: TouchEvent) {
+      const touch = event.touches[0] ?? event.changedTouches[0];
+      if (touch) pointerPositionRef.current = { x: touch.clientX, y: touch.clientY };
+    }
+
+    window.addEventListener('pointermove', trackPointer);
+    window.addEventListener('touchmove', trackTouch);
+    window.addEventListener('touchend', trackTouch);
+    return () => {
+      window.removeEventListener('pointermove', trackPointer);
+      window.removeEventListener('touchmove', trackTouch);
+      window.removeEventListener('touchend', trackTouch);
+    };
+  }, []);
+
   function handleDragEnd({ active, over }: DragEndEvent) {
+    const oldIndex = ids.indexOf(active.id as string);
+    if (oldIndex < 0) return;
+
+    const pointerPosition = pointerPositionRef.current;
+    if (pointerPosition && externalDropTargetId && onExternalDrop) {
+      const target = document.getElementById(externalDropTargetId);
+      const dropElement = document.elementFromPoint(pointerPosition.x, pointerPosition.y);
+      if (target && dropElement && target.contains(dropElement)) {
+        onExternalDrop(data[oldIndex], externalDropTargetId);
+        return;
+      }
+    }
+
     if (over && active.id !== over.id) {
-      const oldIndex = ids.indexOf(active.id as string);
       const newIndex = ids.indexOf(over.id as string);
       onDragEnd(arrayMove(data, oldIndex, newIndex));
     }

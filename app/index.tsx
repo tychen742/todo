@@ -120,6 +120,7 @@ const workspaceContentMaxWidth = 960;
 const workspaceInboxColumnWidth = 340;
 const workspacePaneGap = 12;
 const workspaceBoardPadding = 12;
+const completedDropTargetId = 'todo-completed-drop-target';
 const webAppUrl = 'https://todo-eight-gamma.vercel.app';
 const oauthReturnStorageKey = 'todo:oauth-return-to-production';
 
@@ -2702,6 +2703,9 @@ export default function HomeScreen() {
   }
 
   async function handleDragEnd(reorderedActive: Todo[]) {
+    if (sortField) {
+      setSortField(null);
+    }
     const positionMap = new Map(reorderedActive.map((todo, index) => [todo.id, index]));
 
     setTodos((prev) =>
@@ -2720,6 +2724,32 @@ export default function HomeScreen() {
     if (batchError) {
       setError(batchError.message);
     }
+  }
+
+  async function completeTodoFromDrag(todo: Todo) {
+    if (todo.done) return;
+    const completed_at = new Date().toISOString();
+    const workflow_status: WorkflowLaneKey = 'done';
+
+    setTodos((prev) =>
+      sortTodos(prev.map((item) =>
+        item.id === todo.id ? { ...item, done: true, completed_at, workflow_status } : item
+      ))
+    );
+    setCompletedPaneTab('completed');
+
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ done: true, completed_at, workflow_status })
+      .eq('id', todo.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      setTodos((prev) => sortTodos(prev.map((item) => (item.id === todo.id ? todo : item))));
+      return;
+    }
+
+    setError('');
   }
 
   async function movePlanTodo(todoId: string, targetPhaseId: string | null, overTodoId: string | null) {
@@ -4718,7 +4748,7 @@ export default function HomeScreen() {
 
               <View style={styles.activeTasksBox}>
                 <View style={styles.sortBar}>
-                  {Platform.OS === 'web' && !sortField && <View style={styles.sortHandleSpacer} />}
+                  {Platform.OS === 'web' && <View style={styles.sortHandleSpacer} />}
                   <View style={styles.sortCheckboxSpacer} />
                   <Pressable onPress={() => toggleSort('text')} style={[styles.sortColTask, styles.sortColInner]}>
                     <Text style={[styles.sortColLabel, sortField === 'text' && styles.sortColLabelActive]}>TASK ({active.length})</Text>
@@ -4738,7 +4768,9 @@ export default function HomeScreen() {
                   data={active}
                   keyExtractor={(todo) => todo.id}
                   onDragEnd={handleDragEnd}
-                  draggable={!sortField}
+                  onExternalDrop={(todo) => completeTodoFromDrag(todo)}
+                  externalDropTargetId={completedDropTargetId}
+                  draggable
                   style={[styles.activeTasksList, { maxHeight: rowH * defaultVisibleTaskRows }]}
                   keyboardShouldPersistTaps="handled"
                   renderItem={({ item: todo, drag, isActive }) => {
@@ -4782,7 +4814,7 @@ export default function HomeScreen() {
               </View>
 
               {(done.length > 0 || archivedTodos.length > 0) && (
-                <View style={styles.completedBox}>
+                <View nativeID={completedDropTargetId} style={styles.completedBox}>
                   <View style={styles.completedBoxHeader}>
                     <Pressable
                       onPress={() => setCompletedPaneTab('completed')}
