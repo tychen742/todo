@@ -137,6 +137,7 @@ export default function TodoItem({
   const [archiveHovered, setArchiveHovered] = useState(false);
   const [statusHovered, setStatusHovered] = useState(false);
   const [projectHovered, setProjectHovered] = useState(false);
+  const [textHovered, setTextHovered] = useState(false);
   const [now] = useState(Date.now);
 
   const duePill = dueDatePill(dueDate);
@@ -186,7 +187,7 @@ export default function TodoItem({
   })();
 
   return (
-    <View style={[styles.rowOuter, isMilestone && styles.rowMilestone, isDragging && styles.rowDragging, isLate && styles.rowLate, (priorityHovered || ageHovered || dueDateHovered || statusHovered || projectHovered) && styles.rowTooltipActive]}>
+    <View style={[styles.rowOuter, isMilestone && styles.rowMilestone, isDragging && styles.rowDragging, isLate && styles.rowLate, (priorityHovered || ageHovered || dueDateHovered || statusHovered || projectHovered || textHovered) && styles.rowTooltipActive]}>
     <View style={[styles.row, { paddingVertical: rowPV, paddingRight: rowPaddingRight }]}>
       {!!onDrag && (
         <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
@@ -204,6 +205,8 @@ export default function TodoItem({
       <Pressable
         onPress={onOpenEdit}
         disabled={!onOpenEdit}
+        onHoverIn={() => setTextHovered(true)}
+        onHoverOut={() => setTextHovered(false)}
         style={styles.textWrap}
       >
         <View style={styles.textRow}>
@@ -231,6 +234,11 @@ export default function TodoItem({
           <Text style={styles.startScheduleText} numberOfLines={1}>
             {scheduledStartLabel}
           </Text>
+        )}
+        {textHovered && Platform.OS === 'web' && !!text && (
+          <View style={styles.textTooltip}>
+            <Text style={styles.tooltipText}>{text}</Text>
+          </View>
         )}
       </Pressable>
 
@@ -459,6 +467,7 @@ const styles = StyleSheet.create({
   textWrap: {
     flex: 1,
     minWidth: 0,
+    position: 'relative',
   },
   text: {
     fontSize: 15,
@@ -646,6 +655,18 @@ const styles = StyleSheet.create({
     zIndex: 100,
     minWidth: 80,
     alignItems: 'center',
+  },
+  textTooltip: {
+    position: 'absolute',
+    bottom: 26,
+    left: 0,
+    backgroundColor: '#374151',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 100,
+    maxWidth: 360,
+    alignItems: 'flex-start',
   },
   dueDateTooltip: {
     position: 'absolute',
