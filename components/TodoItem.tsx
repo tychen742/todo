@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Platform, Image } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform, Image, type GestureResponderEvent } from 'react-native';
 import { CircleCheck, Eye, SquareKanban, SquarePlay, Trash2 } from 'lucide-react-native';
 
 type KanbanStageKey = 'backlog' | 'doing' | 'review' | 'done';
@@ -27,7 +27,7 @@ type Props = {
   onOpenEdit?: () => void;
   onAssign?: () => void;
   onProject?: () => void;
-  onPriority?: () => void;
+  onPriority?: (event: GestureResponderEvent) => void;
   onDueDate?: () => void;
   onStartWork?: () => void;
   onPhase?: () => void;

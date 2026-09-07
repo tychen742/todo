@@ -9,6 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  useWindowDimensions,
+  type GestureResponderEvent,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -50,11 +52,20 @@ type Todo = {
 };
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
+const priorityPopoverWidth = 156;
+const priorityPopoverHeight = 172;
 const MAX_PROJECT_PHASES = 5;
 const projectAvatarColors = ['#e74c3c', '#e67e22', '#16a34a', '#2563eb', '#7c3aed', '#db2777', '#0891b2', '#d97706'];
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0, high: 1, normal: 2, low: 3,
+};
+
+const priorityColors: Record<Priority, string> = {
+  low: '#9ca3af',
+  normal: '#60a5fa',
+  high: '#f59e0b',
+  urgent: '#ef4444',
 };
 
 function sortTodos(items: Todo[]) {
@@ -125,6 +136,7 @@ function isSameDate(left: Date, right: Date) {
 
 export default function ProjectScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { width, height } = useWindowDimensions();
 
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -139,6 +151,7 @@ export default function ProjectScreen() {
   const [editDraftNote, setEditDraftNote] = useState('');
   const [editDraftPhaseId, setEditDraftPhaseId] = useState<string | null>(null);
   const [dueTodo, setDueTodo] = useState<Todo | null>(null);
+  const [priorityPicker, setPriorityPicker] = useState<{ todo: Todo; x: number; y: number } | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [phasePickerTodo, setPhasePickerTodo] = useState<Todo | null>(null);
   const [addingPhase, setAddingPhase] = useState(false);
@@ -181,6 +194,18 @@ export default function ProjectScreen() {
       .sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity))[0] ?? null;
   }, [todos]);
   const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const priorityPopoverPosition = priorityPicker
+    ? {
+        left: Math.min(
+          Math.max(8, priorityPicker.x - priorityPopoverWidth / 2),
+          Math.max(8, width - priorityPopoverWidth - 8)
+        ),
+        top: Math.min(
+          Math.max(8, priorityPicker.y + 10),
+          Math.max(8, height - priorityPopoverHeight - 8)
+        ),
+      }
+    : null;
   const projectAvatar = useMemo(() => {
     if (!project) return undefined;
     return {
@@ -308,11 +333,24 @@ export default function ProjectScreen() {
     setError('');
   }
 
-  async function cyclePriority(todo: Todo) {
-    const next = priorities[(priorities.indexOf(todo.priority) + 1) % priorities.length];
-    const { error: err } = await supabase.from('todos').update({ priority: next }).eq('id', todo.id);
+  function openPriorityPicker(todo: Todo, event: GestureResponderEvent) {
+    setPriorityPicker({
+      todo,
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY,
+    });
+  }
+
+  async function setTodoPriority(todo: Todo, priority: Priority) {
+    if (todo.priority === priority) {
+      setPriorityPicker(null);
+      return;
+    }
+
+    const { error: err } = await supabase.from('todos').update({ priority }).eq('id', todo.id);
     if (err) { setError(err.message); return; }
-    setTodos((prev) => sortTodos(prev.map((t) => (t.id === todo.id ? { ...t, priority: next } : t))));
+    setTodos((prev) => sortTodos(prev.map((t) => (t.id === todo.id ? { ...t, priority } : t))));
+    setPriorityPicker(null);
   }
 
   async function toggleMilestone(todo: Todo) {
@@ -524,7 +562,7 @@ export default function ProjectScreen() {
             projectAvatar={projectAvatar}
             onToggle={() => toggle(todo.id)}
             onOpenEdit={() => openEditModal(todo)}
-            onPriority={() => cyclePriority(todo)}
+            onPriority={(event) => openPriorityPicker(todo, event)}
             onDueDate={() => openDueCalendar(todo)}
             onPhase={() => setPhasePickerTodo(todo)}
             onArchive={() => archiveTodo(todo.id)}
@@ -564,7 +602,7 @@ export default function ProjectScreen() {
                     projectAvatar={projectAvatar}
                     onToggle={() => toggle(todo.id)}
                     onOpenEdit={() => openEditModal(todo)}
-                    onPriority={() => cyclePriority(todo)}
+                    onPriority={(event) => openPriorityPicker(todo, event)}
                     onDueDate={() => openDueCalendar(todo)}
                     onPhase={() => setPhasePickerTodo(todo)}
                     onArchive={() => archiveTodo(todo.id)}
@@ -598,6 +636,39 @@ export default function ProjectScreen() {
           </>
         }
       />
+
+      <Modal
+        visible={!!priorityPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPriorityPicker(null)}
+      >
+        <Pressable style={styles.popoverBackdrop} onPress={() => setPriorityPicker(null)}>
+          {priorityPicker && priorityPopoverPosition && (
+            <Pressable
+              style={[styles.priorityPopover, priorityPopoverPosition]}
+              onPress={(event) => event.stopPropagation()}
+            >
+              {priorities.map((priority) => {
+                const isActive = priorityPicker.todo.priority === priority;
+                return (
+                  <Pressable
+                    key={priority}
+                    onPress={() => setTodoPriority(priorityPicker.todo, priority)}
+                    style={[styles.priorityPopoverOption, isActive && styles.priorityPopoverOptionActive]}
+                  >
+                    <View style={[styles.priorityPopoverSwatch, { backgroundColor: priorityColors[priority] }]} />
+                    <Text style={[styles.priorityPopoverLabel, isActive && styles.priorityPopoverLabelActive]}>
+                      {priority[0].toUpperCase() + priority.slice(1)}
+                    </Text>
+                    {isActive && <Text style={styles.priorityPopoverCheck}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+            </Pressable>
+          )}
+        </Pressable>
+      </Modal>
 
       {/* Phase picker */}
       <Modal
@@ -1016,6 +1087,53 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  popoverBackdrop: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  priorityPopover: {
+    position: 'absolute',
+    width: priorityPopoverWidth,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  priorityPopoverOption: {
+    height: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  priorityPopoverOptionActive: {
+    backgroundColor: '#f3f4f6',
+  },
+  priorityPopoverSwatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+  },
+  priorityPopoverLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  priorityPopoverLabelActive: {
+    color: '#111827',
+  },
+  priorityPopoverCheck: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6366f1',
   },
   calendarCard: {
     backgroundColor: '#fff',

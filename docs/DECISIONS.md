@@ -86,7 +86,7 @@ Unchecked task checkboxes use a light gray outline (`#d1d5db`) and fill (`#f9faf
 
 Due date and age are a compact time group. Their fixed slots must stay close together and the corresponding header spacers must use the same widths so short due labels (`+`, `2d`, `-7d`) do not look disconnected from the age pill.
 
-Priority squares are fixed-position row controls and must show their priority level in a tooltip on hover.
+Priority squares are fixed-position row controls and must show their priority level in a tooltip on hover. On web, clicking the square opens a compact popover beside the row with Low, Normal, High, and Urgent choices. Selecting a choice saves immediately and closes the popover. On mobile, use a modal or bottom sheet for the same priority choice instead of a small anchored popover.
 
 Todo rows show the full task text in a hover tooltip on web. Rows stay
 single-line and fixed-height so dense task panels remain scannable, while
@@ -248,6 +248,8 @@ Implementation rules:
 - Attaching a project places that todo in the project's Backlog until `phase_id` is set.
 - A todo created in a project is still a normal todo and can appear in Workspace when it belongs to the signed-in user's active work.
 - Workspace rows for project todos must preserve project context, including project avatar and Kanban/workflow status.
+
+Quick-capture project routing should use a `to:` token in the add-todo text. The token resolves against system-generated project abbreviations first. If exactly one project abbreviation matches, the new todo is created with that `project_id` and the `to:` token is removed from the saved task text. If multiple projects share the same abbreviation, the app must not guess; it should require the full project name after `to:` before assigning the project.
 
 ## 2026-09-07: Todos Have One Primary Project
 

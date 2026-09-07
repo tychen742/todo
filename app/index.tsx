@@ -12,6 +12,7 @@ import {
   Modal,
   useWindowDimensions,
   Image,
+  type GestureResponderEvent,
 } from 'react-native';
 import { DraggableList } from '../components/DraggableList';
 import { KanbanDragItem, KanbanDragProvider, KanbanDropLane } from '../components/KanbanDrag';
@@ -104,6 +105,8 @@ type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
 type CalendarViewMode = 'day' | 'week' | 'month';
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
+const priorityPopoverWidth = 156;
+const priorityPopoverHeight = 172;
 const defaultVisibleTaskRows = 5;
 const todoRowHeight = 70;
 type Density = 'compact' | 'cozy' | 'roomy';
@@ -702,6 +705,7 @@ export default function HomeScreen() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState('');
   const [dueTodo, setDueTodo] = useState<Todo | null>(null);
+  const [priorityPicker, setPriorityPicker] = useState<{ todo: Todo; x: number; y: number } | null>(null);
   const [editTodo, setEditTodo] = useState<Todo | null>(null);
   const [editDraftText, setEditDraftText] = useState('');
   const [editDraftNote, setEditDraftNote] = useState('');
@@ -1003,6 +1007,18 @@ export default function HomeScreen() {
   const calendarViewSelectedDateNote = calendarViewNotes[calendarViewSelectedDateKey] ?? '';
   const assigneePickerCalendarDays = useMemo(() => buildCalendarDays(assigneePickerMonth), [assigneePickerMonth]);
   const editDraftCalendarDays = useMemo(() => buildCalendarDays(editDraftDueDateMonth), [editDraftDueDateMonth]);
+  const priorityPopoverPosition = priorityPicker
+    ? {
+        left: Math.min(
+          Math.max(8, priorityPicker.x - priorityPopoverWidth / 2),
+          Math.max(8, width - priorityPopoverWidth - 8)
+        ),
+        top: Math.min(
+          Math.max(8, priorityPicker.y + 10),
+          Math.max(8, height - priorityPopoverHeight - 8)
+        ),
+      }
+    : null;
   const accountDisplayName = profile
     ? profileDisplayName(profile)
     : emailDisplayName(session?.user.email);
@@ -2332,9 +2348,19 @@ export default function HomeScreen() {
     setError('');
   }
 
-  async function cyclePriority(todo: Todo) {
-    const currentIndex = priorities.indexOf(todo.priority);
-    const priority = priorities[(currentIndex + 1) % priorities.length];
+  function openPriorityPicker(todo: Todo, event: GestureResponderEvent) {
+    setPriorityPicker({
+      todo,
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY,
+    });
+  }
+
+  async function setTodoPriority(todo: Todo, priority: Priority) {
+    if (todo.priority === priority) {
+      setPriorityPicker(null);
+      return;
+    }
 
     const { error: updateError } = await supabase
       .from('todos')
@@ -2349,6 +2375,10 @@ export default function HomeScreen() {
     setTodos((prev) =>
       sortTodos(prev.map((item) => (item.id === todo.id ? { ...item, priority } : item)))
     );
+    setAssignedToMe((prev) =>
+      prev.map((item) => (item.id === todo.id ? { ...item, priority } : item))
+    );
+    setPriorityPicker(null);
     setError('');
   }
 
@@ -4674,7 +4704,7 @@ export default function HomeScreen() {
                         onStartWork={() => startWorkOnTodo(todo)}
                         onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                         onProject={!isProject ? () => openProjectPicker(todo) : undefined}
-                        onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                        onPriority={(event) => openPriorityPicker(todo, event)} onDueDate={() => openDueCalendar(todo)}
                         onArchive={() => archiveTodo(todo.id)}
                         onDrag={drag} isDragging={isActive ?? false}
                         rowPV={rowPV}
@@ -4738,7 +4768,7 @@ export default function HomeScreen() {
                           onStartWork={() => startWorkOnTodo(todo)}
                           onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                           onProject={!isProject ? () => openProjectPicker(todo) : undefined}
-                          onPriority={() => cyclePriority(todo)} onDueDate={() => openDueCalendar(todo)}
+                          onPriority={(event) => openPriorityPicker(todo, event)} onDueDate={() => openDueCalendar(todo)}
                           onArchive={() => archiveTodo(todo.id)}
                           reserveDragSpace={Platform.OS === 'web'}
                           rowPaddingRight={done.length > 3 ? 0 : 2}
@@ -4782,6 +4812,39 @@ export default function HomeScreen() {
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
+
+      <Modal
+        visible={!!priorityPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPriorityPicker(null)}
+      >
+        <Pressable style={styles.popoverBackdrop} onPress={() => setPriorityPicker(null)}>
+          {priorityPicker && priorityPopoverPosition && (
+            <Pressable
+              style={[styles.priorityPopover, priorityPopoverPosition]}
+              onPress={(event) => event.stopPropagation()}
+            >
+              {priorities.map((priority) => {
+                const isActive = priorityPicker.todo.priority === priority;
+                return (
+                  <Pressable
+                    key={priority}
+                    onPress={() => setTodoPriority(priorityPicker.todo, priority)}
+                    style={[styles.priorityPopoverOption, isActive && styles.priorityPopoverOptionActive]}
+                  >
+                    <View style={[styles.priorityPopoverSwatch, { backgroundColor: priorityColors[priority] }]} />
+                    <Text style={[styles.priorityPopoverLabel, isActive && styles.priorityPopoverLabelActive]}>
+                      {priority[0].toUpperCase() + priority.slice(1)}
+                    </Text>
+                    {isActive && <Text style={styles.priorityPopoverCheck}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+            </Pressable>
+          )}
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={!!assigneeTodo}
@@ -7587,6 +7650,53 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  popoverBackdrop: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  priorityPopover: {
+    position: 'absolute',
+    width: priorityPopoverWidth,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  priorityPopoverOption: {
+    height: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  priorityPopoverOptionActive: {
+    backgroundColor: '#f3f4f6',
+  },
+  priorityPopoverSwatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+  },
+  priorityPopoverLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  priorityPopoverLabelActive: {
+    color: '#111827',
+  },
+  priorityPopoverCheck: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6366f1',
   },
   calendarCard: {
     backgroundColor: '#fff',
