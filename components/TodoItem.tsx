@@ -29,7 +29,7 @@ type Props = {
   onProject?: () => void;
   onPriority?: (event: GestureResponderEvent) => void;
   onDueDate?: () => void;
-  onStartWork?: () => void;
+  onStartWork?: (event: GestureResponderEvent) => void;
   onPhase?: () => void;
   onArchive?: () => void;
   onDrag?: () => void;
@@ -332,11 +332,11 @@ export default function TodoItem({
           {!done && (kanbanStage || onStartWork) ? (
             <Pressable
               onPress={onStartWork}
-              disabled={done || !onStartWork || !!startedWorkAt}
+              disabled={done || !onStartWork}
               onHoverIn={() => setStatusHovered(true)}
               onHoverOut={() => setStatusHovered(false)}
               accessibilityRole="button"
-              accessibilityLabel={kanbanStage ? `Kanban stage: ${kanbanStage.label}` : startedWorkAt ? 'Working' : 'Start work'}
+              accessibilityLabel={kanbanStage ? `Choose status. Current: ${kanbanStage.label}` : startedWorkAt ? 'Choose status. Current: Doing' : 'Choose status'}
               hitSlop={4}
             >
               <StatusIcon
@@ -350,7 +350,7 @@ export default function TodoItem({
         {statusHovered && Platform.OS === 'web' && !projectHovered && !done && (kanbanStage || onStartWork) && (
           <View style={styles.statusTooltip}>
             <Text style={styles.tooltipText}>
-              {kanbanStage ? kanbanStage.label : startedWorkAt ? 'Working' : 'Start work'}
+              {kanbanStage ? kanbanStage.label : startedWorkAt ? 'Doing' : 'Choose status'}
             </Text>
           </View>
         )}

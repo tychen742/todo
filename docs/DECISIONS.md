@@ -295,6 +295,21 @@ Implementation rules:
 - Task Age sorting uses the timestamp shown in the row: `assigned_at` when present, otherwise `created_at`.
 - Dragging after a header sort exits sorted view and returns to manual ordering.
 
+## 2026-09-07: Workflow Status Uses a Picker
+
+Decision: clicking a task-row status icon opens a compact workflow-stage picker instead of directly advancing the task to Doing.
+
+Reason: the status icon represents a Kanban workflow state, and users need to choose among Backlog, Doing, Review, and Done. A one-click transition hides the available states and makes the icon feel inconsistent with Priority.
+
+Implementation rules:
+
+- Use a compact popover on web, matching the Priority picker pattern.
+- Offer Backlog, Doing, Review, and Done with their workflow colors.
+- Selecting Doing sets `started_work_at` if it is empty.
+- Selecting Done sets `done = true` and `completed_at`.
+- Moving out of Done clears `completed_at` and sets `done = false`.
+- On mobile, use a modal or bottom sheet for the same stage choices.
+
 ## 2026-06-11: Project Plan and Kanban Are Separate Axes
 
 Decision: project Plan and Kanban workflow are separate fields.

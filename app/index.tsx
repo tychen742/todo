@@ -150,6 +150,15 @@ const workflowSortRank: Record<WorkflowLaneKey, number> = {
   done: 3,
 };
 
+const workflowStages: WorkflowLaneKey[] = ['backlog', 'doing', 'review', 'done'];
+
+const workflowStageColors: Record<WorkflowLaneKey, string> = {
+  backlog: '#9ca3af',
+  doing: '#6366f1',
+  review: '#f59e0b',
+  done: '#16a34a',
+};
+
 const priorityColors: Record<Priority, string> = {
   low: '#9ca3af',
   normal: '#60a5fa',
@@ -768,6 +777,7 @@ export default function HomeScreen() {
   const [input, setInput] = useState('');
   const [dueTodo, setDueTodo] = useState<Todo | null>(null);
   const [priorityPicker, setPriorityPicker] = useState<{ todo: Todo; x: number; y: number } | null>(null);
+  const [statusPicker, setStatusPicker] = useState<{ todo: Todo; x: number; y: number } | null>(null);
   const [editTodo, setEditTodo] = useState<Todo | null>(null);
   const [editDraftText, setEditDraftText] = useState('');
   const [editDraftNote, setEditDraftNote] = useState('');
@@ -1130,6 +1140,18 @@ export default function HomeScreen() {
         ),
         top: Math.min(
           Math.max(8, priorityPicker.y + 10),
+          Math.max(8, height - priorityPopoverHeight - 8)
+        ),
+      }
+    : null;
+  const statusPopoverPosition = statusPicker
+    ? {
+        left: Math.min(
+          Math.max(8, statusPicker.x - priorityPopoverWidth / 2),
+          Math.max(8, width - priorityPopoverWidth - 8)
+        ),
+        top: Math.min(
+          Math.max(8, statusPicker.y + 10),
           Math.max(8, height - priorityPopoverHeight - 8)
         ),
       }
@@ -2502,6 +2524,60 @@ export default function HomeScreen() {
     setError('');
   }
 
+  function openStatusPicker(todo: Todo, event: GestureResponderEvent) {
+    setStatusPicker({
+      todo,
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY,
+    });
+  }
+
+  async function setTodoWorkflowStage(todo: Todo, workflow_status: WorkflowLaneKey) {
+    const currentStatus = workflowStageForTodo(todo);
+    if (currentStatus === workflow_status) {
+      setStatusPicker(null);
+      return;
+    }
+
+    const done = workflow_status === 'done';
+    const completed_at = done ? (todo.completed_at ?? new Date().toISOString()) : null;
+    const started_work_at =
+      workflow_status === 'doing' && !todo.started_work_at
+        ? new Date().toISOString()
+        : todo.started_work_at;
+    const accepted_at =
+      workflow_status === 'doing'
+        ? (todo.accepted_at ?? started_work_at)
+        : todo.accepted_at;
+    const updates = {
+      workflow_status,
+      done,
+      completed_at,
+      started_work_at,
+      accepted_at,
+      workflow_position: null,
+    };
+
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update(updates)
+      .eq('id', todo.id);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setTodos((prev) =>
+      sortTodos(prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item)))
+    );
+    setAssignedToMe((prev) =>
+      prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item))
+    );
+    setStatusPicker(null);
+    setError('');
+  }
+
   async function setDueDate(todo: Todo, due_date: string | null) {
     const { error: updateError } = await supabase
       .from('todos')
@@ -2712,31 +2788,6 @@ export default function HomeScreen() {
     if (todo) setArchivedTodos((prev) => [{ ...todo, archived_at }, ...prev]);
     if (editTodo?.id === id) closeEditModal();
     setError('');
-  }
-
-  async function startWorkOnTodo(todo: Todo) {
-    if (todo.started_work_at) return;
-    const nowIso = new Date().toISOString();
-    const shouldMoveToDoing = !!todo.project_id && todo.workflow_status === 'backlog' && !todo.done;
-    const updates = {
-      started_work_at: nowIso,
-      accepted_at: todo.accepted_at ?? nowIso,
-      workflow_status: shouldMoveToDoing ? ('doing' as WorkflowLaneKey) : todo.workflow_status,
-      workflow_position: shouldMoveToDoing ? null : todo.workflow_position,
-    };
-    const { error: updateError } = await supabase
-      .from('todos')
-      .update(updates)
-      .eq('id', todo.id);
-
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
-
-    setTodos((prev) => prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item)));
-    setError('');
-    showToast(shouldMoveToDoing ? 'Work started · moved to Doing' : 'Work started');
   }
 
   async function unarchiveTodo(id: string) {
@@ -4894,7 +4945,7 @@ export default function HomeScreen() {
                         assignerName={assigner?.name}
                         onToggle={() => toggle(todo.id)}
                         onOpenEdit={() => openEditModal(todo)}
-                        onStartWork={() => startWorkOnTodo(todo)}
+                        onStartWork={(event) => openStatusPicker(todo, event)}
                         onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                         onProject={!isProject ? () => openProjectPicker(todo) : undefined}
                         onPriority={(event) => openPriorityPicker(todo, event)} onDueDate={() => openDueCalendar(todo)}
@@ -4958,7 +5009,7 @@ export default function HomeScreen() {
                           assignerName={assigner?.name}
                           onToggle={() => toggle(todo.id)}
                           onOpenEdit={() => openEditModal(todo)}
-                          onStartWork={() => startWorkOnTodo(todo)}
+                          onStartWork={(event) => openStatusPicker(todo, event)}
                           onAssign={isPersonal ? undefined : () => openAssigneePicker(todo)}
                           onProject={!isProject ? () => openProjectPicker(todo) : undefined}
                           onPriority={(event) => openPriorityPicker(todo, event)} onDueDate={() => openDueCalendar(todo)}
@@ -5029,6 +5080,39 @@ export default function HomeScreen() {
                     <View style={[styles.priorityPopoverSwatch, { backgroundColor: priorityColors[priority] }]} />
                     <Text style={[styles.priorityPopoverLabel, isActive && styles.priorityPopoverLabelActive]}>
                       {priority[0].toUpperCase() + priority.slice(1)}
+                    </Text>
+                    {isActive && <Text style={styles.priorityPopoverCheck}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+            </Pressable>
+          )}
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!statusPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStatusPicker(null)}
+      >
+        <Pressable style={styles.popoverBackdrop} onPress={() => setStatusPicker(null)}>
+          {statusPicker && statusPopoverPosition && (
+            <Pressable
+              style={[styles.priorityPopover, statusPopoverPosition]}
+              onPress={(event) => event.stopPropagation()}
+            >
+              {workflowStages.map((stage) => {
+                const isActive = workflowStageForTodo(statusPicker.todo) === stage;
+                return (
+                  <Pressable
+                    key={stage}
+                    onPress={() => setTodoWorkflowStage(statusPicker.todo, stage)}
+                    style={[styles.priorityPopoverOption, isActive && styles.priorityPopoverOptionActive]}
+                  >
+                    <View style={[styles.priorityPopoverSwatch, { backgroundColor: workflowStageColors[stage] }]} />
+                    <Text style={[styles.priorityPopoverLabel, isActive && styles.priorityPopoverLabelActive]}>
+                      {workflowColumnLabels[stage]}
                     </Text>
                     {isActive && <Text style={styles.priorityPopoverCheck}>✓</Text>}
                   </Pressable>
