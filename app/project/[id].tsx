@@ -15,6 +15,7 @@ import {
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { supabase } from '../../lib/supabase';
+import { parseTodoQuickCapture } from '../../lib/quickCapture';
 import { DraggableList } from '../../components/DraggableList';
 import TodoItem from '../../components/TodoItem';
 import PhaseStrip, { type Phase } from '../../components/PhaseStrip';
@@ -282,10 +283,15 @@ export default function ProjectScreen() {
 
   async function addTodo() {
     const text = input.trim();
-    if (!text) return;
+    if (!text || !project) return;
+    const quickCapture = parseTodoQuickCapture(text, [project], { allowProjectRouting: true });
+    if (quickCapture.error) {
+      setError(quickCapture.error);
+      return;
+    }
     const { data, error: err } = await supabase
       .from('todos')
-      .insert({ text, project_id: id, priority: 'normal' })
+      .insert({ text: quickCapture.text, project_id: id, priority: quickCapture.priority ?? 'normal' })
       .select('id, text, done, assigned_to, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, project_id, phase_id, is_milestone, estimate')
       .single();
     if (err) { setError(err.message); return; }
