@@ -20,6 +20,11 @@ The project is intentionally on Expo SDK 54 because the App Store version of Exp
 - Vercel Cron calls `/api/keep-supabase-awake` once per day to perform one
   trivial Supabase heartbeat write and reduce idle-pause risk.
 - Node version is pinned with `.nvmrc`.
+- Expo Router web/static rendering runs under Node 20. Because Node 20 does not
+  provide a native WebSocket global, the Supabase client supplies a local
+  static-render-only Realtime transport constructor during Node-side web
+  rendering. Browser and native runtimes use their normal WebSocket
+  implementations.
 
 ## App Structure
 
@@ -63,13 +68,17 @@ so the default `Todos` navigation bar cannot appear before the screen hydrates.
 Workspace and project planning share the same `todos` table. Workspace is the
 execution view; Projects are planning views over project-scoped todos.
 
-- A todo created in Workspace starts as a normal todo and may later receive a
-  `project_id`.
-- Workspace quick capture supports a leading project-prefix token, such as
-  `re:` or `te:`. That token is parsed before insert, resolved against
-  system-generated project abbreviations or an unambiguous full project name
-  in the current personal/team project scope, and then stripped from the stored
-  todo text.
+- A todo created in Workspace defaults to Normal priority unless quick-capture
+  text includes a priority token.
+- Workspace quick capture supports project tokens anywhere in the input. Legacy
+  leading tokens such as `re:` or `te:` still work; `:re`, `+re`, and matching
+  single-word project-name tokens also route the todo to a project. Tokens are
+  resolved against system-generated project abbreviations or an unambiguous
+  full project name in the current personal/team project scope, and then
+  stripped from the stored todo text.
+- Quick capture supports priority tokens anywhere in the input: `:U` urgent,
+  `:H` high, `:N` or `:M` normal, and `:L` low. Priority tokens are stripped
+  from stored todo text.
 - When a Workspace todo receives a `project_id`, it remains part of the
   creator's Workspace query and also appears in the project's Backlog when
   `phase_id` is null.

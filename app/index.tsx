@@ -135,6 +135,8 @@ const taskArchiveColumnMarginLeft = 2;
 const taskRowPaddingRight = 2;
 const webAppUrl = 'https://todo-eight-gamma.vercel.app';
 const oauthReturnStorageKey = 'todo:oauth-return-to-production';
+const redirectLocalWebToProductionEnabled =
+  process.env.EXPO_PUBLIC_REDIRECT_LOCAL_WEB_TO_PRODUCTION === '1';
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0,
@@ -355,6 +357,7 @@ function isLocalWebHost() {
 }
 
 function redirectLocalWebToProduction() {
+  if (!redirectLocalWebToProductionEnabled) return false;
   if (!isLocalWebHost()) return false;
   window.location.replace(webAppUrl);
   return true;
@@ -607,42 +610,123 @@ function normalizeProjectCaptureKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function resolveProjectQuickCapture(text: string, availableProjects: Project[]) {
-  const match = text.match(/^([^:\n]{1,80}):\s*(.*)$/);
-  if (!match) return { text, project: null as Project | null, error: '' };
+function priorityFromQuickCaptureToken(token: string): Priority | null {
+  const match = token.match(/^:([a-z])$/i);
+  if (!match) return null;
 
-  const rawPrefix = match[1].trim();
-  const body = match[2].trim();
-  if (!rawPrefix) return { text, project: null as Project | null, error: '' };
+  switch (match[1].toLowerCase()) {
+    case 'u':
+      return 'urgent';
+    case 'h':
+      return 'high';
+    case 'm':
+    case 'n':
+      return 'normal';
+    case 'l':
+      return 'low';
+    default:
+      return null;
+  }
+}
 
-  const prefix = normalizeProjectCaptureKey(rawPrefix);
+function resolveProjectCaptureToken(rawToken: string, availableProjects: Project[]) {
+  const key = normalizeProjectCaptureKey(rawToken);
+  if (!key) return { project: null as Project | null, error: '', matched: false };
+
   const exactNameMatches = availableProjects.filter(
-    (project) => normalizeProjectCaptureKey(project.name) === prefix
+    (project) => normalizeProjectCaptureKey(project.name) === key
   );
   const abbreviationMatches = availableProjects.filter(
-    (project) => normalizeProjectCaptureKey(projectInitials(project.name)) === prefix
+    (project) => normalizeProjectCaptureKey(projectInitials(project.name)) === key
   );
 
   const matchingProjects = exactNameMatches.length > 0 ? exactNameMatches : abbreviationMatches;
-  if (matchingProjects.length === 0) return { text, project: null as Project | null, error: '' };
-
-  if (!body) {
-    return {
-      text,
-      project: null as Project | null,
-      error: `Add task text after "${rawPrefix}:".`,
-    };
-  }
+  if (matchingProjects.length === 0) return { project: null as Project | null, error: '', matched: false };
 
   if (matchingProjects.length > 1) {
     return {
-      text,
       project: null as Project | null,
-      error: `Project shortcut "${rawPrefix}" matches multiple projects. Type the full project name before the colon.`,
+      error: `Project shortcut "${rawToken}" matches multiple projects. Type the full project name before the project shortcut.`,
+      matched: true,
     };
   }
 
-  return { text: body, project: matchingProjects[0], error: '' };
+  return { project: matchingProjects[0], error: '', matched: true };
+}
+
+function parseTodoQuickCapture(
+  text: string,
+  availableProjects: Project[],
+  options: { allowProjectRouting: boolean }
+) {
+  let body = text.trim();
+  let project: Project | null = null;
+  let priority: Priority | null = null;
+  let consumedAttribute = false;
+
+  if (options.allowProjectRouting) {
+    const legacyPrefixMatch = body.match(/^([^:\n]{1,80}):\s*(.*)$/);
+    if (legacyPrefixMatch) {
+      const rawPrefix = legacyPrefixMatch[1].trim();
+      const result = resolveProjectCaptureToken(rawPrefix, availableProjects);
+      if (result.error) return { text, project: null as Project | null, priority, error: result.error };
+      if (result.project) {
+        if (!legacyPrefixMatch[2].trim()) {
+          return {
+            text,
+            project: null as Project | null,
+            priority,
+            error: `Add task text after "${rawPrefix}:".`,
+          };
+        }
+        body = legacyPrefixMatch[2].trim();
+        project = result.project;
+        consumedAttribute = true;
+      }
+    }
+  }
+
+  const cleanedTokens: string[] = [];
+  const tokens = body.split(/\s+/).filter(Boolean);
+  for (const token of tokens) {
+    const parsedPriority = priorityFromQuickCaptureToken(token);
+    if (parsedPriority) {
+      priority = parsedPriority;
+      consumedAttribute = true;
+      continue;
+    }
+
+    let rawProjectToken: string | null = null;
+    if (options.allowProjectRouting && (token.startsWith(':') || token.startsWith('+')) && token.length > 1) {
+      rawProjectToken = token.slice(1);
+    } else if (options.allowProjectRouting && token.endsWith(':') && token.length > 1) {
+      rawProjectToken = token.slice(0, -1);
+    }
+
+    if (rawProjectToken) {
+      const result = resolveProjectCaptureToken(rawProjectToken, availableProjects);
+      if (result.error) return { text, project: null as Project | null, priority, error: result.error };
+      if (result.project) {
+        project = result.project;
+        consumedAttribute = true;
+        continue;
+      }
+    }
+
+    cleanedTokens.push(token);
+  }
+
+  const cleanedText = cleanedTokens.join(' ').trim();
+  if (!cleanedText && consumedAttribute) {
+    return {
+      text,
+      project: null as Project | null,
+      priority,
+      error: 'Add task text after quick-capture attributes.',
+    };
+  }
+
+  return { text: cleanedText || text, project, priority, error: '' };
 }
 
 const priorityLabels: Record<string, string> = {
@@ -2316,9 +2400,7 @@ export default function HomeScreen() {
   async function addTodo() {
     const text = input.trim();
     if (!text || !session) return;
-    const quickCapture = isProject
-      ? { text, project: null as Project | null, error: '' }
-      : resolveProjectQuickCapture(text, quickCaptureProjects);
+    const quickCapture = parseTodoQuickCapture(text, quickCaptureProjects, { allowProjectRouting: !isProject });
     if (quickCapture.error) {
       setError(quickCapture.error);
       return;
@@ -2337,7 +2419,7 @@ export default function HomeScreen() {
         assigned_to: assignedTo,
         assigned_at: assignedAt,
         accepted_at: assignedTo === session.user.id ? assignedAt : null,
-        priority: 'normal',
+        priority: quickCapture.priority ?? 'normal',
         workflow_status: 'backlog',
       })
       .select(todoSelectColumns)
@@ -2359,6 +2441,11 @@ export default function HomeScreen() {
     const key = phaseId ?? 'backlog';
     const text = (columnInputs[key] ?? '').trim();
     if (!text || !session || !selectedProjectId) return;
+    const quickCapture = parseTodoQuickCapture(text, [], { allowProjectRouting: false });
+    if (quickCapture.error) {
+      setError(quickCapture.error);
+      return;
+    }
 
     const assigned_to = columnAssignees[key] ?? null;
     const assigned_at = assigned_to ? new Date().toISOString() : null;
@@ -2367,14 +2454,14 @@ export default function HomeScreen() {
     const { data, error: insertError } = await supabase
       .from('todos')
       .insert({
-        text,
+        text: quickCapture.text,
         project_id: selectedProjectId,
         phase_id: phaseId,
         created_by: session.user.id,
         assigned_to,
         assigned_at,
         accepted_at,
-        priority: 'normal',
+        priority: quickCapture.priority ?? 'normal',
         workflow_status: 'backlog',
       })
       .select(todoSelectColumns)

@@ -119,10 +119,10 @@ Rules:
 - Todo annotations and project planning/annotation should capture resource constraints, risks, assumptions, blockers, and mitigation notes.
 - Assignment only makes sense in a team or project context with multiple users.
 - Inbox should remain visible from Workspace as the home for incoming assignments, handoffs, and management communication, even when there are no current items.
-- Priority should default to Normal on creation, stay visible on each todo row, and be changeable from that row.
+- Priority should default to Normal on creation unless quick-capture text includes a priority token. It should stay visible on each todo row and be changeable from that row.
 - Due dates are central to time management and project management; they should support planning, workload visibility, reminders, calendars, and milestone tracking.
 - Adding todos should stay as quick capture: the add area should have one text input for the todo text.
-- Quick capture should support project routing by prefixing the todo text with a system-generated project abbreviation followed by a colon. For example, `re: do something` should create `do something` in the Research project, and `te: prepare this` should create `prepare this` in the Teaching project. This is future customer tutorial and tooltip material: the prefix means "send this todo to that project." If two or more projects share the same abbreviation, the abbreviation is ambiguous and the user must type the full project name prefix instead.
+- Quick capture should support project routing through attribute tokens in the todo text. Legacy leading abbreviation prefixes such as `re: do something` still work. Abbreviation tokens with `:` or `+`, such as `:re do something`, `+re do something`, or `do something +re`, should also create `do something` in the Research project. Priority tokens should use `:U` urgent, `:H` high, `:N` or `:M` normal, and `:L` low. Attribute tokens may appear at the beginning or end of the input and are stripped from saved task text. If two or more projects share the same abbreviation, the abbreviation is ambiguous and the user must type the full project name instead.
 - Due dates should be set and adjusted from each todo row so planning can happen after capture.
 - Completed todos should show when they were completed near their due-date value; this requires tracking completion time separately from creation time.
 - Notes should be a separate workspace-level concept; the first UI placement should be under the todo list, with a possible dedicated tab later.

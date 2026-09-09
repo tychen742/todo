@@ -4,7 +4,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Recently Completed
 
-- Quick project routing from add-todo text: leading project prefixes in Workspace quick capture now route todos directly into matching projects. Examples: `re: do something` routes `do something` to Research; `te: prepare this` routes `prepare this` to Teaching. Ambiguous abbreviations require the full project name prefix, and the routing prefix is stripped from the saved todo text.
+- Quick-capture attributes: Workspace todos now support project tokens anywhere in the input with `:re`, `+re`, or legacy `re:` syntax, and new todos can set priority at capture time with `:U`, `:H`, `:N`/`:M`, or `:L`. Project and priority tokens are stripped from the saved todo text. Ambiguous project abbreviations require the full project name.
 - Default "Individual" project seeded on first sign-in: `loadProjects` checks for empty projects list and inserts a default "Individual" project so new users always have a project to route tasks to.
 - Default "Individual" project seeded on first sign-in: `loadProjects` checks for empty projects list and inserts a default "Individual" project so new users always have a project to route tasks to.
 
@@ -15,7 +15,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Personal workspace remains usable without creating a team.
 - Todo priority levels: low, normal, high, urgent.
 - New todos default to Normal priority.
-- Priority is changed from each todo row, not during todo creation.
+- Priority can be set during quick capture or changed later from each todo row.
 - Relative timestamps are shown on todo rows, including Personal workspace todos.
 - Due dates are optional for personal and team todos.
 - Due dates are set from each todo row instead of the add-todo input area.
