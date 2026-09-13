@@ -731,11 +731,55 @@ function mindmapBody(title: string, topics: string[]) {
 function mindmapFieldsFromBody(body: string, fallback: MindmapTemplate) {
   const lines = body.split(/\n/).map((line) => line.trim()).filter(Boolean);
   const title = lines[0] ?? fallback.title;
-  const topics = lines.slice(1).map((line) => line.replace(/^[-*]\s*/, '')).filter(Boolean);
+  const bodyTopics = lines.slice(1).map((line) => line.replace(/^[-*]\s*/, '')).filter(Boolean);
+  const topicCount = Math.max(fallback.topics.length, bodyTopics.length);
   return {
     title,
-    topics: fallback.topics.map((topic, index) => topics[index] ?? topic),
+    topics: Array.from({ length: topicCount }, (_, index) => bodyTopics[index] ?? fallback.topics[index] ?? `Topic ${index + 1}`),
   };
+}
+
+function editableMindmapPositions(templateKey: MindmapTemplateKey, count: number) {
+  const presets: Partial<Record<MindmapTemplateKey, { x: number; y: number }[]>> = {
+    balanced: [
+      { x: 24, y: 26 },
+      { x: 24, y: 74 },
+      { x: 76, y: 26 },
+      { x: 76, y: 74 },
+    ],
+    'right-stack': [
+      { x: 78, y: 18 },
+      { x: 78, y: 39 },
+      { x: 78, y: 61 },
+      { x: 78, y: 82 },
+    ],
+    workshop: [
+      { x: 27, y: 24 },
+      { x: 20, y: 50 },
+      { x: 27, y: 76 },
+      { x: 73, y: 24 },
+      { x: 80, y: 50 },
+      { x: 73, y: 76 },
+    ],
+    'business-plan': [
+      { x: 22, y: 21 },
+      { x: 20, y: 50 },
+      { x: 22, y: 79 },
+      { x: 78, y: 16 },
+      { x: 80, y: 39 },
+      { x: 80, y: 61 },
+      { x: 78, y: 84 },
+    ],
+  };
+  const base = presets[templateKey] ?? presets.balanced!;
+  return Array.from({ length: count }, (_, index) => {
+    if (base[index]) return base[index];
+    const angle = -Math.PI / 2 + ((Math.PI * 2) * index) / Math.max(count, 1);
+    return {
+      x: 50 + Math.cos(angle) * 32,
+      y: 50 + Math.sin(angle) * 34,
+    };
+  });
 }
 
 function WorkspaceMindmapPreview({
@@ -861,6 +905,123 @@ function WorkspaceMindmapPreview({
         </G>
       ))}
     </Svg>
+  );
+}
+
+function EditableWorkspaceMindmap({
+  mindmap,
+  template,
+  compact,
+  onTitleChange,
+  onTopicAdd,
+  onTopicChange,
+  onTopicDelete,
+}: {
+  mindmap: WorkspaceMindmap;
+  template: MindmapTemplate;
+  compact: boolean;
+  onTitleChange: (value: string) => void;
+  onTopicAdd: () => void;
+  onTopicChange: (index: number, value: string) => void;
+  onTopicDelete: (index: number) => void;
+}) {
+  const root = { x: 50, y: 50 };
+  const positions = editableMindmapPositions(mindmap.template, mindmap.topics.length);
+  const topicWidth = compact ? 104 : 126;
+  const rootWidth = compact ? 128 : 154;
+  const nodeHeight = 36;
+
+  return (
+    <View style={[styles.notesMindmapCanvas, compact && styles.notesMindmapCanvasCompact]}>
+      <Svg width="100%" height="100%" viewBox="0 0 100 100" style={styles.notesMindmapCanvasConnectors}>
+        {positions.map((position, index) => {
+          const midX = (root.x + position.x) / 2;
+          const color = template.colors[index % template.colors.length] ?? '#cbd5e1';
+          return (
+            <Path
+              key={`${mindmap.id}-connector-${index}`}
+              d={`M ${root.x} ${root.y} C ${midX} ${root.y}, ${midX} ${position.y}, ${position.x} ${position.y}`}
+              stroke={color}
+              strokeWidth={1.4}
+              fill="none"
+              strokeLinecap="round"
+            />
+          );
+        })}
+      </Svg>
+      <View
+        style={[
+          styles.notesMindmapNode,
+          styles.notesMindmapRootNode,
+          {
+            left: `${root.x}%`,
+            top: `${root.y}%`,
+            width: rootWidth,
+            marginLeft: -rootWidth / 2,
+            marginTop: -nodeHeight / 2,
+          },
+        ]}
+      >
+        <TextInput
+          value={mindmap.title}
+          onChangeText={onTitleChange}
+          style={[styles.notesMindmapNodeInput, styles.notesMindmapRootInput]}
+          placeholder="Central topic"
+          placeholderTextColor="#9ca3af"
+          accessibilityLabel="Central topic"
+        />
+      </View>
+      {mindmap.topics.map((topic, index) => {
+        const position = positions[index];
+        const color = template.colors[index % template.colors.length] ?? '#e5e7eb';
+        const darkText = color === '#29488f' || color === '#20266e';
+        return (
+          <View
+            key={`${mindmap.id}-topic-${index}`}
+            style={[
+              styles.notesMindmapNode,
+              {
+                left: `${position.x}%`,
+                top: `${position.y}%`,
+                width: topicWidth,
+                marginLeft: -topicWidth / 2,
+                marginTop: -nodeHeight / 2,
+                backgroundColor: color,
+                borderColor: color,
+              },
+            ]}
+          >
+            <TextInput
+              value={topic}
+              onChangeText={(value) => onTopicChange(index, value)}
+              style={[styles.notesMindmapNodeInput, darkText && styles.notesMindmapNodeInputLight]}
+              placeholder={`Topic ${index + 1}`}
+              placeholderTextColor={darkText ? '#dbeafe' : '#6b7280'}
+              accessibilityLabel={`Mindmap topic ${index + 1}`}
+            />
+            {mindmap.topics.length > 1 && (
+              <Pressable
+                onPress={() => onTopicDelete(index)}
+                style={styles.notesMindmapNodeDelete}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`Delete topic ${index + 1}`}
+              >
+                <Text style={styles.notesMindmapNodeDeleteText}>×</Text>
+              </Pressable>
+            )}
+          </View>
+        );
+      })}
+      <Pressable
+        onPress={onTopicAdd}
+        style={styles.notesMindmapCanvasAddNode}
+        accessibilityRole="button"
+        accessibilityLabel="Add mindmap node"
+      >
+        <Text style={styles.notesMindmapCanvasAddNodeText}>+</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -1058,9 +1219,15 @@ export default function HomeScreen() {
               const template = mindmapTemplateFor(mindmap.template ?? 'balanced');
               const fields = mindmapFieldsFromBody(mindmap.body ?? '', template);
               const title = mindmap.title ?? fields.title;
+              const savedTopics = Array.isArray(mindmap.topics) ? mindmap.topics : [];
+              const topicCount = Math.max(template.topics.length, savedTopics.length, fields.topics.length);
               const topics = Array.isArray(mindmap.topics) && mindmap.topics.length > 0
-                ? template.topics.map((topic, topicIndex) => mindmap.topics?.[topicIndex] ?? topic)
-                : fields.topics;
+                ? Array.from({ length: topicCount }, (_, topicIndex) =>
+                    savedTopics[topicIndex] ?? fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
+                  )
+                : Array.from({ length: topicCount }, (_, topicIndex) =>
+                    fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
+                  );
               return {
                 id: mindmap.id ?? `legacy-${index}-${Date.now()}`,
                 title,
@@ -1363,6 +1530,28 @@ export default function HomeScreen() {
     });
     setWorkspaceMindmaps(nextMindmaps);
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
+  }
+
+  function addWorkspaceMindmapTopic(id: string) {
+    const mindmap = workspaceMindmaps.find((item) => item.id === id);
+    if (!mindmap) return;
+    updateWorkspaceMindmap(id, { topics: [...mindmap.topics, `Topic ${mindmap.topics.length + 1}`] });
+  }
+
+  function updateWorkspaceMindmapTopic(id: string, topicIndex: number, value: string) {
+    const mindmap = workspaceMindmaps.find((item) => item.id === id);
+    if (!mindmap) return;
+    updateWorkspaceMindmap(id, {
+      topics: mindmap.topics.map((topic, index) => (index === topicIndex ? value : topic)),
+    });
+  }
+
+  function deleteWorkspaceMindmapTopic(id: string, topicIndex: number) {
+    const mindmap = workspaceMindmaps.find((item) => item.id === id);
+    if (!mindmap || mindmap.topics.length <= 1) return;
+    updateWorkspaceMindmap(id, {
+      topics: mindmap.topics.filter((_, index) => index !== topicIndex),
+    });
   }
 
   function moveCalendarView(offset: number) {
@@ -3614,49 +3803,26 @@ export default function HomeScreen() {
                       <View key={mindmap.id} style={styles.notesMindmapCard}>
                         <View style={styles.notesMindmapCardHeader}>
                           <Text style={styles.notesMindmapTitle} numberOfLines={1}>{template.name}</Text>
-                          <Pressable
-                            onPress={() => deleteWorkspaceMindmap(mindmap.id)}
-                            hitSlop={8}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Delete mindmap ${mindmap.title}`}
-                          >
-                            <Text style={styles.notesMindmapDelete}>Delete</Text>
-                          </Pressable>
-                        </View>
-                        <WorkspaceMindmapPreview
-                          template={template}
-                          title={mindmap.title}
-                          topics={mindmap.topics}
-                          compact={isSide || width < 980}
-                        />
-                        <View style={styles.notesMindmapEditor}>
-                          <TextInput
-                            value={mindmap.title}
-                            onChangeText={(value) => updateWorkspaceMindmap(mindmap.id, { title: value })}
-                            style={[styles.notesMindmapInput, styles.notesMindmapCentralInput]}
-                            placeholder="Central topic"
-                            placeholderTextColor="#9ca3af"
-                            accessibilityLabel="Central topic"
-                          />
-                          <View style={styles.notesMindmapTopicGrid}>
-                            {template.topics.map((topic, topicIndex) => (
-                              <TextInput
-                                key={`${mindmap.id}-${topicIndex}`}
-                                value={mindmap.topics[topicIndex] ?? topic}
-                                onChangeText={(value) => {
-                                  const nextTopics = template.topics.map((fallbackTopic, index) =>
-                                    index === topicIndex ? value : (mindmap.topics[index] ?? fallbackTopic)
-                                  );
-                                  updateWorkspaceMindmap(mindmap.id, { topics: nextTopics });
-                                }}
-                                style={styles.notesMindmapInput}
-                                placeholder={`Topic ${topicIndex + 1}`}
-                                placeholderTextColor="#9ca3af"
-                                accessibilityLabel={`Mindmap topic ${topicIndex + 1}`}
-                              />
-                            ))}
+                          <View style={styles.notesMindmapCardActions}>
+                            <Pressable
+                              onPress={() => deleteWorkspaceMindmap(mindmap.id)}
+                              hitSlop={8}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Delete mindmap ${mindmap.title}`}
+                            >
+                              <Text style={styles.notesMindmapDelete}>Delete</Text>
+                            </Pressable>
                           </View>
                         </View>
+                        <EditableWorkspaceMindmap
+                          mindmap={mindmap}
+                          template={template}
+                          compact={isSide || width < 980}
+                          onTitleChange={(value) => updateWorkspaceMindmap(mindmap.id, { title: value })}
+                          onTopicAdd={() => addWorkspaceMindmapTopic(mindmap.id)}
+                          onTopicChange={(topicIndex, value) => updateWorkspaceMindmapTopic(mindmap.id, topicIndex, value)}
+                          onTopicDelete={(topicIndex) => deleteWorkspaceMindmapTopic(mindmap.id, topicIndex)}
+                        />
                       </View>
                     );
                   })
@@ -7155,42 +7321,105 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  notesMindmapCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   notesMindmapDelete: {
     color: '#9ca3af',
     fontSize: 11,
     fontWeight: '700',
   },
-  notesMindmapEditor: {
-    gap: 8,
+  notesMindmapCanvas: {
+    position: 'relative',
+    height: 250,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    overflow: 'hidden',
   },
-  notesMindmapTopicGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  notesMindmapCanvasCompact: {
+    height: 220,
   },
-  notesMindmapInput: {
-    minWidth: 118,
-    flexGrow: 1,
-    flexBasis: 118,
-    minHeight: 34,
+  notesMindmapCanvasConnectors: {
+    position: 'absolute',
+    inset: 0,
+  },
+  notesMindmapNode: {
+    position: 'absolute',
+    minHeight: 36,
     borderWidth: 1,
     borderColor: '#d1d5db',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#fff',
     borderRadius: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 8,
+    paddingRight: 20,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  notesMindmapRootNode: {
+    minHeight: 38,
+    borderColor: '#312e81',
+    backgroundColor: '#fff',
+    paddingRight: 8,
+  },
+  notesMindmapNodeInput: {
+    flex: 1,
+    minWidth: 0,
     color: '#374151',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    padding: 0,
     outlineStyle: 'none' as never,
   },
-  notesMindmapCentralInput: {
-    flexBasis: 'auto',
-    width: '100%',
-    borderColor: '#a5b4fc',
-    backgroundColor: '#eef2ff',
+  notesMindmapRootInput: {
     color: '#312e81',
-    fontWeight: '700',
+    fontSize: 13,
+  },
+  notesMindmapNodeInputLight: {
+    color: '#fff',
+  },
+  notesMindmapNodeDelete: {
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 7,
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+  },
+  notesMindmapNodeDeleteText: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 13,
+  },
+  notesMindmapCanvasAddNode: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#6366f1',
+  },
+  notesMindmapCanvasAddNodeText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 24,
   },
   authScroll: {
     flexGrow: 1,

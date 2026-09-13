@@ -10,7 +10,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 - Resources tab: workspace tab showing per-member workload — active tasks, overdue, due today, urgent. Reads from existing todos and members state; no new schema needed.
 - Dashboard tab: workspace tab with a 6-stat grid (Active, Overdue, Due Today, Due This Week, Done This Week, Urgent), team member workload chips, and inline overdue/due-today task lists. Context-aware: reflects personal or team todos depending on what's loaded.
-- Notes tab: top-level workspace tab with local Ideas plus a New Mindmap template picker and editable saved mindmap entries.
+- Notes tab: top-level workspace tab with local Ideas plus a New Mindmap template picker and saved mindmaps with direct node editing, add node, and delete node controls.
 - Auth flow improvements: app logo/brand header, display name field on sign-up (saved to `profiles.display_name`), email format validation, password length check (≥8 chars) on sign-up, "Show/Hide" password toggle, success confirmation box (green) instead of red text, password-reset screen matches new design, social OAuth buttons visually disabled with "coming soon" label, footer with terms note.
 - Personal workspace remains usable without creating a team.
 - Todo priority levels: low, normal, high, urgent.
@@ -114,7 +114,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 ## Notes
 
 - Treat Notes as a separate workspace concept, not as the same thing as todo annotations.
-- Current implementation: the former Inbox tab and personal workspace side/inline panel are Notes surfaces with a left Ideas pane and a larger right mindmap area. New Mindmap opens visual templates; choosing one creates a saved entry with editable central topic and branch labels.
+- Current implementation: the former Inbox tab and personal workspace side/inline panel are Notes surfaces with a left Ideas pane and a larger right mindmap area. New Mindmap opens visual templates; choosing one creates a saved entry whose map nodes can be edited directly, with branch nodes added or deleted from the map.
 - Add synced storage for Notes after the workspace scope is settled.
 - Support quick note taking for personal, team, or project context depending on the active workspace.
 - Keep annotations scoped to one task; keep Notes for broader context, thoughts, snippets, and running notes.
