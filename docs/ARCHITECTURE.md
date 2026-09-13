@@ -139,14 +139,17 @@ Notes should be modeled separately from todo annotations and Team Pages.
 Current implementation:
 
 - The former Inbox tab and personal workspace side/inline panel render Notes.
-- Notes store two local fields, Ideas and Mindmap, in `AsyncStorage` per signed-in user.
+- Notes store a left Ideas pane, a right mindmap template picker, and created
+  mindmap entries in `AsyncStorage` per signed-in user. Created mindmaps keep
+  their template key plus a generated starter outline.
 - These notes are local-only until the shared workspace notes scope is settled.
 
 Likely synced architecture:
 
 - Store workspace-level notes in a first-party table such as `workspace_notes`.
 - Scope notes to the active workspace: personal, team, or project.
-- Preserve Ideas and Mindmap as first-class sections or migrate them into structured note blocks.
+- Preserve Ideas and created mindmaps as first-class sections or migrate them
+  into structured note blocks.
 - Keep todo annotations as task detail records or fields; keep workspace Notes for broader context.
 
 ## Future Team Page Architecture

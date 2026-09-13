@@ -21,6 +21,7 @@ import { Stack } from 'expo-router';
 import { createURL } from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Svg, { Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
 import { MoreHorizontal } from 'lucide-react-native';
@@ -98,6 +99,24 @@ type Profile = {
 
 type ProfileSummary = Pick<Profile, 'id' | 'email' | 'display_name'>;
 
+type WorkspaceMindmap = {
+  id: string;
+  title: string;
+  body: string;
+  created_at: string;
+  template: MindmapTemplateKey;
+};
+
+type MindmapTemplateKey = 'balanced' | 'right-stack' | 'workshop' | 'business-plan';
+
+type MindmapTemplate = {
+  key: MindmapTemplateKey;
+  name: string;
+  title: string;
+  body: string;
+  colors: string[];
+};
+
 type Priority = 'low' | 'normal' | 'high' | 'urgent';
 type SortField = 'text' | 'priority' | 'assigned_by' | 'status' | 'project' | 'due_date' | 'age' | 'created_at';
 type CreateTarget = 'team' | 'organization' | 'project';
@@ -122,6 +141,36 @@ const workspaceInboxColumnWidth = 340;
 const workspacePaneGap = 12;
 const workspaceBoardPadding = 12;
 const completedDropTargetId = 'todo-completed-drop-target';
+const mindmapTemplates: MindmapTemplate[] = [
+  {
+    key: 'balanced',
+    name: 'Balanced',
+    title: 'Central Topic',
+    body: 'Central Topic\n- Main Topic 1\n- Main Topic 2\n- Main Topic 3\n- Main Topic 4',
+    colors: ['#ff6666', '#ff9b66', '#8ed6b0', '#72d7c6'],
+  },
+  {
+    key: 'right-stack',
+    name: 'Right Stack',
+    title: 'Central Topic',
+    body: 'Central Topic\n- Main Topic 1\n- Main Topic 2\n- Main Topic 3\n- Main Topic 4',
+    colors: ['#ffcc43', '#e86a5b', '#29488f', '#ffcc43'],
+  },
+  {
+    key: 'workshop',
+    name: 'Workshop',
+    title: 'Workshop',
+    body: 'Workshop\n- Set Goals\n- Plan the Agenda\n- Materials\n- Engagement\n- Organize the Venue\n- Feedback',
+    colors: ['#b7e0cd', '#ffad7a', '#d7be9a', '#e6bd8b', '#ffad7a', '#b7e0cd'],
+  },
+  {
+    key: 'business-plan',
+    name: 'Business Plan',
+    title: 'Business Plan',
+    body: 'Business Plan\n- Target Market\n- Strategy\n- Management Team\n- Executive Summary\n- Company\n- Financial\n- Product',
+    colors: ['#e9c7a4', '#e9c7a4', '#e9c7a4', '#f1d6b8', '#f1d6b8', '#f1d6b8', '#f1d6b8'],
+  },
+];
 const taskHandleColumnWidth = 32;
 const taskCheckboxColumnWidth = 30;
 const taskPriorityColumnWidth = 48;
@@ -670,6 +719,124 @@ const ias = StyleSheet.create({
   tooltipText: { color: '#fff', fontSize: 11 },
 });
 
+function mindmapTemplateFor(key: MindmapTemplateKey) {
+  return mindmapTemplates.find((template) => template.key === key) ?? mindmapTemplates[0];
+}
+
+function WorkspaceMindmapPreview({ template, compact = false }: { template: MindmapTemplate; compact?: boolean }) {
+  const width = compact ? 220 : 320;
+  const height = compact ? 108 : 170;
+  const scale = compact ? 0.68 : 1;
+  const textSize = compact ? 10 : 14;
+  const centerTextSize = compact ? 14 : 22;
+
+  if (template.key === 'right-stack') {
+    return (
+      <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
+        <Rect x={16 * scale} y={54 * scale} width={144 * scale} height={42 * scale} rx={5} fill="#fff" stroke="#11156a" strokeWidth={2.4} />
+        <SvgText x={88 * scale} y={81 * scale} fill="#11156a" fontSize={centerTextSize} fontWeight="700" textAnchor="middle">
+          Central Topic
+        </SvgText>
+        <Path d={`M ${184 * scale} ${37 * scale} C ${166 * scale} ${37 * scale}, ${166 * scale} ${47 * scale}, ${166 * scale} ${67 * scale} C ${166 * scale} ${84 * scale}, ${154 * scale} ${88 * scale}, ${154 * scale} ${88 * scale} C ${166 * scale} ${88 * scale}, ${166 * scale} ${94 * scale}, ${166 * scale} ${111 * scale} C ${166 * scale} ${132 * scale}, ${168 * scale} ${142 * scale}, ${184 * scale} ${142 * scale}`} stroke="#f5bd2d" strokeWidth={2.2} fill="none" />
+        {template.colors.map((color, index) => (
+          <G key={`${template.key}-${index}`}>
+            <Rect x={204 * scale} y={(16 + index * 38) * scale} width={104 * scale} height={27 * scale} rx={5} fill={color} />
+            <SvgText x={256 * scale} y={(34 + index * 38) * scale} fill={index === 1 || index === 2 ? '#fff' : '#111827'} fontSize={textSize} fontWeight="700" textAnchor="middle">
+              {`Main Topic ${index + 1}`}
+            </SvgText>
+          </G>
+        ))}
+      </Svg>
+    );
+  }
+
+  if (template.key === 'workshop') {
+    const nodes = [
+      { x: 90, y: 48, label: 'Goals' },
+      { x: 72, y: 88, label: 'Agenda' },
+      { x: 94, y: 126, label: 'Materials' },
+      { x: 230, y: 48, label: 'Engage' },
+      { x: 244, y: 88, label: 'Venue' },
+      { x: 226, y: 126, label: 'Feedback' },
+    ];
+    return (
+      <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
+        <Rect x={0} y={0} width={width} height={height} rx={8} fill="#eaf6f5" />
+        <Ellipse cx={160 * scale} cy={86 * scale} rx={47 * scale} ry={22 * scale} fill="#374151" />
+        <SvgText x={160 * scale} y={92 * scale} fill="#fff" fontSize={compact ? 12 : 16} fontWeight="700" textAnchor="middle">
+          Workshop
+        </SvgText>
+        {nodes.map((node, index) => (
+          <G key={`${template.key}-${node.label}`}>
+            <Path d={`M ${160 * scale} ${86 * scale} C ${((node.x + 160) / 2) * scale} ${86 * scale}, ${((node.x + 160) / 2) * scale} ${node.y * scale}, ${node.x * scale} ${node.y * scale}`} stroke={template.colors[index]} strokeWidth={2} fill="none" />
+            <Ellipse cx={node.x * scale} cy={node.y * scale} rx={32 * scale} ry={12 * scale} fill={template.colors[index]} />
+            <SvgText x={node.x * scale} y={(node.y + 4) * scale} fill="#111827" fontSize={compact ? 8 : 10} fontWeight="700" textAnchor="middle">
+              {node.label}
+            </SvgText>
+          </G>
+        ))}
+      </Svg>
+    );
+  }
+
+  if (template.key === 'business-plan') {
+    const leftNodes = [
+      { x: 58, y: 42, label: 'Market' },
+      { x: 72, y: 86, label: 'Strategy' },
+      { x: 60, y: 130, label: 'Team' },
+    ];
+    const rightNodes = [
+      { x: 242, y: 32, label: 'Summary' },
+      { x: 242, y: 66, label: 'Company' },
+      { x: 242, y: 100, label: 'Financial' },
+      { x: 242, y: 134, label: 'Product' },
+    ];
+    return (
+      <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
+        <Rect x={142 * scale} y={68 * scale} width={58 * scale} height={50 * scale} rx={4} fill="#20266e" />
+        <SvgText x={171 * scale} y={89 * scale} fill="#fff" fontSize={compact ? 10 : 13} fontWeight="700" textAnchor="middle">
+          BUSINESS
+        </SvgText>
+        <SvgText x={171 * scale} y={104 * scale} fill="#fff" fontSize={compact ? 10 : 13} fontWeight="700" textAnchor="middle">
+          PLAN
+        </SvgText>
+        {[...leftNodes, ...rightNodes].map((node, index) => (
+          <G key={`${template.key}-${node.label}`}>
+            <Path d={`M ${node.x < 160 ? 142 * scale : 200 * scale} ${92 * scale} C ${node.x < 160 ? 116 * scale : 222 * scale} ${92 * scale}, ${node.x * scale} ${node.y * scale}, ${node.x * scale} ${node.y * scale}`} stroke="#20266e" strokeWidth={1.5} fill="none" />
+            <Rect x={(node.x - 40) * scale} y={(node.y - 12) * scale} width={80 * scale} height={24 * scale} rx={3} fill={template.colors[index]} />
+            <SvgText x={node.x * scale} y={(node.y + 4) * scale} fill="#1f2937" fontSize={compact ? 8 : 10} fontWeight="700" textAnchor="middle">
+              {node.label}
+            </SvgText>
+          </G>
+        ))}
+      </Svg>
+    );
+  }
+
+  const balancedNodes = [
+    { x: 64, y: 36, label: 'Main Topic 4' },
+    { x: 64, y: 120, label: 'Main Topic 3' },
+    { x: 254, y: 36, label: 'Main Topic 1' },
+    { x: 254, y: 120, label: 'Main Topic 2' },
+  ];
+  return (
+    <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
+      <SvgText x={160 * scale} y={89 * scale} fill="#111827" fontSize={centerTextSize} fontWeight="700" textAnchor="middle">
+        Central Topic
+      </SvgText>
+      {balancedNodes.map((node, index) => (
+        <G key={`${template.key}-${node.label}`}>
+          <Path d={`M ${160 * scale} ${84 * scale} C ${((node.x + 160) / 2) * scale} ${84 * scale}, ${((node.x + 160) / 2) * scale} ${node.y * scale}, ${node.x * scale} ${node.y * scale}`} stroke={template.colors[index]} strokeWidth={1.8} fill="none" />
+          <Rect x={(node.x - 48) * scale} y={(node.y - 14) * scale} width={96 * scale} height={28 * scale} rx={4} fill={template.colors[index]} />
+          <SvgText x={node.x * scale} y={(node.y + 5) * scale} fill="#111827" fontSize={textSize} fontWeight="700" textAnchor="middle">
+            {node.label}
+          </SvgText>
+        </G>
+      ))}
+    </Svg>
+  );
+}
+
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const [session, setSession] = useState<Session | null>(null);
@@ -729,7 +896,8 @@ export default function HomeScreen() {
   const [calendarViewSelectedDate, setCalendarViewSelectedDate] = useState(() => new Date());
   const [calendarViewNotes, setCalendarViewNotes] = useState<Record<string, string>>({});
   const [workspaceIdeas, setWorkspaceIdeas] = useState('');
-  const [workspaceMindmap, setWorkspaceMindmap] = useState('');
+  const [workspaceMindmaps, setWorkspaceMindmaps] = useState<WorkspaceMindmap[]>([]);
+  const [mindmapTemplatePickerOpen, setMindmapTemplatePickerOpen] = useState(false);
   const [animalPickerVisible, setAnimalPickerVisible] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
@@ -826,7 +994,8 @@ export default function HomeScreen() {
     if (!uid) {
       setCalendarViewNotes({});
       setWorkspaceIdeas('');
-      setWorkspaceMindmap('');
+      setWorkspaceMindmaps([]);
+      setMindmapTemplatePickerOpen(false);
       return;
     }
     AsyncStorage.getItem(`todo:calendar-notes:${uid}`)
@@ -850,14 +1019,41 @@ export default function HomeScreen() {
     AsyncStorage.getItem(`todo:workspace-notes:${uid}`)
       .then((value) => {
         if (cancelled || !value) return;
-        const notes = JSON.parse(value) as { ideas?: string; mindmap?: string };
+        const notes = JSON.parse(value) as {
+          ideas?: string;
+          mindmap?: string;
+          mindmapDraft?: string;
+          mindmaps?: Partial<WorkspaceMindmap>[];
+        };
+        const legacyDraft = notes.mindmapDraft ?? notes.mindmap ?? '';
+        const loadedMindmaps = Array.isArray(notes.mindmaps)
+          ? notes.mindmaps.map((mindmap, index) => ({
+              id: mindmap.id ?? `legacy-${index}-${Date.now()}`,
+              title: mindmap.title ?? 'Mindmap',
+              body: mindmap.body ?? '',
+              created_at: mindmap.created_at ?? new Date().toISOString(),
+              template: mindmap.template ?? 'balanced',
+            }))
+          : [];
+        const migratedMindmaps = legacyDraft.trim() && loadedMindmaps.length === 0
+          ? [
+              {
+                id: `legacy-draft-${Date.now()}`,
+                title: legacyDraft.split(/\n/).map((line) => line.trim()).find(Boolean)?.slice(0, 80) ?? 'Mindmap',
+                body: legacyDraft,
+                created_at: new Date().toISOString(),
+                template: 'balanced' as MindmapTemplateKey,
+              },
+            ]
+          : loadedMindmaps;
         setWorkspaceIdeas(notes.ideas ?? '');
-        setWorkspaceMindmap(notes.mindmap ?? '');
+        setWorkspaceMindmaps(migratedMindmaps);
       })
       .catch(() => {
         if (!cancelled) {
           setWorkspaceIdeas('');
-          setWorkspaceMindmap('');
+          setWorkspaceMindmaps([]);
+          setMindmapTemplatePickerOpen(false);
         }
       });
 
@@ -1070,11 +1266,14 @@ export default function HomeScreen() {
     });
   }
 
-  function saveWorkspaceNotes(nextIdeas: string, nextMindmap: string) {
+  function saveWorkspaceNotes(
+    nextIdeas: string,
+    nextMindmaps: WorkspaceMindmap[]
+  ) {
     if (!session) return;
     AsyncStorage.setItem(
       `todo:workspace-notes:${session.user.id}`,
-      JSON.stringify({ ideas: nextIdeas, mindmap: nextMindmap })
+      JSON.stringify({ ideas: nextIdeas, mindmaps: nextMindmaps })
     ).catch(() => {
       setError('Could not save notes.');
     });
@@ -1082,12 +1281,30 @@ export default function HomeScreen() {
 
   function saveWorkspaceIdeas(value: string) {
     setWorkspaceIdeas(value);
-    saveWorkspaceNotes(value, workspaceMindmap);
+    saveWorkspaceNotes(value, workspaceMindmaps);
   }
 
-  function saveWorkspaceMindmap(value: string) {
-    setWorkspaceMindmap(value);
-    saveWorkspaceNotes(workspaceIdeas, value);
+  function createWorkspaceMindmap(templateKey: MindmapTemplateKey) {
+    const template = mindmapTemplateFor(templateKey);
+    const nextMindmaps = [
+      {
+        id: `${Date.now()}`,
+        title: template.title,
+        body: template.body,
+        created_at: new Date().toISOString(),
+        template: template.key,
+      },
+      ...workspaceMindmaps,
+    ];
+    setWorkspaceMindmaps(nextMindmaps);
+    setMindmapTemplatePickerOpen(false);
+    saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
+  }
+
+  function deleteWorkspaceMindmap(id: string) {
+    const nextMindmaps = workspaceMindmaps.filter((mindmap) => mindmap.id !== id);
+    setWorkspaceMindmaps(nextMindmaps);
+    saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
   }
 
   function moveCalendarView(offset: number) {
@@ -3260,6 +3477,7 @@ export default function HomeScreen() {
 
   function renderWorkspaceNotesPanel(variant: 'side' | 'inline' | 'full') {
     const isSide = variant === 'side';
+    const isStacked = isSide || width < 760;
     return (
       <View style={[
         variant === 'side' && styles.assignedToMePanel,
@@ -3276,37 +3494,82 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.notesFieldGroup}>
-            <Text style={styles.notesFieldLabel}>Ideas</Text>
-            <TextInput
-              value={workspaceIdeas}
-              onChangeText={saveWorkspaceIdeas}
-              style={[
-                styles.notesTextArea,
-                isSide && styles.notesTextAreaSide,
-                variant === 'full' && styles.notesTextAreaFull,
-              ]}
-              placeholder="Ideas..."
-              placeholderTextColor="#9ca3af"
-              multiline
-              textAlignVertical="top"
-            />
-          </View>
-          <View style={styles.notesFieldGroup}>
-            <Text style={styles.notesFieldLabel}>Mindmap</Text>
-            <TextInput
-              value={workspaceMindmap}
-              onChangeText={saveWorkspaceMindmap}
-              style={[
-                styles.notesTextArea,
-                isSide && styles.notesTextAreaSide,
-                variant === 'full' && styles.notesTextAreaFull,
-              ]}
-              placeholder="Mindmap..."
-              placeholderTextColor="#9ca3af"
-              multiline
-              textAlignVertical="top"
-            />
+          <View style={[styles.notesWorkspace, isStacked && styles.notesWorkspaceStacked]}>
+            <View style={[styles.notesIdeasPane, isStacked && styles.notesPaneStacked]}>
+              <Text style={styles.notesFieldLabel}>Ideas</Text>
+              <TextInput
+                value={workspaceIdeas}
+                onChangeText={saveWorkspaceIdeas}
+                style={[
+                  styles.notesTextArea,
+                  styles.notesIdeasInput,
+                  isSide && styles.notesTextAreaSide,
+                  variant === 'full' && styles.notesTextAreaFull,
+                ]}
+                placeholder="Ideas..."
+                placeholderTextColor="#9ca3af"
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+            <View style={[styles.notesMindmapPane, isStacked && styles.notesPaneStacked]}>
+              <View style={styles.notesMindmapHeader}>
+                <Text style={styles.notesFieldLabel}>Mindmaps</Text>
+                <Pressable
+                  onPress={() => setMindmapTemplatePickerOpen((open) => !open)}
+                  style={styles.notesCreateButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="New mindmap"
+                >
+                  <Text style={styles.notesCreateButtonText}>New Mindmap</Text>
+                </Pressable>
+              </View>
+              {mindmapTemplatePickerOpen && (
+                <View style={styles.notesTemplatePicker}>
+                  <Text style={styles.notesTemplatePickerTitle}>Choose a template</Text>
+                  <View style={styles.notesTemplateGrid}>
+                    {mindmapTemplates.map((template) => (
+                      <Pressable
+                        key={template.key}
+                        onPress={() => createWorkspaceMindmap(template.key)}
+                        style={({ pressed }) => [
+                          styles.notesTemplateCard,
+                          pressed && styles.notesTemplateCardPressed,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Create ${template.name} mindmap`}
+                      >
+                        <WorkspaceMindmapPreview template={template} compact={isSide || width < 980} />
+                        <Text style={styles.notesTemplateName}>{template.name}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+              <View style={styles.notesMindmapList}>
+                {workspaceMindmaps.length === 0 ? (
+                  <Text style={styles.notesMindmapEmpty}>Created mindmaps will appear here.</Text>
+                ) : (
+                  workspaceMindmaps.map((mindmap) => (
+                    <View key={mindmap.id} style={styles.notesMindmapCard}>
+                      <WorkspaceMindmapPreview template={mindmapTemplateFor(mindmap.template)} compact />
+                      <View style={styles.notesMindmapCardHeader}>
+                        <Text style={styles.notesMindmapTitle} numberOfLines={1}>{mindmap.title}</Text>
+                        <Pressable
+                          onPress={() => deleteWorkspaceMindmap(mindmap.id)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete mindmap ${mindmap.title}`}
+                        >
+                          <Text style={styles.notesMindmapDelete}>Delete</Text>
+                        </Pressable>
+                      </View>
+                      <Text style={styles.notesMindmapBody} numberOfLines={5}>{mindmap.body}</Text>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
           </View>
         </ScrollView>
       </View>
@@ -6659,6 +6922,36 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
+  notesWorkspace: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 14,
+  },
+  notesWorkspaceStacked: {
+    flexDirection: 'column',
+  },
+  notesIdeasPane: {
+    flexBasis: '32%',
+    flexGrow: 0,
+    flexShrink: 0,
+    gap: 5,
+  },
+  notesMindmapPane: {
+    flex: 1,
+    gap: 8,
+    minWidth: 0,
+  },
+  notesPaneStacked: {
+    flexBasis: 'auto',
+    width: '100%',
+  },
+  notesMindmapHeader: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   notesTextArea: {
     minHeight: 118,
     borderWidth: 1,
@@ -6678,9 +6971,107 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   notesTextAreaFull: {
-    minHeight: 240,
+    minHeight: 360,
     fontSize: 15,
     lineHeight: 22,
+  },
+  notesIdeasInput: {
+    minHeight: 340,
+  },
+  notesCreateButton: {
+    minHeight: 24,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6366f1',
+    borderRadius: 6,
+  },
+  notesCreateButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  notesTemplatePicker: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    padding: 10,
+    gap: 8,
+  },
+  notesTemplatePickerTitle: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  notesTemplateGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  notesTemplateCard: {
+    width: 220,
+    minHeight: 144,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  notesTemplateCardPressed: {
+    borderColor: '#6366f1',
+    backgroundColor: '#eef2ff',
+  },
+  notesTemplateName: {
+    paddingHorizontal: 9,
+    paddingTop: 6,
+    paddingBottom: 8,
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  notesMindmapList: {
+    gap: 8,
+  },
+  notesMindmapEmpty: {
+    paddingVertical: 10,
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  notesMindmapCard: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 7,
+  },
+  notesMindmapCardHeader: {
+    minHeight: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  notesMindmapTitle: {
+    flex: 1,
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  notesMindmapDelete: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  notesMindmapBody: {
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
   },
   authScroll: {
     flexGrow: 1,
