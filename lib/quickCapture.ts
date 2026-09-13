@@ -35,6 +35,13 @@ function priorityFromQuickCaptureToken(token: string): QuickCapturePriority | nu
   }
 }
 
+function bareProjectCaptureToken(token: string): string | null {
+  const trimmed = token.trim();
+  if (!trimmed || trimmed.includes(':') || trimmed.includes('+')) return null;
+  if (/\s/.test(trimmed)) return null;
+  return trimmed;
+}
+
 function resolveProjectCaptureToken(rawToken: string, availableProjects: QuickCaptureProject[]) {
   const key = normalizeProjectCaptureKey(rawToken);
   if (!key) return { project: null as QuickCaptureProject | null, error: '', matched: false };
@@ -107,6 +114,8 @@ export function parseTodoQuickCapture(
       rawProjectToken = token.slice(1);
     } else if (options.allowProjectRouting && token.endsWith(':') && token.length > 1) {
       rawProjectToken = token.slice(0, -1);
+    } else if (options.allowProjectRouting) {
+      rawProjectToken = bareProjectCaptureToken(token);
     }
 
     if (rawProjectToken) {

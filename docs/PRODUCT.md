@@ -123,6 +123,7 @@ Rules:
 - Due dates are central to time management and project management; they should support planning, workload visibility, reminders, calendars, and milestone tracking.
 - Adding todos should stay as quick capture: the add area should have one text input for the todo text.
 - Quick capture should support project routing through attribute tokens in the todo text. Legacy leading abbreviation prefixes such as `re: do something` still work. Abbreviation tokens with `:` or `+`, such as `:re do something`, `+re do something`, or `do something +re`, should also create `do something` in the Research project. Priority tokens should use `:U` urgent, `:H` high, `:N` or `:M` normal, and `:L` low. Attribute tokens may appear at the beginning or end of the input and are stripped from saved task text. If two or more projects share the same abbreviation, the abbreviation is ambiguous and the user must type the full project name instead.
+- Quick capture may chain project and priority tokens at the start of a task, for example `:li :h higheredjobs every saturday`.
 - Due dates should be set and adjusted from each todo row so planning can happen after capture.
 - Completed todos should show when they were completed near their due-date value; this requires tracking completion time separately from creation time.
 - Notes should be a separate workspace-level concept; the first UI placement should be under the todo list, with a possible dedicated tab later.
