@@ -127,7 +127,7 @@ Rules:
 - Editing an existing todo title may also use priority tokens such as `:h` or `:urgent`; project routing stays in the project picker during edits.
 - Due dates should be set and adjusted from each todo row so planning can happen after capture.
 - Completed todos should show when they were completed near their due-date value; this requires tracking completion time separately from creation time.
-- Notes should be a separate workspace-level concept. Current UI gives Notes a primary workspace tab plus the personal workspace side/inline panel, with Ideas on the left and a larger right-side mindmap area where New Mindmap opens visual templates, created maps are edited directly on the nodes, and branch nodes can be added or deleted.
+- Notes should be a separate workspace-level concept. Current UI gives Notes a primary workspace tab plus the personal workspace side/inline panel, with Ideas on the left and a larger right-side mindmap area where New Mindmap opens visual templates, created maps are edited directly on the nodes, top-level nodes can be added from the canvas, and edge nodes expose child-node add controls.
 - Todo annotations should stay scoped to one task; workspace Notes should hold broader context, thoughts, snippets, and running notes.
 - Calendar sync should be optional per user and should not be required for basic todo use.
 - Personal calendars should show the user's own todos, assignments, reminders, and synced external calendar context.

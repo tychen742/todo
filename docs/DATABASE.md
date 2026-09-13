@@ -109,8 +109,9 @@ When the creator assigns a task to themself, the app sets `accepted_at` immediat
 
 Workspace Notes are not in Postgres yet. The current Notes surface stores local
 Ideas, the mindmap template choice for each created map, editable central topic
-and branch labels, and created mindmap entries in per-user `AsyncStorage`.
-Branch nodes can be added or deleted locally; a future synced `workspace_notes`
+and nested node labels, and created mindmap entries in per-user `AsyncStorage`.
+Top-level nodes can be added from the canvas, edge nodes expose child-node add
+controls, and nodes can be deleted locally; a future synced `workspace_notes`
 table should own durable workspace notes.
 
 #### Timestamp Modeling Notes
