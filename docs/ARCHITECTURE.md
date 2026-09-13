@@ -81,6 +81,10 @@ execution view; Projects are planning views over project-scoped todos.
   and `:L`, `:LO`, or `:LOW` low. Priority tokens are stripped from stored todo
   text. Project and priority tokens can be chained at the beginning of the
   input, for example `:li :hi higheredjobs every saturday`.
+- Existing todo title edits also consume priority tokens, so adding `:h` to a
+  title changes its priority and strips the token on save. Title edits do not
+  consume project-routing tokens; project assignment stays controlled by the
+  project picker.
 - When a Workspace todo receives a `project_id`, it remains part of the
   creator's Workspace query and also appears in the project's Backlog when
   `phase_id` is null.

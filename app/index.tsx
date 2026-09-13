@@ -2679,7 +2679,12 @@ export default function HomeScreen() {
 
   async function saveEditModal() {
     if (!editTodo) return;
-    const text = editDraftText.trim();
+    const parsedText = parseTodoQuickCapture(editDraftText.trim(), [], { allowProjectRouting: false });
+    if (parsedText.error) {
+      setError(parsedText.error);
+      return;
+    }
+    const text = parsedText.text.trim();
     if (!text) return;
 
     const note = editDraftNote.trim() || null;
@@ -2703,10 +2708,11 @@ export default function HomeScreen() {
     const accepted_at = assigneeChanged
       ? (assigned_to === session?.user.id ? assigned_at : null)
       : editTodo.accepted_at;
+    const priority = parsedText.priority ?? editDraftPriority;
 
     const { error: updateError } = await supabase
       .from('todos')
-      .update({ text, note, phase_id, project_id, due_date: editDraftDueDate, priority: editDraftPriority, estimate, scheduled_start_at: scheduledStartAt, assigned_to, assigned_at, accepted_at })
+      .update({ text, note, phase_id, project_id, due_date: editDraftDueDate, priority, estimate, scheduled_start_at: scheduledStartAt, assigned_to, assigned_at, accepted_at })
       .eq('id', editTodo.id);
 
     if (updateError) {
@@ -2724,7 +2730,7 @@ export default function HomeScreen() {
               phase_id: phase_id ?? null,
               project_id: project_id ?? null,
               due_date: editDraftDueDate,
-              priority: editDraftPriority,
+              priority,
               estimate,
               scheduled_start_at: scheduledStartAt,
               assigned_to,
