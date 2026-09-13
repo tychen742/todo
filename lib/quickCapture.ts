@@ -17,18 +17,25 @@ function normalizeProjectCaptureKey(value: string): string {
 }
 
 function priorityFromQuickCaptureToken(token: string): QuickCapturePriority | null {
-  const match = token.match(/^:([a-z])$/i);
+  const match = token.match(/^:([a-z]+)$/i);
   if (!match) return null;
 
   switch (match[1].toLowerCase()) {
     case 'u':
+    case 'urgent':
       return 'urgent';
     case 'h':
+    case 'hi':
+    case 'high':
       return 'high';
     case 'm':
+    case 'medium':
     case 'n':
+    case 'normal':
       return 'normal';
     case 'l':
+    case 'lo':
+    case 'low':
       return 'low';
     default:
       return null;

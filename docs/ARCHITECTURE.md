@@ -77,9 +77,10 @@ execution view; Projects are planning views over project-scoped todos.
   full project name in the current personal/team project scope, and then
   stripped from the stored todo text.
 - Quick capture supports priority tokens anywhere in the input: `:U` urgent,
-  `:H` high, `:N` or `:M` normal, and `:L` low. Priority tokens are stripped
-  from stored todo text. Project and priority tokens can be chained at the
-  beginning of the input, for example `:li :h higheredjobs every saturday`.
+  `:H`, `:HI`, or `:HIGH` high, `:N`, `:M`, `:NORMAL`, or `:MEDIUM` normal,
+  and `:L`, `:LO`, or `:LOW` low. Priority tokens are stripped from stored todo
+  text. Project and priority tokens can be chained at the beginning of the
+  input, for example `:li :hi higheredjobs every saturday`.
 - When a Workspace todo receives a `project_id`, it remains part of the
   creator's Workspace query and also appears in the project's Backlog when
   `phase_id` is null.
