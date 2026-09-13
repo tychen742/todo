@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import { MoreHorizontal } from 'lucide-react-native';
+import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -1200,6 +1200,7 @@ export default function HomeScreen() {
   const [projectsViewOpen, setProjectsViewOpen] = useState(false);
   const [teamsViewOpen, setTeamsViewOpen] = useState(false);
   const [inboxViewOpen, setInboxViewOpen] = useState(false);
+  const [notesViewOpen, setNotesViewOpen] = useState(false);
   const [calendarViewOpen, setCalendarViewOpen] = useState(false);
   const [resourcesViewOpen, setResourcesViewOpen] = useState(false);
   const [dashboardViewOpen, setDashboardViewOpen] = useState(false);
@@ -1250,6 +1251,8 @@ export default function HomeScreen() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState('');
+  const [hoveredInboxTodoId, setHoveredInboxTodoId] = useState<string | null>(null);
+  const [hoveredInboxActionId, setHoveredInboxActionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadedTodoScopes, setLoadedTodoScopes] = useState<Record<string, true>>({});
   const loadedTodoScopesRef = useRef<Record<string, true>>({});
@@ -1399,10 +1402,11 @@ export default function HomeScreen() {
   }, [session]);
 
   const isProject = selectedProjectId !== null;
-  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
+  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
   const workspaceTabActive = isPersonal && !teamsViewOpen;
   const projectsTabActive = (isProject || projectsViewOpen) && !teamsViewOpen;
   const inboxTabActive = inboxViewOpen;
+  const notesTabActive = notesViewOpen;
   const calendarTabActive = calendarViewOpen;
   const resourcesTabActive = resourcesViewOpen;
   const dashboardTabActive = dashboardViewOpen;
@@ -3030,6 +3034,24 @@ export default function HomeScreen() {
     setError('');
   }
 
+  async function moveInboxTodoToTodos(id: string) {
+    const todo = assignedToMe.find((item) => item.id === id);
+    if (!todo) return;
+    const accepted_at = new Date().toISOString();
+    const started_work_at = accepted_at;
+
+    const { error: updateError } = await supabase
+      .from('todos')
+      .update({ accepted_at, started_work_at })
+      .eq('id', id);
+    if (updateError) { setError(updateError.message); return; }
+    const acceptedTodo = { ...todo, accepted_at, started_work_at };
+    setAssignedToMe((prev) => prev.filter((item) => item.id !== id));
+    setTodos((prev) => sortTodos([acceptedTodo, ...prev.filter((item) => item.id !== id)]));
+    showToast('Moved from Inbox to Todos');
+    setError('');
+  }
+
   async function setAssignee(todo: Todo, userId: string | null) {
     const assignedAt = userId ? new Date().toISOString() : null;
     const updates = {
@@ -3855,6 +3877,100 @@ export default function HomeScreen() {
     };
   }
 
+  function renderAssignedToMeTodo(todo: Todo) {
+    const project = projects.find((item) => item.id === todo.project_id);
+    const contextLabel = project?.name ?? 'Team task';
+    const due = parseDateValue(todo.due_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isOverdue = due ? due < today : false;
+    const creatorMember = todo.created_by ? memberById.get(todo.created_by) : null;
+    const isCreatorMe = todo.created_by === session?.user.id;
+    const creatorName = isCreatorMe
+      ? accountDisplayName
+      : creatorMember
+        ? profileDisplayName(creatorMember)
+        : null;
+    const creatorEmail = isCreatorMe ? (profile?.email ?? '') : (creatorMember?.email ?? todo.created_by ?? '');
+    const creatorInitials = creatorName ? (creatorName[0] ?? '?').toUpperCase() : '?';
+    const creatorColor = pickAvatarColor(creatorEmail);
+    const creatorAvatarUrl = isCreatorMe ? (profile?.avatar_url ?? null) : (creatorMember?.avatar_url ?? null);
+    const creatorTooltip = creatorName ? `From: ${creatorName}` : `From: ${contextLabel}`;
+    const isRowHovered = Platform.OS === 'web' && hoveredInboxTodoId === todo.id;
+    const isActionHovered = Platform.OS === 'web' && hoveredInboxActionId === todo.id;
+    return (
+      <View key={todo.id} style={[styles.assignedToMeRowOuter, isRowHovered && styles.assignedToMeRowHovered]}>
+        <Pressable
+          onHoverIn={() => setHoveredInboxTodoId(todo.id)}
+          onHoverOut={() => setHoveredInboxTodoId(null)}
+          style={[styles.assignedToMeRow, { paddingVertical: rowPV }]}
+        >
+          <Pressable
+            onPress={() => moveInboxTodoToTodos(todo.id)}
+            onHoverIn={() => setHoveredInboxActionId(todo.id)}
+            onHoverOut={() => setHoveredInboxActionId(null)}
+            style={[
+              styles.incomingAcceptIcon,
+              { backgroundColor: priorityColors[todo.priority], borderColor: priorityColors[todo.priority] },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Move to Todos"
+          >
+            <ArrowLeft size={11} strokeWidth={2.75} color="#fff" />
+            {isActionHovered && (
+              <View style={styles.incomingAcceptTooltip}>
+                <Text style={styles.incomingAcceptTooltipText} numberOfLines={1}>
+                  Move to Todos - {todo.priority[0].toUpperCase() + todo.priority.slice(1)}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+          <Text style={styles.assignedToMeText} numberOfLines={1}>{todo.text}</Text>
+          {!!contextLabel && <Text style={styles.assignedToMeContext} numberOfLines={1}>{contextLabel}</Text>}
+          {todo.due_date && (
+            <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]} numberOfLines={1}>
+              {isOverdue ? 'Overdue' : todo.due_date}
+            </Text>
+          )}
+          <InboxAssignerAvatar
+            initials={creatorInitials}
+            color={creatorColor}
+            avatarUrl={creatorAvatarUrl}
+            tooltip={creatorTooltip}
+          />
+          {isRowHovered && !isActionHovered && (
+            <View style={styles.assignedToMeTooltip}>
+              <Text style={styles.assignedToMeTooltipText}>{todo.text}</Text>
+              {!!todo.note && <Text style={styles.assignedToMeTooltipNote}>{todo.note}</Text>}
+            </View>
+          )}
+        </Pressable>
+        <View style={styles.assignedToMeSeparator} />
+      </View>
+    );
+  }
+
+  function renderWorkspaceInboxPanel(variant: 'side' | 'inline' | 'full') {
+    return (
+      <View style={[
+        variant === 'side' && styles.assignedToMePanel,
+        variant === 'inline' && styles.assignedToMeInlinePanel,
+        variant === 'full' && styles.inboxViewPanel,
+      ]}>
+        <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
+        {assignedToMe.length === 0 ? (
+          <Text style={styles.inboxViewEmpty}>No assigned tasks right now.</Text>
+        ) : variant === 'full' ? (
+          assignedToMe.map(renderAssignedToMeTodo)
+        ) : (
+          <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
+            {assignedToMe.map(renderAssignedToMeTodo)}
+          </ScrollView>
+        )}
+      </View>
+    );
+  }
+
   function renderWorkspaceNotesPanel(variant: 'side' | 'inline' | 'full') {
     const isSide = variant === 'side';
     const isStacked = isSide || width < 760;
@@ -4264,6 +4380,7 @@ export default function HomeScreen() {
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
               setInboxViewOpen(false);
+              setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
@@ -4284,6 +4401,7 @@ export default function HomeScreen() {
               setProjectsViewOpen(!rememberedProject);
               setTeamsViewOpen(false);
               setInboxViewOpen(false);
+              setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
@@ -4303,6 +4421,7 @@ export default function HomeScreen() {
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
               setInboxViewOpen(true);
+              setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
@@ -4310,9 +4429,9 @@ export default function HomeScreen() {
             style={[styles.workspaceTab, styles.workspaceTabJoined, inboxTabActive && styles.workspaceTabActive]}
           >
             <Text style={[styles.workspaceTabText, inboxTabActive && styles.workspaceTabTextActive]}>
-              Notes
+              Inbox
             </Text>
-            {renderWorkspaceTabDivider(inboxTabActive, calendarTabActive)}
+            {renderWorkspaceTabDivider(inboxTabActive, notesTabActive)}
           </Pressable>
 
           <Pressable
@@ -4322,6 +4441,27 @@ export default function HomeScreen() {
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
               setInboxViewOpen(false);
+              setNotesViewOpen(true);
+              setCalendarViewOpen(false);
+              setResourcesViewOpen(false);
+              setDashboardViewOpen(false);
+            }}
+            style={[styles.workspaceTab, styles.workspaceTabJoined, notesTabActive && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabText, notesTabActive && styles.workspaceTabTextActive]}>
+              Notes
+            </Text>
+            {renderWorkspaceTabDivider(notesTabActive, calendarTabActive)}
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              setSelectedTeamId(null);
+              setSelectedProjectId(null);
+              setProjectsViewOpen(false);
+              setTeamsViewOpen(false);
+              setInboxViewOpen(false);
+              setNotesViewOpen(false);
               setCalendarViewOpen(true);
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
@@ -4341,6 +4481,7 @@ export default function HomeScreen() {
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
               setInboxViewOpen(false);
+              setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(true);
               setDashboardViewOpen(false);
@@ -4360,6 +4501,7 @@ export default function HomeScreen() {
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
               setInboxViewOpen(false);
+              setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
               setDashboardViewOpen(true);
@@ -4376,6 +4518,7 @@ export default function HomeScreen() {
             onPress={() => {
               setProjectsViewOpen(false);
               setInboxViewOpen(false);
+              setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
               setDashboardViewOpen(false);
@@ -4431,6 +4574,7 @@ export default function HomeScreen() {
                           setSelectedProjectId(null);
                           setTeamsViewOpen(false);
                           setInboxViewOpen(false);
+                          setNotesViewOpen(false);
                           setCalendarViewOpen(false);
                         }}
                         style={[styles.organizationTeamTab, selectedTeamId === team.id && styles.organizationTeamTabActive]}
@@ -4483,6 +4627,7 @@ export default function HomeScreen() {
                       setSelectedProjectId(null);
                       setTeamsViewOpen(false);
                       setInboxViewOpen(false);
+                      setNotesViewOpen(false);
                       setCalendarViewOpen(false);
                     }}
                     style={[styles.organizationTeamTab, selectedTeamId === team.id && styles.organizationTeamTabActive]}
@@ -4529,6 +4674,7 @@ export default function HomeScreen() {
                     setProjectsViewOpen(false);
                     setTeamsViewOpen(false);
                     setInboxViewOpen(false);
+                    setNotesViewOpen(false);
                     setCalendarViewOpen(false);
                   }}
                   accessibilityRole="button"
@@ -4557,7 +4703,7 @@ export default function HomeScreen() {
             );
           })}
           <Pressable
-            onPress={() => { setTeamsViewOpen(false); setInboxViewOpen(false); setCalendarViewOpen(false); openCreateTarget('project'); }}
+            onPress={() => { setTeamsViewOpen(false); setInboxViewOpen(false); setNotesViewOpen(false); setCalendarViewOpen(false); openCreateTarget('project'); }}
             style={styles.projectCardNew}
             accessibilityRole="button"
             accessibilityLabel="Create project"
@@ -4569,6 +4715,12 @@ export default function HomeScreen() {
       )}
 
       {inboxViewOpen && (
+        <ScrollView style={styles.inboxView} contentContainerStyle={styles.inboxViewContent}>
+          {renderWorkspaceInboxPanel('full')}
+        </ScrollView>
+      )}
+
+      {notesViewOpen && (
         <ScrollView style={styles.inboxView} contentContainerStyle={styles.inboxViewContent}>
           {renderWorkspaceNotesPanel('full')}
         </ScrollView>
@@ -5038,7 +5190,7 @@ export default function HomeScreen() {
         );
       })()}
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && selectedTeam && (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && selectedTeam && (
         <View style={styles.memberPanel}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={styles.panelTitle}>{selectedTeam.name}</Text>
@@ -5076,7 +5228,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && nextMilestone && (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && nextMilestone && (
         <View style={[styles.milestoneBanner, nextMilestone.daysLeft < 0 && styles.milestoneBannerOverdue]}>
           <Text style={styles.milestoneBannerText}>
             ◆ {nextMilestone.text}
@@ -5089,7 +5241,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectSwitchBar}>
           <ScrollView
             horizontal
@@ -5142,7 +5294,7 @@ export default function HomeScreen() {
       )}
 
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectViewModeBar}>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             {(['plan', 'kanban'] as ProjectViewMode[]).map((mode) => (
@@ -5214,7 +5366,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && (isProject ? (
+      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && (isProject ? (
         projectViewMode === 'plan' ? (
         <KanbanDragProvider onMove={(todoId, targetPhaseId, _targetWorkflowStatus, overTodoId) => movePlanTodo(todoId, targetPhaseId, overTodoId)}>
           {/* Backlog strip — one-line capture bar; tasks land here by default */}
@@ -5525,7 +5677,7 @@ export default function HomeScreen() {
           <View style={[styles.todoBoard, showInboxSidePanel && styles.todoBoardWithAssigned]}>
             <View style={styles.todoListPane}>
               {isPersonal && !showInboxSidePanel && (
-                renderWorkspaceNotesPanel('inline')
+                renderWorkspaceInboxPanel('inline')
               )}
 
               <View style={styles.activeTasksBox}>
@@ -5675,7 +5827,7 @@ export default function HomeScreen() {
             </View>
 
             {showInboxSidePanel && (
-              renderWorkspaceNotesPanel('side')
+              renderWorkspaceInboxPanel('side')
             )}
           </View>
         </>

@@ -138,8 +138,10 @@ Notes should be modeled separately from todo annotations and Team Pages.
 
 Current implementation:
 
-- The former Inbox tab and personal workspace side/inline panel render Notes.
-- Notes store a left Ideas pane, a right mindmap template picker, and created
+- The original Inbox tab and personal workspace side/inline panel remain the
+  assigned-to-me task inbox.
+- Notes has its own Workspace tab with a left Ideas pane, a right mindmap
+  template picker, and created
   mindmap entries in `AsyncStorage` per signed-in user. Created mindmaps keep
   their template key, central topic, branch labels, and nested child nodes. The
   rendered map nodes are editable directly, top-level nodes can be added from

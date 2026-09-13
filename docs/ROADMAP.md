@@ -45,7 +45,7 @@ The app should stay free for personal and small-team use. Paid value should come
 - Project closure summary: phases completed, todos completed vs dropped, milestones hit or missed.
 - Due-date-based project planning and milestone tracking.
 - Project/team dashboards.
-- Dedicated Notes tab if workspace-level notes grow beyond the todo-list page.
+- Dedicated Notes tab separate from the original Workspace Inbox.
 - Personal calendar and team calendar views.
 - Recurring (weekly/monthly/annually) personal/team tasks.
 - Roles and permissions beyond owner/admin/member.

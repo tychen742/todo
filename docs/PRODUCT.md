@@ -118,7 +118,7 @@ Rules:
 - Resource management and risk management should start as lightweight planning and annotation workflows, not as a heavy enterprise module.
 - Todo annotations and project planning/annotation should capture resource constraints, risks, assumptions, blockers, and mitigation notes.
 - Assignment only makes sense in a team or project context with multiple users.
-- The former Inbox surface is now a Notes area for ideas and mindmaps. Assignment notifications should move toward unobtrusive notification surfaces rather than occupying a primary workspace tab.
+- The original Workspace Inbox should stay available for assigned-to-me tasks. Notes is a separate workspace area for ideas and mindmaps.
 - Priority should default to Normal on creation unless quick-capture text includes a priority token. It should stay visible on each todo row and be changeable from that row.
 - Due dates are central to time management and project management; they should support planning, workload visibility, reminders, calendars, and milestone tracking.
 - Adding todos should stay as quick capture: the add area should have one text input for the todo text.
@@ -127,7 +127,7 @@ Rules:
 - Editing an existing todo title may also use priority tokens such as `:h` or `:urgent`; project routing stays in the project picker during edits.
 - Due dates should be set and adjusted from each todo row so planning can happen after capture.
 - Completed todos should show when they were completed near their due-date value; this requires tracking completion time separately from creation time.
-- Notes should be a separate workspace-level concept. Current UI gives Notes a primary workspace tab plus the personal workspace side/inline panel, with Ideas on the left and a larger right-side mindmap area where New Mindmap opens visual templates, created maps are edited directly on the nodes, top-level nodes can be added from the canvas, and edge nodes expose child-node add controls.
+- Notes should be a separate workspace-level concept. Current UI gives Notes a primary workspace tab with Ideas on the left and a larger right-side mindmap area where New Mindmap opens visual templates, created maps are edited directly on the nodes, top-level nodes can be added from the canvas, and edge nodes expose child-node add controls.
 - Todo annotations should stay scoped to one task; workspace Notes should hold broader context, thoughts, snippets, and running notes.
 - Calendar sync should be optional per user and should not be required for basic todo use.
 - Personal calendars should show the user's own todos, assignments, reminders, and synced external calendar context.
