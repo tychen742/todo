@@ -881,7 +881,7 @@ end;
 $$;
 
 -- Allow reading todos assigned to the current user across all workspaces.
--- This enables the "Inbox" section and accepted assigned todos in the Personal workspace.
+-- This supports assignment notification queries and accepted assigned todos in the Personal workspace.
 drop policy if exists "Team members can read team todos" on todos;
 create policy "Team members can read team todos"
   on todos for select

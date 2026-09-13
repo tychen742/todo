@@ -23,7 +23,7 @@ import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
+import { MoreHorizontal } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -206,6 +206,26 @@ function sortWorkflowTodos(items: Todo[]) {
     if (b.workflow_position !== null) return 1;
     return sortTodos([a, b])[0].id === a.id ? -1 : 1;
   });
+}
+
+function positionScopeKey(todo: Todo) {
+  if (todo.project_id) return `project:${todo.project_id}:phase:${todo.phase_id ?? 'backlog'}`;
+  if (todo.team_id) return `team:${todo.team_id}`;
+  return `personal:${todo.created_by ?? 'unknown'}`;
+}
+
+function scopedPositionUpdates(orderedTodos: Todo[]) {
+  const nextPositionById = new Map<string, number>();
+  const nextIndexByScope = new Map<string, number>();
+
+  for (const todo of orderedTodos) {
+    const scopeKey = positionScopeKey(todo);
+    const nextPosition = nextIndexByScope.get(scopeKey) ?? 0;
+    nextPositionById.set(todo.id, nextPosition);
+    nextIndexByScope.set(scopeKey, nextPosition + 1);
+  }
+
+  return nextPositionById;
 }
 
 function formatDateValue(date: Date) {
@@ -604,13 +624,6 @@ function projectInitials(name: string): string {
   return projectCaptureAbbreviation(name);
 }
 
-const priorityLabels: Record<string, string> = {
-  low: 'Low',
-  normal: 'Normal',
-  high: 'High',
-  urgent: 'Urgent',
-};
-
 function InboxAssignerAvatar({
   initials,
   color,
@@ -715,6 +728,8 @@ export default function HomeScreen() {
   const [calendarViewMonth, setCalendarViewMonth] = useState(() => new Date());
   const [calendarViewSelectedDate, setCalendarViewSelectedDate] = useState(() => new Date());
   const [calendarViewNotes, setCalendarViewNotes] = useState<Record<string, string>>({});
+  const [workspaceIdeas, setWorkspaceIdeas] = useState('');
+  const [workspaceMindmap, setWorkspaceMindmap] = useState('');
   const [animalPickerVisible, setAnimalPickerVisible] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<string | null>(null);
   const [statusDraft, setStatusDraft] = useState('');
@@ -755,8 +770,6 @@ export default function HomeScreen() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState('');
-  const [hoveredInboxTodoId, setHoveredInboxTodoId] = useState<string | null>(null);
-  const [hoveredInboxActionId, setHoveredInboxActionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadedTodoScopes, setLoadedTodoScopes] = useState<Record<string, true>>({});
   const loadedTodoScopesRef = useRef<Record<string, true>>({});
@@ -812,6 +825,8 @@ export default function HomeScreen() {
     let cancelled = false;
     if (!uid) {
       setCalendarViewNotes({});
+      setWorkspaceIdeas('');
+      setWorkspaceMindmap('');
       return;
     }
     AsyncStorage.getItem(`todo:calendar-notes:${uid}`)
@@ -822,6 +837,30 @@ export default function HomeScreen() {
       .catch(() => {
         if (!cancelled) setCalendarViewNotes({});
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  useEffect(() => {
+    const uid = session?.user.id;
+    let cancelled = false;
+    if (!uid) return;
+
+    AsyncStorage.getItem(`todo:workspace-notes:${uid}`)
+      .then((value) => {
+        if (cancelled || !value) return;
+        const notes = JSON.parse(value) as { ideas?: string; mindmap?: string };
+        setWorkspaceIdeas(notes.ideas ?? '');
+        setWorkspaceMindmap(notes.mindmap ?? '');
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorkspaceIdeas('');
+          setWorkspaceMindmap('');
+        }
+      });
+
     return () => {
       cancelled = true;
     };
@@ -1029,6 +1068,26 @@ export default function HomeScreen() {
     AsyncStorage.setItem(`todo:calendar-notes:${uid}`, JSON.stringify(nextNotes)).catch(() => {
       setError('Could not save calendar note.');
     });
+  }
+
+  function saveWorkspaceNotes(nextIdeas: string, nextMindmap: string) {
+    if (!session) return;
+    AsyncStorage.setItem(
+      `todo:workspace-notes:${session.user.id}`,
+      JSON.stringify({ ideas: nextIdeas, mindmap: nextMindmap })
+    ).catch(() => {
+      setError('Could not save notes.');
+    });
+  }
+
+  function saveWorkspaceIdeas(value: string) {
+    setWorkspaceIdeas(value);
+    saveWorkspaceNotes(value, workspaceMindmap);
+  }
+
+  function saveWorkspaceMindmap(value: string) {
+    setWorkspaceMindmap(value);
+    saveWorkspaceNotes(workspaceIdeas, value);
   }
 
   function moveCalendarView(offset: number) {
@@ -2374,24 +2433,6 @@ export default function HomeScreen() {
     setError('');
   }
 
-  async function moveInboxTodoToTodos(id: string) {
-    const todo = assignedToMe.find((item) => item.id === id);
-    if (!todo) return;
-    const accepted_at = new Date().toISOString();
-    const started_work_at = accepted_at;
-
-    const { error: updateError } = await supabase
-      .from('todos')
-      .update({ accepted_at, started_work_at })
-      .eq('id', id);
-    if (updateError) { setError(updateError.message); return; }
-    const acceptedTodo = { ...todo, accepted_at, started_work_at };
-    setAssignedToMe(prev => prev.filter(t => t.id !== id));
-    setTodos((prev) => sortTodos([acceptedTodo, ...prev.filter((item) => item.id !== id)]));
-    showToast('Moved from Inbox to Todos');
-    setError('');
-  }
-
   async function setAssignee(todo: Todo, userId: string | null) {
     const assignedAt = userId ? new Date().toISOString() : null;
     const updates = {
@@ -2787,7 +2828,7 @@ export default function HomeScreen() {
     if (sortField) {
       setSortField(null);
     }
-    const positionMap = new Map(reorderedActive.map((todo, index) => [todo.id, index]));
+    const positionMap = scopedPositionUpdates(reorderedActive);
 
     setTodos((prev) =>
       sortTodos(
@@ -2797,7 +2838,7 @@ export default function HomeScreen() {
       )
     );
 
-    const updates = reorderedActive.map((todo, index) => ({ id: todo.id, position: index }));
+    const updates = Array.from(positionMap, ([id, position]) => ({ id, position }));
     const { error: batchError } = await supabase.rpc('batch_update_todo_positions', {
       updates,
     });
@@ -3217,68 +3258,57 @@ export default function HomeScreen() {
     };
   }
 
-  function renderAssignedToMeTodo(todo: Todo) {
-    const project = projects.find(p => p.id === todo.project_id);
-    const contextLabel = project?.name ?? 'Team task';
-    const due = parseDateValue(todo.due_date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isOverdue = due ? due < today : false;
-    const creatorMember = todo.created_by ? memberById.get(todo.created_by) : null;
-    const isCreatorMe = todo.created_by === session?.user.id;
-    const creatorName = isCreatorMe
-      ? accountDisplayName
-      : creatorMember
-        ? profileDisplayName(creatorMember)
-        : null;
-    const creatorEmail = isCreatorMe ? (profile?.email ?? '') : (creatorMember?.email ?? todo.created_by ?? '');
-    const creatorInitials = creatorName ? (creatorName[0] ?? '?').toUpperCase() : '?';
-    const creatorColor = pickAvatarColor(creatorEmail);
-    const creatorAvatarUrl = isCreatorMe ? (profile?.avatar_url ?? null) : (creatorMember?.avatar_url ?? null);
-    const creatorTooltip = creatorName ? `From: ${creatorName}` : `From: ${contextLabel}`;
-    const isRowHovered = Platform.OS === 'web' && hoveredInboxTodoId === todo.id;
-    const isActionHovered = Platform.OS === 'web' && hoveredInboxActionId === todo.id;
+  function renderWorkspaceNotesPanel(variant: 'side' | 'inline' | 'full') {
+    const isSide = variant === 'side';
     return (
-      <View key={todo.id} style={[styles.assignedToMeRowOuter, isRowHovered && styles.assignedToMeRowHovered]}>
-        <Pressable
-          onHoverIn={() => setHoveredInboxTodoId(todo.id)}
-          onHoverOut={() => setHoveredInboxTodoId(null)}
-          style={[styles.assignedToMeRow, { paddingVertical: rowPV }]}
+      <View style={[
+        variant === 'side' && styles.assignedToMePanel,
+        variant === 'inline' && styles.assignedToMeInlinePanel,
+        variant === 'full' && styles.inboxViewPanel,
+      ]}>
+        <Text style={styles.assignedToMePanelTitle}>NOTES</Text>
+        <ScrollView
+          style={isSide ? styles.notesPanelScroll : undefined}
+          contentContainerStyle={[
+            styles.notesPanelContent,
+            variant === 'full' && styles.notesPanelContentFull,
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <Pressable
-            onPress={() => moveInboxTodoToTodos(todo.id)}
-            onHoverIn={() => setHoveredInboxActionId(todo.id)}
-            onHoverOut={() => setHoveredInboxActionId(null)}
-            style={[
-              styles.incomingAcceptIcon,
-              { backgroundColor: priorityColors[todo.priority], borderColor: priorityColors[todo.priority] },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Move to Todos"
-          >
-            <ArrowLeft size={11} strokeWidth={2.75} color="#fff" />
-            {isActionHovered && (
-              <View style={styles.incomingAcceptTooltip}>
-                <Text style={styles.incomingAcceptTooltipText} numberOfLines={1}>Move to Todos · {priorityLabels[todo.priority]}</Text>
-              </View>
-            )}
-          </Pressable>
-          <Text style={styles.assignedToMeText} numberOfLines={1}>{todo.text}</Text>
-          {!!contextLabel && <Text style={styles.assignedToMeContext} numberOfLines={1}>{contextLabel}</Text>}
-          {todo.due_date && (
-            <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]} numberOfLines={1}>
-              {isOverdue ? 'Overdue' : todo.due_date}
-            </Text>
-          )}
-          <InboxAssignerAvatar initials={creatorInitials} color={creatorColor} avatarUrl={creatorAvatarUrl} tooltip={creatorTooltip} />
-          {isRowHovered && !isActionHovered && (
-            <View style={styles.assignedToMeTooltip}>
-              <Text style={styles.assignedToMeTooltipText}>{todo.text}</Text>
-              {!!todo.note && <Text style={styles.assignedToMeTooltipNote}>{todo.note}</Text>}
-            </View>
-          )}
-        </Pressable>
-        <View style={styles.assignedToMeSeparator} />
+          <View style={styles.notesFieldGroup}>
+            <Text style={styles.notesFieldLabel}>Ideas</Text>
+            <TextInput
+              value={workspaceIdeas}
+              onChangeText={saveWorkspaceIdeas}
+              style={[
+                styles.notesTextArea,
+                isSide && styles.notesTextAreaSide,
+                variant === 'full' && styles.notesTextAreaFull,
+              ]}
+              placeholder="Ideas..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              textAlignVertical="top"
+            />
+          </View>
+          <View style={styles.notesFieldGroup}>
+            <Text style={styles.notesFieldLabel}>Mindmap</Text>
+            <TextInput
+              value={workspaceMindmap}
+              onChangeText={saveWorkspaceMindmap}
+              style={[
+                styles.notesTextArea,
+                isSide && styles.notesTextAreaSide,
+                variant === 'full' && styles.notesTextAreaFull,
+              ]}
+              placeholder="Mindmap..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              textAlignVertical="top"
+            />
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -3625,7 +3655,7 @@ export default function HomeScreen() {
             style={[styles.workspaceTab, styles.workspaceTabJoined, inboxTabActive && styles.workspaceTabActive]}
           >
             <Text style={[styles.workspaceTabText, inboxTabActive && styles.workspaceTabTextActive]}>
-              Inbox
+              Notes
             </Text>
             {renderWorkspaceTabDivider(inboxTabActive, calendarTabActive)}
           </Pressable>
@@ -3885,14 +3915,7 @@ export default function HomeScreen() {
 
       {inboxViewOpen && (
         <ScrollView style={styles.inboxView} contentContainerStyle={styles.inboxViewContent}>
-          <View style={styles.inboxViewPanel}>
-            <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
-            {assignedToMe.length === 0 ? (
-              <Text style={styles.inboxViewEmpty}>No assigned tasks right now.</Text>
-            ) : (
-              assignedToMe.map(renderAssignedToMeTodo)
-            )}
-          </View>
+          {renderWorkspaceNotesPanel('full')}
         </ScrollView>
       )}
 
@@ -4847,14 +4870,7 @@ export default function HomeScreen() {
           <View style={[styles.todoBoard, showInboxSidePanel && styles.todoBoardWithAssigned]}>
             <View style={styles.todoListPane}>
               {isPersonal && !showInboxSidePanel && (
-                <View style={styles.assignedToMeInlinePanel}>
-                  <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
-                  {assignedToMe.length > 0 ? (
-                    assignedToMe.map(renderAssignedToMeTodo)
-                  ) : (
-                    <Text style={styles.assignedToMeEmpty}>No assigned tasks right now.</Text>
-                  )}
-                </View>
+                renderWorkspaceNotesPanel('inline')
               )}
 
               <View style={styles.activeTasksBox}>
@@ -5004,16 +5020,7 @@ export default function HomeScreen() {
             </View>
 
             {showInboxSidePanel && (
-              <View style={styles.assignedToMePanel}>
-                <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
-                <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
-                  {assignedToMe.length > 0 ? (
-                    assignedToMe.map(renderAssignedToMeTodo)
-                  ) : (
-                    <Text style={styles.assignedToMeEmpty}>No assigned tasks right now.</Text>
-                  )}
-                </ScrollView>
-              </View>
+              renderWorkspaceNotesPanel('side')
             )}
           </View>
         </>
@@ -6631,6 +6638,49 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  notesPanelScroll: {
+    maxHeight: incomingBoxMaxHeight - taskHeaderHeight,
+  },
+  notesPanelContent: {
+    padding: 10,
+    gap: 10,
+  },
+  notesPanelContentFull: {
+    padding: 14,
+    gap: 14,
+  },
+  notesFieldGroup: {
+    gap: 5,
+  },
+  notesFieldLabel: {
+    color: '#6b7280',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  notesTextArea: {
+    minHeight: 118,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+    color: '#374151',
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    outlineStyle: 'none' as never,
+  },
+  notesTextAreaSide: {
+    minHeight: 142,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notesTextAreaFull: {
+    minHeight: 240,
+    fontSize: 15,
+    lineHeight: 22,
   },
   authScroll: {
     flexGrow: 1,

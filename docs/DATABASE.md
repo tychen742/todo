@@ -91,15 +91,25 @@ Workflow status values:
 
 `phase_id` and `position` are the project Plan placement. They answer where the task belongs in the project structure. For project-scoped todos, `position` is unique within each project phase/backlog lane, not across the whole project. `workflow_status` and `workflow_position` are the Kanban placement. They answer what is happening to the task now. These fields are intentionally separate.
 
+Workspace reorder code must persist `position` by the same uniqueness scopes:
+personal todos by owner, team todos by team, and project todos by
+project-plus-phase/backlog lane. A mixed Workspace list must not send one global
+position sequence across project and non-project rows, or project rows can
+collide with the `todos_position_project_phase_active_unique` index.
+
 Deleting a project phase sets affected todo `phase_id` values to `null`, which moves those tasks back to the project Backlog. The app enforces at least one phase column per project and compacts remaining phase `order_index` values after deletion.
 
 Personal todos have `team_id = null`. Team todos have `team_id` set and can be assigned to a team member.
 Assigned tasks start as incoming work until the assignee accepts them. `assigned_at` records when the task was assigned, `accepted_at` records when the assignee accepted it into their todo list, and `completed_at` records when the task was marked done.
-When the creator assigns a task to themself, the app sets `accepted_at` immediately so the task stays in Todos instead of appearing in Inbox.
+When the creator assigns a task to themself, the app sets `accepted_at` immediately so the task stays in Todos instead of entering the pending assignment queue.
 
 `due_date` is optional. Todos without a due date should store `null`.
 
 `note` currently stores optional per-task detail text. Product language should treat this as a future todo annotation concept, not workspace-level Notes.
+
+Workspace Notes are not in Postgres yet. The current Notes surface stores local
+Ideas and Mindmap fields in per-user `AsyncStorage`; a future synced
+`workspace_notes` table should own durable workspace notes.
 
 #### Timestamp Modeling Notes
 

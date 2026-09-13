@@ -19,7 +19,7 @@ Every user has a short free-text status ("What are you up to?") visible to their
 
 ## Assignment Notifications
 
-When a todo is assigned to a team member, they receive a notification. Currently this appears as an item in their Inbox tab. The full notification pipeline (email, push, in-app badge) is planned.
+When a todo is assigned to a team member, they should receive a notification. The old Inbox tab no longer owns this flow; that workspace surface is now Notes. The full notification pipeline (in-app badge, email, push) is planned.
 
 See `docs/DECISIONS.md` → Task Assignment Lifecycle for the full accept/decline lifecycle.
 
@@ -37,7 +37,7 @@ Personal 1:1 messaging between users within the same organization or team.
 
 ## Planned: Notification Delivery Channels
 
-- In-app (current): Inbox tab for assignments, toast messages for actions.
+- In-app (current): toast messages for actions. A lightweight assignment badge or notification surface is planned.
 - Email: for assignment notifications and declines, especially for Collaborators who may not use the app regularly.
 - Push: mobile push via Expo notifications for time-sensitive signals.
 

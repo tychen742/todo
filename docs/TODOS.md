@@ -10,7 +10,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 - Resources tab: workspace tab showing per-member workload — active tasks, overdue, due today, urgent. Reads from existing todos and members state; no new schema needed.
 - Dashboard tab: workspace tab with a 6-stat grid (Active, Overdue, Due Today, Due This Week, Done This Week, Urgent), team member workload chips, and inline overdue/due-today task lists. Context-aware: reflects personal or team todos depending on what's loaded.
-- Inbox tab: top-level workspace tab for assigned-to-me task notifications, with an empty state when there are no assigned tasks.
+- Notes tab: top-level workspace tab for local Ideas and Mindmap notes.
 - Auth flow improvements: app logo/brand header, display name field on sign-up (saved to `profiles.display_name`), email format validation, password length check (≥8 chars) on sign-up, "Show/Hide" password toggle, success confirmation box (green) instead of red text, password-reset screen matches new design, social OAuth buttons visually disabled with "coming soon" label, footer with terms note.
 - Personal workspace remains usable without creating a team.
 - Todo priority levels: low, normal, high, urgent.
@@ -29,7 +29,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 - **Project assignment icon on task rows** — in Personal view, add a small icon/button on each todo row to assign it to a project. Tapping opens a compact picker listing existing projects. Preferred over a global pill row above the task list (removed — too prominent for an optional field). The icon should be subtle when no project is assigned and show the project name/initial when one is set.
 
-- In the Personal workspace header/toolbar, add a toggle button with tooltip "Show personal items" that filters the list to todos belonging to the user's personal account (not assigned from other workspaces, not team todos). Useful when the inbox is crowded and the user just wants to focus on their own private work.
+- In the Personal workspace header/toolbar, add a toggle button with tooltip "Show personal items" that filters the list to todos belonging to the user's personal account (not assigned from other workspaces, not team todos).
 - The filter should be remembered per session (or persisted in user prefs). A filled/highlighted icon indicates the filter is active.
 - Consider pairing with a complementary "Show assigned" toggle so users can quickly switch between personal-only, assigned-only, and all.
 
@@ -78,9 +78,9 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Design System
 
-- **UI Element Design Principles** — document visual and interaction design principles for each recurring UI element type to guide consistent implementation and future decisions. Candidates: row items (task, inbox, completed), section headers, action buttons, pills/badges, modals/cards, tooltips, input fields, avatar chips, priority indicators, due date pills. For each: define spacing, typography, color, interaction state (hover/active/disabled), and the intent behind the choices. Goal is a living reference that prevents element-by-element ad-hoc decisions and makes new panels/views self-consistent from the start.
+- **UI Element Design Principles** — document visual and interaction design principles for each recurring UI element type to guide consistent implementation and future decisions. Candidates: row items (task, completed), section headers, action buttons, pills/badges, modals/cards, tooltips, input fields, avatar chips, priority indicators, due date pills. For each: define spacing, typography, color, interaction state (hover/active/disabled), and the intent behind the choices. Goal is a living reference that prevents element-by-element ad-hoc decisions and makes new panels/views self-consistent from the start.
 
-- **Text truncation with `...` (ellipsis) — learn from this pattern.** When a row has multiple fixed-width elements competing for space (text, context label, date, avatar), `numberOfLines={1}` can produce very short clips like "E…" that destroy meaning. Rules to follow: (1) Text is primary — give it `flex: 1` and let fixed elements shrink before the text does. (2) Secondary metadata (context label, date) should use `flexShrink: 1` with a `maxWidth` cap so they yield space to the text. (3) Never let a truncated label be shorter than ~3–4 characters — if it would be, hide it entirely rather than show a useless fragment. (4) On hover/tap of a truncated row, show the full text in a tooltip or expanded state. (5) Audit compact row layouts (Inbox, Assigned, Completed side panels) specifically — they are most likely to have this problem because they squeeze many columns into a narrow panel width.
+- **Text truncation with `...` (ellipsis) — learn from this pattern.** When a row has multiple fixed-width elements competing for space (text, context label, date, avatar), `numberOfLines={1}` can produce very short clips like "E…" that destroy meaning. Rules to follow: (1) Text is primary — give it `flex: 1` and let fixed elements shrink before the text does. (2) Secondary metadata (context label, date) should use `flexShrink: 1` with a `maxWidth` cap so they yield space to the text. (3) Never let a truncated label be shorter than ~3–4 characters — if it would be, hide it entirely rather than show a useless fragment. (4) On hover/tap of a truncated row, show the full text in a tooltip or expanded state. (5) Audit compact row layouts such as Assigned and Completed side panels specifically — they are most likely to have this problem because they squeeze many columns into a narrow panel width.
 
 ## Near-Term
 
@@ -114,8 +114,8 @@ This file collects product and implementation TODOs from working sessions. Move 
 ## Notes
 
 - Treat Notes as a separate workspace concept, not as the same thing as todo annotations.
-- Place the Notes area under the todo list in the initial UI.
-- Consider moving Notes into its own tab after workspace tabs exist.
+- Current implementation: the former Inbox tab and personal workspace side/inline panel are Notes surfaces with local Ideas and Mindmap fields.
+- Add synced storage for Notes after the workspace scope is settled.
 - Support quick note taking for personal, team, or project context depending on the active workspace.
 - Keep annotations scoped to one task; keep Notes for broader context, thoughts, snippets, and running notes.
 
@@ -193,7 +193,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Photo upload: store in Supabase Storage; write public URL to `profiles.avatar_url`. Support crop/resize on upload.
 - Keep the animal emoji picker as a fun fallback for users who prefer not to use a photo.
 - Display priority throughout the app: profile photo > animal emoji > initials fallback.
-- Show the avatar consistently everywhere: title bar, assignment pills, inbox rows, member panels, and team pages.
+- Show the avatar consistently everywhere: title bar, assignment pills, member panels, and team pages.
 - Add a Profile screen where users can change display name, avatar, status, and other profile fields after onboarding.
 
 ## Status & Presence

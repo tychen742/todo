@@ -96,6 +96,11 @@ execution view; Projects are planning views over project-scoped todos.
 - Project Kanban placement uses `workflow_status` and `workflow_position`.
 - Workspace rows show project context with the project avatar and workflow
   status icon, so users can execute project work without leaving Workspace.
+- Workspace drag reorder persists `position` values within each database
+  ordering scope: personal todos, team todos, or a project phase/backlog lane.
+  It must not write one global position sequence across mixed project and
+  non-project rows, because project-scoped active positions are unique only
+  inside each project phase/backlog lane.
 
 Todo pages track whether each personal/team/project scope has loaded once.
 Returning to an already loaded scope keeps the current rows mounted and syncs
@@ -127,16 +132,21 @@ Supabase Row Level Security is the main security boundary.
 - Adding unknown users to teams is not complete; it needs `team_invitations`.
 - The main screen is doing too much and should eventually split into domain components.
 
-## Future Notes Architecture
+## Notes Architecture
 
 Notes should be modeled separately from todo annotations and Team Pages.
 
-Likely architecture:
+Current implementation:
+
+- The former Inbox tab and personal workspace side/inline panel render Notes.
+- Notes store two local fields, Ideas and Mindmap, in `AsyncStorage` per signed-in user.
+- These notes are local-only until the shared workspace notes scope is settled.
+
+Likely synced architecture:
 
 - Store workspace-level notes in a first-party table such as `workspace_notes`.
 - Scope notes to the active workspace: personal, team, or project.
-- Show notes under the todo list first.
-- Consider a dedicated Notes tab after workspace tabs exist or notes become a primary workflow.
+- Preserve Ideas and Mindmap as first-class sections or migrate them into structured note blocks.
 - Keep todo annotations as task detail records or fields; keep workspace Notes for broader context.
 
 ## Future Team Page Architecture

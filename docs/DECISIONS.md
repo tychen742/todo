@@ -54,7 +54,7 @@ Reason: both web and iPhone clients talk directly to Supabase, so database polic
 
 **Self-assignment rule:** A task assigned to the signed-in user by that same user is accepted immediately. Inbox is for incoming work from someone else, not a holding area for tasks the user created for themself.
 
-Inbox still belongs in Workspace as a persistent communication and management pane. It may be empty, but the Workspace layout should keep it visible on wide screens so assigned work and handoffs have a stable place to appear.
+Superseded UI decision: Inbox no longer owns a primary Workspace tab or persistent side panel. That surface is now Notes for ideas and mindmaps. Assignment notifications should move to a lighter notification surface instead of competing with the main workspace.
 
 **Pre-acceptance rule:** Before a task is accepted, the assignee cannot mutate any task field (priority, due date, text, phase). The only actions available are: comment, accept, or decline.
 
@@ -118,7 +118,7 @@ Reason: real photos make the product feel human and are the foundation for prese
 
 ## 2026-06-10: Section Header Style Is Uniform Across All Panels
 
-Decision: every section or panel header in the app — task list, completed, inbox, and any future panel — must share the same visual style.
+Decision: every section or panel header in the app — task list, completed, Notes, and any future panel — must share the same visual style.
 
 **Canonical header style:**
 
@@ -128,7 +128,7 @@ Decision: every section or panel header in the app — task list, completed, inb
 - `borderBottomWidth: 1`, `borderBottomColor: '#d1d5db'`
 - `fontSize: 11`, `fontWeight: '700'`, `color: '#9ca3af'`, `letterSpacing: 0.3`
 - No `textTransform: 'uppercase'` — sentence case only (e.g. "Completed", not "COMPLETED")
-- Include item count where relevant: "Task (8)", "Completed (11)", "Inbox (4)"
+- Include item count where relevant: "Task (8)", "Completed (11)"
 
 Reason: visual consistency across all list panels reduces cognitive load. Headers that differ in size, weight, case, or background make the app feel like a collection of features rather than a coherent product.
 
@@ -147,24 +147,23 @@ Decision: all spacing in the app uses three values. No intermediate values may b
 - Top-level workspace tab band: `paddingTop: 2`, `paddingBottom: 0`, `paddingHorizontal: 12`
 - Top-level workspace tab buttons: `height: 30`, `paddingVertical: 2`, `paddingHorizontal: 6`; tabs sit on a shared bottom rule with short vertical dividers between inactive tabs. The active tab uses a top-rounded fill with a left border and transparent bottom border.
 - Add todo band: `paddingTop: 12`, `paddingBottom: 0`, `paddingHorizontal: 12`; input and Add button use `height: 36`
-- When the right-side Inbox panel is visible, the add todo band reserves the Inbox column width plus pane gap on the right so the input and Add button match the Task pane width.
+- When the right-side Notes panel is visible, the add todo band reserves the Notes column width plus pane gap on the right so the input and Add button match the Task pane width.
 - Header band separators keep their hairline border width but use a transparent border color so the header spacing stays stable without visible divider lines.
 - The title bar, workspace tab band, add todo band, and todo board share a centered `960px` max width on web-sized layouts so the task text column does not create a large empty center gap on ultrawide screens.
 - `todoBoard`: `padding: 12` all sides, `gap: 12` between panes
 - The active task pane is capped to the default visible active rows; the completed pane grows into the remaining board height when completed tasks exist.
 - The Completed/Deleted pane body is capped to three visible rows; overflow must scroll inside the pane for both tabs.
-- Inbox renders as a right-side panel on wide web screens. Below that breakpoint, Inbox renders as a full-width panel above the active task pane, not as a footer after tasks.
+- Notes render as a right-side panel on wide web screens. Below that breakpoint, Notes render as a full-width panel above the active task pane, not as a footer after tasks.
 - Deleted is a tab alongside Completed in the Completed panel. It must not appear inside the active task pane footer.
 - Deleted row text, deleted dates, and Restore actions use the same light, regular-weight tone as task description text.
 - Pane headers (TASK, Completed, INBOX): `height: 24`, `paddingRight: 2`
-- All row items (todo rows, completed rows, deleted rows, inbox rows): `paddingVertical: 2`, `paddingRight: 2`
-- Inbox rows must use the same natural row height as Task rows. Both render row content plus a separate `1px` separator view, rather than folding the separator into row padding or border height.
+- All row items (todo rows, completed rows, deleted rows): `paddingVertical: 2`, `paddingRight: 2`
 - Fixed-height controls inside a row must be no taller than 20px so they do not force rows above the shared measured row height.
 - Row left edge: determined by column structure (drag handle + checkbox), not by a padding value
 - Modals and calendar cards: `padding: 16`
 - The Edit Todo modal must always show assignment controls. Personal tasks use `None` plus the signed-in user when no team/project roster is available.
 
-**Height consistency rule:** every row in every pane — active tasks, completed, deleted, inbox — must use `paddingVertical: 2`. Using any other vertical padding on a row is a bug.
+**Height consistency rule:** every row in every pane — active tasks, completed, deleted — must use `paddingVertical: 2`. Using any other vertical padding on a row is a bug.
 
 Reason: inconsistent vertical padding is the primary cause of rows feeling different heights across panes. A single micro value (2px) applied uniformly makes all rows visually equal regardless of which pane they appear in.
 
@@ -175,7 +174,7 @@ Decision: the app uses exactly five font sizes. No other sizes may be introduced
 | Token | Size | Used for                                                           |
 |-------|----- |--------------------------------------------------------------------|
 | `xs`  | 11px | Metadata, pills, sort headers, note previews, tooltips, phase tags |
-| `sm`  | 13px | Secondary labels, tab text, button labels, inbox metadata          |
+| `sm`  | 13px | Secondary labels, tab text, button labels, notes labels            |
 | `md`  | 15px | Primary body text, todo item text, inputs                          |
 | `lg`  | 18px | Modal titles, section headings, icons                              |
 | `xl`  | 22px | Large display elements (calendar nav, workspace add button)        |
@@ -192,9 +191,9 @@ React Native `fontSize` values are density-independent points, not literal scree
 
 However, Dynamic Type (iOS) and font scaling (Android accessibility settings) are a separate concern. React Native respects the system font scale by default (`allowFontScaling` defaults to `true`). This means our `xs` (11px) items could become unreadably small if a user has reduced their system font size, or overflow their containers if enlarged. To do: audit small-text and fixed-width containers for scaling robustness before the first public release.
 
-Primary list text in todo and Inbox rows uses `#374151`, not near-black `#111827`, so dense lists read softer while retaining contrast.
+Primary list text in todo rows uses `#374151`, not near-black `#111827`, so dense lists read softer while retaining contrast.
 
-Workspace task and Inbox todo row content boxes are pinned to at least `24px`
+Workspace task row content boxes are pinned to at least `24px`
 high, with a separate `1px` separator between entries, so both lists align at
 the same compact visual rhythm.
 
@@ -340,7 +339,7 @@ Decision: icons and avatars use a fixed size scale. New UI should choose from th
 
 | Token | Size | Used for |
 |-------|------|----------|
-| `icon.xs` | 11 | Icons inside tiny row controls, such as Inbox move-to-todos |
+| `icon.xs` | 11 | Icons inside tiny row controls |
 | `icon.sm` | 15 | Secondary row actions, such as Archive |
 | `icon.md` | 18 | Standard buttons, dense toolbar controls, status indicators |
 | `icon.lg` | 22 | Primary navigation actions and larger workspace controls |
