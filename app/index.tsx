@@ -105,6 +105,7 @@ type WorkspaceMindmap = {
   body: string;
   created_at: string;
   template: MindmapTemplateKey;
+  topics: string[];
 };
 
 type MindmapTemplateKey = 'balanced' | 'right-stack' | 'workshop' | 'business-plan';
@@ -113,7 +114,7 @@ type MindmapTemplate = {
   key: MindmapTemplateKey;
   name: string;
   title: string;
-  body: string;
+  topics: string[];
   colors: string[];
 };
 
@@ -146,28 +147,28 @@ const mindmapTemplates: MindmapTemplate[] = [
     key: 'balanced',
     name: 'Balanced',
     title: 'Central Topic',
-    body: 'Central Topic\n- Main Topic 1\n- Main Topic 2\n- Main Topic 3\n- Main Topic 4',
+    topics: ['Main Topic 4', 'Main Topic 3', 'Main Topic 1', 'Main Topic 2'],
     colors: ['#ff6666', '#ff9b66', '#8ed6b0', '#72d7c6'],
   },
   {
     key: 'right-stack',
     name: 'Right Stack',
     title: 'Central Topic',
-    body: 'Central Topic\n- Main Topic 1\n- Main Topic 2\n- Main Topic 3\n- Main Topic 4',
+    topics: ['Main Topic 1', 'Main Topic 2', 'Main Topic 3', 'Main Topic 4'],
     colors: ['#ffcc43', '#e86a5b', '#29488f', '#ffcc43'],
   },
   {
     key: 'workshop',
     name: 'Workshop',
     title: 'Workshop',
-    body: 'Workshop\n- Set Goals\n- Plan the Agenda\n- Materials\n- Engagement\n- Organize the Venue\n- Feedback',
+    topics: ['Goals', 'Agenda', 'Materials', 'Engage', 'Venue', 'Feedback'],
     colors: ['#b7e0cd', '#ffad7a', '#d7be9a', '#e6bd8b', '#ffad7a', '#b7e0cd'],
   },
   {
     key: 'business-plan',
     name: 'Business Plan',
     title: 'Business Plan',
-    body: 'Business Plan\n- Target Market\n- Strategy\n- Management Team\n- Executive Summary\n- Company\n- Financial\n- Product',
+    topics: ['Market', 'Strategy', 'Team', 'Summary', 'Company', 'Financial', 'Product'],
     colors: ['#e9c7a4', '#e9c7a4', '#e9c7a4', '#f1d6b8', '#f1d6b8', '#f1d6b8', '#f1d6b8'],
   },
 ];
@@ -723,26 +724,52 @@ function mindmapTemplateFor(key: MindmapTemplateKey) {
   return mindmapTemplates.find((template) => template.key === key) ?? mindmapTemplates[0];
 }
 
-function WorkspaceMindmapPreview({ template, compact = false }: { template: MindmapTemplate; compact?: boolean }) {
+function mindmapBody(title: string, topics: string[]) {
+  return [title.trim() || 'Mindmap', ...topics.map((topic) => `- ${topic.trim() || 'Topic'}`)].join('\n');
+}
+
+function mindmapFieldsFromBody(body: string, fallback: MindmapTemplate) {
+  const lines = body.split(/\n/).map((line) => line.trim()).filter(Boolean);
+  const title = lines[0] ?? fallback.title;
+  const topics = lines.slice(1).map((line) => line.replace(/^[-*]\s*/, '')).filter(Boolean);
+  return {
+    title,
+    topics: fallback.topics.map((topic, index) => topics[index] ?? topic),
+  };
+}
+
+function WorkspaceMindmapPreview({
+  template,
+  title,
+  topics,
+  compact = false,
+}: {
+  template: MindmapTemplate;
+  title?: string;
+  topics?: string[];
+  compact?: boolean;
+}) {
   const width = compact ? 220 : 320;
   const height = compact ? 108 : 170;
   const scale = compact ? 0.68 : 1;
   const textSize = compact ? 10 : 14;
   const centerTextSize = compact ? 14 : 22;
+  const centralLabel = title ?? template.title;
+  const topicLabels = template.topics.map((topic, index) => topics?.[index] ?? topic);
 
   if (template.key === 'right-stack') {
     return (
       <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
         <Rect x={16 * scale} y={54 * scale} width={144 * scale} height={42 * scale} rx={5} fill="#fff" stroke="#11156a" strokeWidth={2.4} />
         <SvgText x={88 * scale} y={81 * scale} fill="#11156a" fontSize={centerTextSize} fontWeight="700" textAnchor="middle">
-          Central Topic
+          {centralLabel}
         </SvgText>
         <Path d={`M ${184 * scale} ${37 * scale} C ${166 * scale} ${37 * scale}, ${166 * scale} ${47 * scale}, ${166 * scale} ${67 * scale} C ${166 * scale} ${84 * scale}, ${154 * scale} ${88 * scale}, ${154 * scale} ${88 * scale} C ${166 * scale} ${88 * scale}, ${166 * scale} ${94 * scale}, ${166 * scale} ${111 * scale} C ${166 * scale} ${132 * scale}, ${168 * scale} ${142 * scale}, ${184 * scale} ${142 * scale}`} stroke="#f5bd2d" strokeWidth={2.2} fill="none" />
         {template.colors.map((color, index) => (
           <G key={`${template.key}-${index}`}>
             <Rect x={204 * scale} y={(16 + index * 38) * scale} width={104 * scale} height={27 * scale} rx={5} fill={color} />
             <SvgText x={256 * scale} y={(34 + index * 38) * scale} fill={index === 1 || index === 2 ? '#fff' : '#111827'} fontSize={textSize} fontWeight="700" textAnchor="middle">
-              {`Main Topic ${index + 1}`}
+              {topicLabels[index]}
             </SvgText>
           </G>
         ))}
@@ -752,19 +779,19 @@ function WorkspaceMindmapPreview({ template, compact = false }: { template: Mind
 
   if (template.key === 'workshop') {
     const nodes = [
-      { x: 90, y: 48, label: 'Goals' },
-      { x: 72, y: 88, label: 'Agenda' },
-      { x: 94, y: 126, label: 'Materials' },
-      { x: 230, y: 48, label: 'Engage' },
-      { x: 244, y: 88, label: 'Venue' },
-      { x: 226, y: 126, label: 'Feedback' },
+      { x: 90, y: 48, label: topicLabels[0] },
+      { x: 72, y: 88, label: topicLabels[1] },
+      { x: 94, y: 126, label: topicLabels[2] },
+      { x: 230, y: 48, label: topicLabels[3] },
+      { x: 244, y: 88, label: topicLabels[4] },
+      { x: 226, y: 126, label: topicLabels[5] },
     ];
     return (
       <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
         <Rect x={0} y={0} width={width} height={height} rx={8} fill="#eaf6f5" />
         <Ellipse cx={160 * scale} cy={86 * scale} rx={47 * scale} ry={22 * scale} fill="#374151" />
         <SvgText x={160 * scale} y={92 * scale} fill="#fff" fontSize={compact ? 12 : 16} fontWeight="700" textAnchor="middle">
-          Workshop
+          {centralLabel}
         </SvgText>
         {nodes.map((node, index) => (
           <G key={`${template.key}-${node.label}`}>
@@ -781,24 +808,24 @@ function WorkspaceMindmapPreview({ template, compact = false }: { template: Mind
 
   if (template.key === 'business-plan') {
     const leftNodes = [
-      { x: 58, y: 42, label: 'Market' },
-      { x: 72, y: 86, label: 'Strategy' },
-      { x: 60, y: 130, label: 'Team' },
+      { x: 58, y: 42, label: topicLabels[0] },
+      { x: 72, y: 86, label: topicLabels[1] },
+      { x: 60, y: 130, label: topicLabels[2] },
     ];
     const rightNodes = [
-      { x: 242, y: 32, label: 'Summary' },
-      { x: 242, y: 66, label: 'Company' },
-      { x: 242, y: 100, label: 'Financial' },
-      { x: 242, y: 134, label: 'Product' },
+      { x: 242, y: 32, label: topicLabels[3] },
+      { x: 242, y: 66, label: topicLabels[4] },
+      { x: 242, y: 100, label: topicLabels[5] },
+      { x: 242, y: 134, label: topicLabels[6] },
     ];
     return (
       <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
         <Rect x={142 * scale} y={68 * scale} width={58 * scale} height={50 * scale} rx={4} fill="#20266e" />
         <SvgText x={171 * scale} y={89 * scale} fill="#fff" fontSize={compact ? 10 : 13} fontWeight="700" textAnchor="middle">
-          BUSINESS
+          {centralLabel.split(/\s+/)[0] ?? 'BUSINESS'}
         </SvgText>
         <SvgText x={171 * scale} y={104 * scale} fill="#fff" fontSize={compact ? 10 : 13} fontWeight="700" textAnchor="middle">
-          PLAN
+          {centralLabel.split(/\s+/).slice(1).join(' ') || 'PLAN'}
         </SvgText>
         {[...leftNodes, ...rightNodes].map((node, index) => (
           <G key={`${template.key}-${node.label}`}>
@@ -814,15 +841,15 @@ function WorkspaceMindmapPreview({ template, compact = false }: { template: Mind
   }
 
   const balancedNodes = [
-    { x: 64, y: 36, label: 'Main Topic 4' },
-    { x: 64, y: 120, label: 'Main Topic 3' },
-    { x: 254, y: 36, label: 'Main Topic 1' },
-    { x: 254, y: 120, label: 'Main Topic 2' },
+    { x: 64, y: 36, label: topicLabels[0] },
+    { x: 64, y: 120, label: topicLabels[1] },
+    { x: 254, y: 36, label: topicLabels[2] },
+    { x: 254, y: 120, label: topicLabels[3] },
   ];
   return (
     <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
       <SvgText x={160 * scale} y={89 * scale} fill="#111827" fontSize={centerTextSize} fontWeight="700" textAnchor="middle">
-        Central Topic
+        {centralLabel}
       </SvgText>
       {balancedNodes.map((node, index) => (
         <G key={`${template.key}-${node.label}`}>
@@ -1027,24 +1054,38 @@ export default function HomeScreen() {
         };
         const legacyDraft = notes.mindmapDraft ?? notes.mindmap ?? '';
         const loadedMindmaps = Array.isArray(notes.mindmaps)
-          ? notes.mindmaps.map((mindmap, index) => ({
-              id: mindmap.id ?? `legacy-${index}-${Date.now()}`,
-              title: mindmap.title ?? 'Mindmap',
-              body: mindmap.body ?? '',
-              created_at: mindmap.created_at ?? new Date().toISOString(),
-              template: mindmap.template ?? 'balanced',
-            }))
+          ? notes.mindmaps.map((mindmap, index) => {
+              const template = mindmapTemplateFor(mindmap.template ?? 'balanced');
+              const fields = mindmapFieldsFromBody(mindmap.body ?? '', template);
+              const title = mindmap.title ?? fields.title;
+              const topics = Array.isArray(mindmap.topics) && mindmap.topics.length > 0
+                ? template.topics.map((topic, topicIndex) => mindmap.topics?.[topicIndex] ?? topic)
+                : fields.topics;
+              return {
+                id: mindmap.id ?? `legacy-${index}-${Date.now()}`,
+                title,
+                body: mindmap.body ?? mindmapBody(title, topics),
+                created_at: mindmap.created_at ?? new Date().toISOString(),
+                template: template.key,
+                topics: [...topics],
+              };
+            })
           : [];
         const migratedMindmaps = legacyDraft.trim() && loadedMindmaps.length === 0
-          ? [
-              {
-                id: `legacy-draft-${Date.now()}`,
-                title: legacyDraft.split(/\n/).map((line) => line.trim()).find(Boolean)?.slice(0, 80) ?? 'Mindmap',
-                body: legacyDraft,
-                created_at: new Date().toISOString(),
-                template: 'balanced' as MindmapTemplateKey,
-              },
-            ]
+          ? (() => {
+              const template = mindmapTemplateFor('balanced');
+              const fields = mindmapFieldsFromBody(legacyDraft, template);
+              return [
+                {
+                  id: `legacy-draft-${Date.now()}`,
+                  title: fields.title,
+                  body: mindmapBody(fields.title, fields.topics),
+                  created_at: new Date().toISOString(),
+                  template: template.key,
+                  topics: [...fields.topics],
+                },
+              ];
+            })()
           : loadedMindmaps;
         setWorkspaceIdeas(notes.ideas ?? '');
         setWorkspaceMindmaps(migratedMindmaps);
@@ -1290,9 +1331,10 @@ export default function HomeScreen() {
       {
         id: `${Date.now()}`,
         title: template.title,
-        body: template.body,
+        body: mindmapBody(template.title, template.topics),
         created_at: new Date().toISOString(),
         template: template.key,
+        topics: [...template.topics],
       },
       ...workspaceMindmaps,
     ];
@@ -1303,6 +1345,22 @@ export default function HomeScreen() {
 
   function deleteWorkspaceMindmap(id: string) {
     const nextMindmaps = workspaceMindmaps.filter((mindmap) => mindmap.id !== id);
+    setWorkspaceMindmaps(nextMindmaps);
+    saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
+  }
+
+  function updateWorkspaceMindmap(id: string, updates: Partial<Pick<WorkspaceMindmap, 'title' | 'topics'>>) {
+    const nextMindmaps = workspaceMindmaps.map((mindmap) => {
+      if (mindmap.id !== id) return mindmap;
+      const title = updates.title ?? mindmap.title;
+      const topics = updates.topics ?? mindmap.topics;
+      return {
+        ...mindmap,
+        title,
+        topics,
+        body: mindmapBody(title, topics),
+      };
+    });
     setWorkspaceMindmaps(nextMindmaps);
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
   }
@@ -3550,23 +3608,58 @@ export default function HomeScreen() {
                 {workspaceMindmaps.length === 0 ? (
                   <Text style={styles.notesMindmapEmpty}>Created mindmaps will appear here.</Text>
                 ) : (
-                  workspaceMindmaps.map((mindmap) => (
-                    <View key={mindmap.id} style={styles.notesMindmapCard}>
-                      <WorkspaceMindmapPreview template={mindmapTemplateFor(mindmap.template)} compact />
-                      <View style={styles.notesMindmapCardHeader}>
-                        <Text style={styles.notesMindmapTitle} numberOfLines={1}>{mindmap.title}</Text>
-                        <Pressable
-                          onPress={() => deleteWorkspaceMindmap(mindmap.id)}
-                          hitSlop={8}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Delete mindmap ${mindmap.title}`}
-                        >
-                          <Text style={styles.notesMindmapDelete}>Delete</Text>
-                        </Pressable>
+                  workspaceMindmaps.map((mindmap) => {
+                    const template = mindmapTemplateFor(mindmap.template);
+                    return (
+                      <View key={mindmap.id} style={styles.notesMindmapCard}>
+                        <View style={styles.notesMindmapCardHeader}>
+                          <Text style={styles.notesMindmapTitle} numberOfLines={1}>{template.name}</Text>
+                          <Pressable
+                            onPress={() => deleteWorkspaceMindmap(mindmap.id)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Delete mindmap ${mindmap.title}`}
+                          >
+                            <Text style={styles.notesMindmapDelete}>Delete</Text>
+                          </Pressable>
+                        </View>
+                        <WorkspaceMindmapPreview
+                          template={template}
+                          title={mindmap.title}
+                          topics={mindmap.topics}
+                          compact={isSide || width < 980}
+                        />
+                        <View style={styles.notesMindmapEditor}>
+                          <TextInput
+                            value={mindmap.title}
+                            onChangeText={(value) => updateWorkspaceMindmap(mindmap.id, { title: value })}
+                            style={[styles.notesMindmapInput, styles.notesMindmapCentralInput]}
+                            placeholder="Central topic"
+                            placeholderTextColor="#9ca3af"
+                            accessibilityLabel="Central topic"
+                          />
+                          <View style={styles.notesMindmapTopicGrid}>
+                            {template.topics.map((topic, topicIndex) => (
+                              <TextInput
+                                key={`${mindmap.id}-${topicIndex}`}
+                                value={mindmap.topics[topicIndex] ?? topic}
+                                onChangeText={(value) => {
+                                  const nextTopics = template.topics.map((fallbackTopic, index) =>
+                                    index === topicIndex ? value : (mindmap.topics[index] ?? fallbackTopic)
+                                  );
+                                  updateWorkspaceMindmap(mindmap.id, { topics: nextTopics });
+                                }}
+                                style={styles.notesMindmapInput}
+                                placeholder={`Topic ${topicIndex + 1}`}
+                                placeholderTextColor="#9ca3af"
+                                accessibilityLabel={`Mindmap topic ${topicIndex + 1}`}
+                              />
+                            ))}
+                          </View>
+                        </View>
                       </View>
-                      <Text style={styles.notesMindmapBody} numberOfLines={5}>{mindmap.body}</Text>
-                    </View>
-                  ))
+                    );
+                  })
                 )}
               </View>
             </View>
@@ -7067,11 +7160,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  notesMindmapBody: {
-    color: '#6b7280',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
+  notesMindmapEditor: {
+    gap: 8,
+  },
+  notesMindmapTopicGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  notesMindmapInput: {
+    minWidth: 118,
+    flexGrow: 1,
+    flexBasis: 118,
+    minHeight: 34,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '600',
+    outlineStyle: 'none' as never,
+  },
+  notesMindmapCentralInput: {
+    flexBasis: 'auto',
+    width: '100%',
+    borderColor: '#a5b4fc',
+    backgroundColor: '#eef2ff',
+    color: '#312e81',
+    fontWeight: '700',
   },
   authScroll: {
     flexGrow: 1,

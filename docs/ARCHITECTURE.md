@@ -141,7 +141,7 @@ Current implementation:
 - The former Inbox tab and personal workspace side/inline panel render Notes.
 - Notes store a left Ideas pane, a right mindmap template picker, and created
   mindmap entries in `AsyncStorage` per signed-in user. Created mindmaps keep
-  their template key plus a generated starter outline.
+  their template key, central topic, and editable branch labels.
 - These notes are local-only until the shared workspace notes scope is settled.
 
 Likely synced architecture:
