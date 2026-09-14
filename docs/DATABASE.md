@@ -102,6 +102,7 @@ Deleting a project phase sets affected todo `phase_id` values to `null`, which m
 Personal todos have `team_id = null`. Team todos have `team_id` set and can be assigned to a team member.
 Assigned tasks start as incoming work until the assignee accepts them. `assigned_at` records when the task was assigned, `accepted_at` records when the assignee accepted it into their todo list, and `completed_at` records when the task was marked done.
 When the creator assigns a task to themself, the app sets `accepted_at` immediately so the task stays in Todos instead of entering the pending assignment queue.
+Current `todos` columns can answer the latest assignment state: who created the todo, who it is currently assigned to, when it was assigned, when it was accepted, and when it was completed. A "sent assignments" report can use these fields to show how many todos a user has assigned to each person and when, as long as it only needs current assignment state.
 
 `due_date` is optional. Todos without a due date should store `null`.
 
@@ -157,6 +158,8 @@ Expected event shape:
 - `created_at`
 
 Good candidates for `todo_events` are assignment changes, due-date changes, reopen events, priority changes, comments/annotations, blocked/unblocked transitions, and project phase moves. Keep `todos` as the current-state table; use events only when the product needs audit history, analytics, or timeline UI.
+
+If the product must answer historical sender questions such as "how many todos did I send to whom and when, including reassigned or deleted tasks," record assignment events in `todo_events` with `actor_id` as the sender, `event_type = 'assigned'`, `from_value` as the previous assignee, `to_value` as the new assignee, and `created_at` as the send time.
 
 ## RLS Summary
 

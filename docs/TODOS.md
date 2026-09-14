@@ -129,6 +129,8 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Assignment & Collaborators
 
+- Add a "Sent assignments" view/report so a user can see how many todos they assigned, who received them, when they were sent, and whether each one is pending, accepted, active, completed, or deleted.
+- Decide whether the first version can use current `todos.created_by`, `assigned_to`, `assigned_at`, `accepted_at`, and `completed_at`, or whether it needs `todo_events` to preserve reassignment and deletion history.
 - Replace the cycle-tap assignee mechanic on kanban cards with a searchable picker modal.
 - Picker shows Team Members first (from the project's linked team), then any existing Collaborators on the project.
 - Search filters by name or email in real time; Tab moves between results; Enter confirms selection.

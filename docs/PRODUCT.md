@@ -119,6 +119,7 @@ Rules:
 - Todo annotations and project planning/annotation should capture resource constraints, risks, assumptions, blockers, and mitigation notes.
 - Assignment only makes sense in a team or project context with multiple users.
 - The original Workspace Inbox should stay available for assigned-to-me tasks. Notes is a separate workspace area for ideas and mindmaps.
+- Users should be able to answer: how many todos have I assigned, who did I send them to, when did I send them, and what is their current status?
 - Priority should default to Normal on creation unless quick-capture text includes a priority token. It should stay visible on each todo row and be changeable from that row.
 - Due dates are central to time management and project management; they should support planning, workload visibility, reminders, calendars, and milestone tracking.
 - Adding todos should stay as quick capture: the add area should have one text input for the todo text.
@@ -207,6 +208,7 @@ Due dates are optional at capture time, but they become a planning signal when p
 - Notes area under the todo list
 - Team pages for shared notes, links, status, and lightweight widgets
 - Filters for assigned to me, created by me, urgent, completed, team, and project
+- Sent assignment history: count todos the user assigned, grouped by assignee and assignment date, with current status and acceptance/completion timing
 - Project creation and closure
 - Project-scoped todos
 - Personal calendar and team calendar views
