@@ -96,6 +96,9 @@ execution view; Projects are planning views over project-scoped todos.
 - Project Kanban placement uses `workflow_status` and `workflow_position`.
 - Workspace rows show project context with the project avatar and workflow
   status icon, so users can execute project work without leaving Workspace.
+- The Workspace Project-column filter narrows active rows in memory to All
+  projects, No project, or one project in the current personal/team scope. It
+  does not change the Supabase query or completed-task history.
 - Workspace drag reorder persists `position` values within each database
   ordering scope: personal todos, team todos, or a project phase/backlog lane.
   It must not write one global position sequence across mixed project and

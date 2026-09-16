@@ -196,6 +196,7 @@ Due dates are optional at capture time, but they become a planning signal when p
 - Team todo assignment
 - Todo priority levels: low, normal, high, urgent
 - Optional due dates
+- Workspace task filtering by project, including unassigned-to-project todos
 - Todo annotations planned for per-task details
 - Supabase-backed sync across web and iPhone
 

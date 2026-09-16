@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, MoreHorizontal } from 'lucide-react-native';
+import { ArrowLeft, Filter, MoreHorizontal } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -1247,6 +1247,8 @@ export default function HomeScreen() {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [hoveredSortField, setHoveredSortField] = useState<SortField | null>(null);
+  const [projectFilter, setProjectFilter] = useState<'all' | 'none' | string>('all');
+  const [projectFilterPickerVisible, setProjectFilterPickerVisible] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -1417,6 +1419,16 @@ export default function HomeScreen() {
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
+  const projectFilterProjects = useMemo(
+    () => projects
+      .filter((project) => !project.archived_at)
+      .filter((project) => selectedTeamId
+        ? project.team_id === selectedTeamId
+        : project.team_id === null && project.created_by === session?.user.id
+      )
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [projects, selectedTeamId, session?.user.id]
+  );
   const accountDisplayName = profile
     ? profileDisplayName(profile)
     : emailDisplayName(session?.user.email);
@@ -1426,6 +1438,11 @@ export default function HomeScreen() {
       ? `team:${selectedTeamId}`
       : `personal:${session?.user.id ?? 'anonymous'}`;
   const hasLoadedCurrentTodos = loadedTodoScopes[todoScopeKey] === true;
+
+  useEffect(() => {
+    setProjectFilter('all');
+    setProjectFilterPickerVisible(false);
+  }, [selectedProjectId, selectedTeamId]);
 
   function projectAvatarFor(project: Project): { label: string; initials: string; color: string } {
     return {
@@ -1452,7 +1469,12 @@ export default function HomeScreen() {
     [members]
   );
   const active = useMemo(() => {
-    const items = todos.filter((t) => !t.done);
+    const items = todos.filter((todo) =>
+      !todo.done && (
+        projectFilter === 'all' ||
+        (projectFilter === 'none' ? todo.project_id === null : todo.project_id === projectFilter)
+      )
+    );
     if (!sortField) return items;
     const projectNameForTodo = (todo: Todo) => {
       const project = todo.project_id
@@ -1511,7 +1533,7 @@ export default function HomeScreen() {
       if (delta === 0) delta = a.text.localeCompare(b.text);
       return sortDir === 'asc' ? delta : -delta;
     });
-  }, [todos, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
+  }, [todos, projectFilter, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
 
   const done = useMemo(() => todos.filter((t) => t.done), [todos]);
   const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
@@ -5702,7 +5724,15 @@ export default function HomeScreen() {
                     {renderIconSortHeader('assigned_by', 'Sort by assigned by', styles.sortColAssignedBy)}
                   </View>
                   <View style={styles.sortStatusGap}>
-                    {renderIconSortHeader('project', 'Sort by project', styles.sortColProject)}
+                    <Pressable
+                      onPress={() => setProjectFilterPickerVisible(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Filter by project"
+                      accessibilityState={{ expanded: projectFilterPickerVisible, selected: projectFilter !== 'all' }}
+                      style={[styles.sortColProject, styles.sortIconHeader, projectFilter !== 'all' && styles.sortIconHeaderActive]}
+                    >
+                      <Filter size={13} color={projectFilter === 'all' ? '#9ca3af' : '#4338ca'} strokeWidth={2.5} />
+                    </Pressable>
                     {renderIconSortHeader('status', 'Sort by status', styles.sortColStatus)}
                   </View>
                   {renderIconSortHeader('due_date', 'Sort by due date', styles.sortColDue)}
@@ -5902,6 +5932,58 @@ export default function HomeScreen() {
               })}
             </Pressable>
           )}
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={projectFilterPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProjectFilterPickerVisible(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setProjectFilterPickerVisible(false)}>
+          <Pressable style={styles.projectFilterPicker} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.projectFilterTitle}>Filter by project</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {([
+                ['all', 'All projects'],
+                ['none', 'No project'],
+              ] as const).map(([filter, label]) => {
+                const isSelected = projectFilter === filter;
+                return (
+                  <Pressable
+                    key={filter}
+                    onPress={() => {
+                      setProjectFilter(filter);
+                      setProjectFilterPickerVisible(false);
+                    }}
+                    style={[styles.projectFilterOption, isSelected && styles.projectFilterOptionActive]}
+                  >
+                    <Text style={[styles.projectFilterOptionLabel, isSelected && styles.projectFilterOptionLabelActive]}>{label}</Text>
+                    {isSelected && <Text style={styles.projectFilterCheck}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+              {projectFilterProjects.map((project) => {
+                const isSelected = projectFilter === project.id;
+                return (
+                  <Pressable
+                    key={project.id}
+                    onPress={() => {
+                      setProjectFilter(project.id);
+                      setProjectFilterPickerVisible(false);
+                    }}
+                    style={[styles.projectFilterOption, isSelected && styles.projectFilterOptionActive]}
+                  >
+                    <Text style={[styles.projectFilterOptionLabel, isSelected && styles.projectFilterOptionLabelActive]} numberOfLines={1}>
+                      {project.name}
+                    </Text>
+                    {isSelected && <Text style={styles.projectFilterCheck}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
         </Pressable>
       </Modal>
 
@@ -9270,6 +9352,45 @@ const styles = StyleSheet.create({
   },
   sortIconHeaderActive: {
     backgroundColor: '#e0e7ff',
+  },
+  projectFilterPicker: {
+    width: 260,
+    maxHeight: '70%',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 8,
+  },
+  projectFilterTitle: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  projectFilterOption: {
+    minHeight: 40,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 5,
+  },
+  projectFilterOptionActive: {
+    backgroundColor: '#eef2ff',
+  },
+  projectFilterOptionLabel: {
+    flex: 1,
+    color: '#374151',
+    fontSize: 14,
+  },
+  projectFilterOptionLabelActive: {
+    color: '#312e81',
+    fontWeight: '700',
+  },
+  projectFilterCheck: {
+    color: '#4338ca',
+    fontSize: 16,
+    fontWeight: '700',
   },
   sortColTask: {
     flex: 1,

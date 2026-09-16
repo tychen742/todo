@@ -280,12 +280,13 @@ Implementation rules:
 
 Decision: Task pane column headers should support sorting without adding a toolbar or visible icon clutter.
 
-Reason: users need to sort by task text, priority, assigned-by, project, status, due date, and task age, but the pane should not feel like a dense spreadsheet. Existing row columns already communicate the available sort dimensions.
+Reason: users need to sort by task text, priority, assigned-by, status, due date, and task age, and to filter active work by project, but the pane should not feel like a dense spreadsheet. Existing row columns already communicate the available sort dimensions.
 
 Implementation rules:
 
 - Use the visible `TASK` label as a clickable sort header.
-- Use blank but accessible hit targets over compact columns for Priority, Assigned By, Project, Status, Due Date, and Task Age.
+- Use blank but accessible hit targets over compact columns for Priority, Assigned By, Status, Due Date, and Task Age.
+- The Project column uses a funnel control that opens a picker for All projects, No project, and projects in the current personal or team workspace scope. Selecting one filters active Workspace rows and updates the Task count. It resets when the workspace scope changes.
 - Highlight a header target only on hover or when active.
 - Show an up/down arrow only for the active sort column.
 - Header column widths and margins must mirror task-row column widths; avoid header-only padding that shifts the sort targets.
