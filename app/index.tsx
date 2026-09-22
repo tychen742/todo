@@ -1247,6 +1247,7 @@ export default function HomeScreen() {
   const [assigneePickerPriority, setAssigneePickerPriority] = useState<Priority>('normal');
   const [assigneePickerMonth, setAssigneePickerMonth] = useState(() => new Date());
   const [assignedToMe, setAssignedToMe] = useState<Todo[]>([]);
+  const [assignedFromMe, setAssignedFromMe] = useState<Todo[]>([]);
   const [memberEmail, setMemberEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [newTodoAssignee, setNewTodoAssignee] = useState<string | null>(null);
@@ -2165,6 +2166,26 @@ export default function HomeScreen() {
     if (!err) setAssignedToMe((data ?? []) as Todo[]);
   }, [session]);
 
+  const loadAssignedFromMe = useCallback(async () => {
+    if (!session) return;
+    const { data, error: err } = await supabase
+      .from('todos')
+      .select(todoSelectColumns)
+      .eq('created_by', session.user.id)
+      .not('assigned_to', 'is', null)
+      .neq('assigned_to', session.user.id)
+      .is('archived_at', null)
+      .eq('done', false)
+      .or('team_id.not.is.null,project_id.not.is.null')
+      .order('assigned_at', { ascending: false, nullsFirst: false });
+    if (!err) setAssignedFromMe((data ?? []) as Todo[]);
+  }, [session]);
+
+  const loadInboxAssignments = useCallback(() => {
+    loadAssignedToMe();
+    loadAssignedFromMe();
+  }, [loadAssignedFromMe, loadAssignedToMe]);
+
   const loadArchivedTodos = useCallback(async () => {
     let query = supabase
       .from('todos')
@@ -2198,8 +2219,8 @@ export default function HomeScreen() {
   }, [selectedTeamId, selectedProjectId, session, projects]);
 
   useEffect(() => {
-    loadAssignedToMe();
-  }, [loadAssignedToMe]);
+    loadInboxAssignments();
+  }, [loadInboxAssignments]);
 
   useEffect(() => {
     loadArchivedTodos();
@@ -3037,6 +3058,7 @@ export default function HomeScreen() {
     if (data) {
       setTodos((prev) => sortTodos([data as Todo, ...prev]));
     }
+    loadAssignedFromMe();
     setInput('');
     setError('');
   }
@@ -3073,6 +3095,7 @@ export default function HomeScreen() {
 
     if (insertError) { setError(insertError.message); return; }
     if (data) setTodos((prev) => [data as Todo, ...prev]);
+    loadAssignedFromMe();
     setColumnInputs((prev) => ({ ...prev, [key]: '' }));
     setColumnAssignees((prev) => ({ ...prev, [key]: null }));
     setError('');
@@ -3100,6 +3123,7 @@ export default function HomeScreen() {
     }
 
     setTodos((prev) => prev.map((item) => (item.id === id ? { ...item, done, completed_at, workflow_status } : item)));
+    setAssignedFromMe((prev) => (done ? prev.filter((item) => item.id !== id) : prev));
     setError('');
   }
 
@@ -3138,6 +3162,8 @@ export default function HomeScreen() {
     setTodos((prev) =>
       prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item))
     );
+    loadAssignedToMe();
+    loadAssignedFromMe();
     setAssigneeTodo(null);
     setError('');
   }
@@ -3178,6 +3204,7 @@ export default function HomeScreen() {
     setTodos(prev => prev.map(t => t.id === assigneeTodo!.id ? { ...t, ...updates } : t));
     closeAssigneePicker();
     loadAssignedToMe();
+    loadAssignedFromMe();
     setError('');
   }
 
@@ -3209,6 +3236,9 @@ export default function HomeScreen() {
       sortTodos(prev.map((item) => (item.id === todo.id ? { ...item, priority } : item)))
     );
     setAssignedToMe((prev) =>
+      prev.map((item) => (item.id === todo.id ? { ...item, priority } : item))
+    );
+    setAssignedFromMe((prev) =>
       prev.map((item) => (item.id === todo.id ? { ...item, priority } : item))
     );
     setPriorityPicker(null);
@@ -3264,6 +3294,11 @@ export default function HomeScreen() {
     );
     setAssignedToMe((prev) =>
       prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item))
+    );
+    setAssignedFromMe((prev) =>
+      done
+        ? prev.filter((item) => item.id !== todo.id)
+        : prev.map((item) => (item.id === todo.id ? { ...item, ...updates } : item))
     );
     setStatusPicker(null);
     setError('');
@@ -3469,6 +3504,8 @@ export default function HomeScreen() {
           : item
       )
     );
+    loadAssignedToMe();
+    loadAssignedFromMe();
     closeEditModal();
     setError('');
   }
@@ -3482,6 +3519,7 @@ export default function HomeScreen() {
     if (updateError) { setError(updateError.message); return; }
     const todo = todos.find((t) => t.id === id);
     setTodos((prev) => prev.filter((t) => t.id !== id));
+    setAssignedFromMe((prev) => prev.filter((t) => t.id !== id));
     if (todo) setArchivedTodos((prev) => [{ ...todo, archived_at }, ...prev]);
     if (editTodo?.id === id) closeEditModal();
     setError('');
@@ -4019,21 +4057,96 @@ export default function HomeScreen() {
     );
   }
 
+  function renderAssignedFromMeTodo(todo: Todo) {
+    const project = projects.find((item) => item.id === todo.project_id);
+    const contextLabel = project?.name ?? 'Team task';
+    const due = parseDateValue(todo.due_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isOverdue = due ? due < today : false;
+    const assigneeMember = todo.assigned_to ? memberById.get(todo.assigned_to) : null;
+    const assigneeName = assigneeMember ? profileDisplayName(assigneeMember) : 'Assigned user';
+    const assigneeEmail = assigneeMember?.email ?? todo.assigned_to ?? '';
+    const assigneeInitials = (assigneeName[0] ?? '?').toUpperCase();
+    const assigneeColor = pickAvatarColor(assigneeEmail);
+    const isRowHovered = Platform.OS === 'web' && hoveredInboxTodoId === todo.id;
+    const assignmentState = todo.accepted_at ? 'Accepted' : 'Waiting';
+
+    return (
+      <View key={todo.id} style={[styles.assignedToMeRowOuter, isRowHovered && styles.assignedToMeRowHovered]}>
+        <Pressable
+          onHoverIn={() => setHoveredInboxTodoId(todo.id)}
+          onHoverOut={() => setHoveredInboxTodoId(null)}
+          style={[styles.assignedToMeRow, { paddingVertical: rowPV }]}
+        >
+          <View style={[styles.inboxSentStatePill, todo.accepted_at && styles.inboxSentStatePillAccepted]}>
+            <Text style={[styles.inboxSentStateText, todo.accepted_at && styles.inboxSentStateTextAccepted]}>
+              {todo.accepted_at ? '✓' : '…'}
+            </Text>
+          </View>
+          <Text style={styles.assignedToMeText} numberOfLines={1}>{todo.text}</Text>
+          <Text style={styles.assignedToMeContext} numberOfLines={1}>{assignmentState}</Text>
+          {!!contextLabel && <Text style={styles.assignedToMeContext} numberOfLines={1}>{contextLabel}</Text>}
+          {todo.due_date && (
+            <Text style={[styles.assignedToMeDue, isOverdue && styles.assignedToMeDueOverdue]} numberOfLines={1}>
+              {isOverdue ? 'Overdue' : todo.due_date}
+            </Text>
+          )}
+          <InboxAssignerAvatar
+            initials={assigneeInitials}
+            color={assigneeColor}
+            avatarUrl={assigneeMember?.avatar_url ?? null}
+            tooltip={`To: ${assigneeName}`}
+          />
+          {isRowHovered && (
+            <View style={styles.assignedToMeTooltip}>
+              <Text style={styles.assignedToMeTooltipText}>{todo.text}</Text>
+              <Text style={styles.assignedToMeTooltipNote}>To: {assigneeName}</Text>
+              {!!todo.note && <Text style={styles.assignedToMeTooltipNote}>{todo.note}</Text>}
+            </View>
+          )}
+        </Pressable>
+        <View style={styles.assignedToMeSeparator} />
+      </View>
+    );
+  }
+
   function renderWorkspaceInboxPanel(variant: 'side' | 'inline' | 'full') {
+    const totalInboxCount = assignedToMe.length + assignedFromMe.length;
+    const inboxSections = (
+      <>
+        <View style={styles.inboxSectionHeader}>
+          <Text style={styles.inboxSectionTitle}>To you ({assignedToMe.length})</Text>
+        </View>
+        {assignedToMe.length === 0 ? (
+          <Text style={styles.inboxViewEmpty}>No assigned tasks for you right now.</Text>
+        ) : (
+          assignedToMe.map(renderAssignedToMeTodo)
+        )}
+
+        <View style={styles.inboxSectionHeader}>
+          <Text style={styles.inboxSectionTitle}>From you ({assignedFromMe.length})</Text>
+        </View>
+        {assignedFromMe.length === 0 ? (
+          <Text style={styles.inboxViewEmpty}>No active assignments from you.</Text>
+        ) : (
+          assignedFromMe.map(renderAssignedFromMeTodo)
+        )}
+      </>
+    );
+
     return (
       <View style={[
         variant === 'side' && styles.assignedToMePanel,
         variant === 'inline' && styles.assignedToMeInlinePanel,
         variant === 'full' && styles.inboxViewPanel,
       ]}>
-        <Text style={styles.assignedToMePanelTitle}>INBOX ({assignedToMe.length})</Text>
-        {assignedToMe.length === 0 ? (
-          <Text style={styles.inboxViewEmpty}>No assigned tasks right now.</Text>
-        ) : variant === 'full' ? (
-          assignedToMe.map(renderAssignedToMeTodo)
+        <Text style={styles.assignedToMePanelTitle}>INBOX ({totalInboxCount})</Text>
+        {variant === 'full' ? (
+          inboxSections
         ) : (
           <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
-            {assignedToMe.map(renderAssignedToMeTodo)}
+            {inboxSections}
           </ScrollView>
         )}
       </View>
@@ -7639,6 +7752,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
+  inboxSectionHeader: {
+    minHeight: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  inboxSectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6b7280',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
   notesPanelScroll: {
     maxHeight: incomingBoxMaxHeight - taskHeaderHeight,
   },
@@ -10889,6 +11017,30 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '700',
+  },
+  inboxSentStatePill: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    flexShrink: 0,
+  },
+  inboxSentStatePillAccepted: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#86efac',
+  },
+  inboxSentStateText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 14,
+  },
+  inboxSentStateTextAccepted: {
+    color: '#16a34a',
   },
   assignedToMeText: {
     flex: 1,
