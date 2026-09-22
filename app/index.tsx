@@ -10014,6 +10014,9 @@ const styles = StyleSheet.create({
   },
   sortColProject: {
     width: 18,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
   },
   sortColStatus: {
