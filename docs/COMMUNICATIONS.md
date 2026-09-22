@@ -17,6 +17,23 @@ Every user has a short free-text status ("What are you up to?") visible to their
 
 **Future:** status could auto-expire after a set time (e.g., "In a meeting until 3pm"), integrate with calendar presence, or display alongside avatars throughout the UI.
 
+## Presence and Activity: User Education
+
+Users will need a short, friendly explanation because the header combines several related signals:
+
+- **Green dot:** the browser window is active and focused.
+- **Status message:** the user's short personal message, such as "I am up to something." This is a lightweight signal for teammates, not a chat message.
+- **Activity bar:** an 8-hour work-window bar. It fills green while the Workspace tab is open and visibly shown. In the browser version, this means the Workspace tab is selected and the page is not hidden by browser tab visibility rules.
+- **Message board:** compact presence and chat/status snippets, such as "Alice is online" or "Alice: I am up to something." Presence snippets and personal chat/status snippets should use different color bars.
+
+Suggested help copy:
+
+> The green dot means your browser is focused here. The activity bar shows how much time today this Workspace has been visibly open, up to an 8-hour work window. Your status message is a quick way to tell teammates what you are doing.
+
+Browser limitation to explain carefully: the web app can know when the Workspace tab is selected and visible according to the browser, but it cannot always know whether another desktop app is physically covering the browser window. Desktop and mobile apps can provide stronger foreground and screen-presence signals later.
+
+Design principle: present these signals as awareness, not surveillance. The activity bar should help users understand their own Workspace time; it should not be framed as employee monitoring.
+
 ## Assignment Notifications
 
 When a todo is assigned to a team member, they should receive a notification. The old Inbox tab no longer owns this flow; that workspace surface is now Notes. The full notification pipeline (in-app badge, email, push) is planned.
