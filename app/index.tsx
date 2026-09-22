@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   Image,
   type GestureResponderEvent,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { DraggableList } from '../components/DraggableList';
 import { KanbanDragItem, KanbanDragProvider, KanbanDropLane } from '../components/KanbanDrag';
@@ -1108,6 +1109,7 @@ function EditableWorkspaceMindmap({
   onNodeChange: (nodeId: string, value: string) => void;
   onNodeDelete: (nodeId: string) => void;
 }) {
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const root = { x: 50, y: 50 };
   const topLevelNodes = mindmap.nodes.length > 0 ? mindmap.nodes : mindmapNodesFromTopics(mindmap.topics);
   const positions = editableMindmapPositions(mindmap.template, topLevelNodes.length);
@@ -1115,14 +1117,58 @@ function EditableWorkspaceMindmap({
   const childWidth = compact ? 94 : 108;
   const rootWidth = compact ? 138 : 166;
   const nodeHeight = 38;
+  const rootHeight = 42;
   const childNodeHeight = 32;
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+  const canvasWidth = Math.max(canvasSize.width, 1);
+  const canvasHeight = Math.max(canvasSize.height, 1);
+  const toCanvasPoint = (point: { x: number; y: number }) => ({
+    x: (point.x / 100) * canvasWidth,
+    y: (point.y / 100) * canvasHeight,
+  });
+  const gridPath = [20, 40, 60, 80].map((line) => {
+    const x = (line / 100) * canvasWidth;
+    const y = (line / 100) * canvasHeight;
+    return `M ${x} 0 V ${canvasHeight} M 0 ${y} H ${canvasWidth}`;
+  }).join(' ');
+  function handleCanvasLayout(event: LayoutChangeEvent) {
+    const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
+    setCanvasSize((current) => (
+      Math.abs(current.width - nextWidth) < 1 && Math.abs(current.height - nextHeight) < 1
+        ? current
+        : { width: nextWidth, height: nextHeight }
+    ));
+  }
+  function connectorEndpoint(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    width: number,
+    height: number
+  ) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (dx === 0 && dy === 0) return from;
+    const halfWidth = width / 2;
+    const halfHeight = height / 2;
+    const scale = Math.min(
+      Math.abs(dx) > 0 ? halfWidth / Math.abs(dx) : Number.POSITIVE_INFINITY,
+      Math.abs(dy) > 0 ? halfHeight / Math.abs(dy) : Number.POSITIVE_INFINITY
+    );
+    return {
+      x: from.x + dx * scale,
+      y: from.y + dy * scale,
+    };
+  }
   type RenderNode = {
     node: WorkspaceMindmapNode;
     x: number;
     y: number;
     parentX: number;
     parentY: number;
+    width: number;
+    height: number;
+    parentWidth: number;
+    parentHeight: number;
     depth: number;
     color: string;
   };
@@ -1136,44 +1182,70 @@ function EditableWorkspaceMindmap({
       y: clamp(parentY + yOffset, 9, 91),
     };
   }
-  function collectNodes(nodes: WorkspaceMindmapNode[], parentX: number, parentY: number, depth: number) {
+  function collectNodes(
+    nodes: WorkspaceMindmapNode[],
+    parentX: number,
+    parentY: number,
+    parentWidth: number,
+    parentHeight: number,
+    depth: number
+  ) {
     nodes.forEach((node, index) => {
       const position = depth === 0
         ? positions[index]
         : childPosition(parentX, parentY, index, nodes.length, depth);
       const color = template.colors[index % template.colors.length] ?? '#e5e7eb';
+      const width = depth === 0 ? topicWidth : childWidth;
+      const height = depth === 0 ? nodeHeight : childNodeHeight;
       renderNodes.push({
         node,
         x: position.x,
         y: position.y,
         parentX,
         parentY,
+        width,
+        height,
+        parentWidth,
+        parentHeight,
         depth,
         color: depth === 0 ? color : '#ffffff',
       });
-      collectNodes(node.children, position.x, position.y, depth + 1);
+      collectNodes(node.children, position.x, position.y, width, height, depth + 1);
     });
   }
-  collectNodes(topLevelNodes, root.x, root.y, 0);
+  collectNodes(topLevelNodes, root.x, root.y, rootWidth, rootHeight, 0);
 
   return (
-    <View style={[styles.notesMindmapCanvas, compact && styles.notesMindmapCanvasCompact]}>
-      <Svg width="100%" height="100%" viewBox="0 0 100 100" style={styles.notesMindmapCanvasConnectors}>
+    <View
+      style={[styles.notesMindmapCanvas, compact && styles.notesMindmapCanvasCompact]}
+      onLayout={handleCanvasLayout}
+    >
+      <Svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+        style={styles.notesMindmapCanvasConnectors}
+        pointerEvents="none"
+      >
         <Path
-          d="M 20 0 V 100 M 40 0 V 100 M 60 0 V 100 M 80 0 V 100 M 0 20 H 100 M 0 40 H 100 M 0 60 H 100 M 0 80 H 100"
+          d={gridPath}
           stroke="#dbe4f0"
-          strokeWidth={0.22}
+          strokeWidth={1}
           opacity={0.48}
           fill="none"
         />
         {renderNodes.map((renderNode) => {
-          const midX = (renderNode.parentX + renderNode.x) / 2;
+          const parentPoint = toCanvasPoint({ x: renderNode.parentX, y: renderNode.parentY });
+          const nodePoint = toCanvasPoint({ x: renderNode.x, y: renderNode.y });
+          const start = connectorEndpoint(parentPoint, nodePoint, renderNode.parentWidth, renderNode.parentHeight);
+          const end = connectorEndpoint(nodePoint, parentPoint, renderNode.width, renderNode.height);
+          const midX = (start.x + end.x) / 2;
           return (
             <Path
               key={`${mindmap.id}-connector-${renderNode.node.id}`}
-              d={`M ${renderNode.parentX} ${renderNode.parentY} C ${midX} ${renderNode.parentY}, ${midX} ${renderNode.y}, ${renderNode.x} ${renderNode.y}`}
+              d={`M ${start.x} ${start.y} C ${midX} ${start.y}, ${midX} ${end.y}, ${end.x} ${end.y}`}
               stroke={renderNode.depth === 0 ? renderNode.color : '#94a3b8'}
-              strokeWidth={renderNode.depth === 0 ? 1.7 : 1.15}
+              strokeWidth={renderNode.depth === 0 ? 3 : 2}
               fill="none"
               strokeLinecap="round"
               opacity={renderNode.depth === 0 ? 0.85 : 0.58}
@@ -1190,7 +1262,8 @@ function EditableWorkspaceMindmap({
             top: `${root.y}%`,
             width: rootWidth,
             marginLeft: -rootWidth / 2,
-            marginTop: -nodeHeight / 2,
+            height: rootHeight,
+            marginTop: -rootHeight / 2,
           },
         ]}
       >
@@ -1206,7 +1279,6 @@ function EditableWorkspaceMindmap({
       {renderNodes.map((renderNode, index) => {
         const color = renderNode.color;
         const width = renderNode.depth === 0 ? topicWidth : childWidth;
-        const heightOffset = renderNode.depth === 0 ? nodeHeight / 2 : childNodeHeight / 2;
         const isEdgeNode = renderNode.node.children.length === 0;
         const nodeColor = renderNode.depth === 0 ? color : '#ffffff';
         const borderColor = renderNode.depth === 0 ? color : '#cbd5e1';
@@ -1220,8 +1292,9 @@ function EditableWorkspaceMindmap({
                 left: `${renderNode.x}%`,
                 top: `${renderNode.y}%`,
                 width,
+                height: renderNode.height,
                 marginLeft: -width / 2,
-                marginTop: -heightOffset,
+                marginTop: -renderNode.height / 2,
                 backgroundColor: nodeColor,
                 borderColor,
               },
