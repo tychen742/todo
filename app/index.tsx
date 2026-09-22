@@ -194,7 +194,10 @@ const taskArchiveColumnMarginLeft = 2;
 const taskRowPaddingRight = 2;
 const appName = 'RodoFlow';
 const webAppUrl = 'https://rodoflow.com';
-const legacyWebHost = 'todo-eight-gamma.vercel.app';
+const legacyWebHosts = [
+  'todo-eight-gamma.vercel.app',
+  'todo-tsangyao-chen-s-projects.vercel.app',
+];
 const oauthReturnStorageKey = 'rodoflow:oauth-return-to-production';
 const redirectLocalWebToProductionEnabled =
   process.env.EXPO_PUBLIC_REDIRECT_LOCAL_WEB_TO_PRODUCTION === '1';
@@ -439,7 +442,7 @@ function isLocalWebHost() {
 
 function redirectLegacyWebHostToProduction() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
-  if (window.location.hostname !== legacyWebHost) return false;
+  if (!legacyWebHosts.includes(window.location.hostname)) return false;
 
   const destination = new URL(webAppUrl);
   destination.pathname = window.location.pathname;
