@@ -1666,6 +1666,7 @@ export default function HomeScreen() {
     [members]
   );
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const searching = normalizedSearchQuery.length > 0;
   const textMatchesSearch = useCallback((values: (string | null | undefined)[]) => {
     if (!normalizedSearchQuery) return true;
     return values.some((value) => value?.toLowerCase().includes(normalizedSearchQuery));
@@ -1690,6 +1691,16 @@ export default function HomeScreen() {
       creator ? profileDisplayName(creator) : null,
     ]);
   }, [memberById, projectById, selectedProject, textMatchesSearch, workflowColumnLabels]);
+  const orderBySearchMatch = useCallback(<T,>(items: T[], matches: (item: T) => boolean) => {
+    if (!searching) return items;
+    const matched: T[] = [];
+    const unmatched: T[] = [];
+    items.forEach((item) => {
+      if (matches(item)) matched.push(item);
+      else unmatched.push(item);
+    });
+    return [...matched, ...unmatched];
+  }, [searching]);
   const active = useMemo(() => {
     const items = todos.filter((todo) =>
       !todo.done && (
@@ -1697,7 +1708,7 @@ export default function HomeScreen() {
         (projectFilter === 'none' ? todo.project_id === null : todo.project_id === projectFilter)
       )
     );
-    if (!sortField) return items;
+    if (!sortField) return orderBySearchMatch(items, searchMatchesTodo);
     const projectNameForTodo = (todo: Todo) => {
       const project = todo.project_id
         ? projects.find((item) => item.id === todo.project_id)
@@ -1717,7 +1728,7 @@ export default function HomeScreen() {
       return creator ? profileDisplayName(creator).toLowerCase() : '';
     };
     const ageTimestampForTodo = (todo: Todo) => Date.parse(todo.assigned_at ?? todo.created_at);
-    return [...items].sort((a, b) => {
+    const sortedItems = [...items].sort((a, b) => {
       let delta = 0;
       if (sortField === 'text') {
         const priorityDelta = priorityRank[a.priority] - priorityRank[b.priority];
@@ -1755,11 +1766,18 @@ export default function HomeScreen() {
       if (delta === 0) delta = a.text.localeCompare(b.text);
       return sortDir === 'asc' ? delta : -delta;
     });
-  }, [todos, projectFilter, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
+    return orderBySearchMatch(sortedItems, searchMatchesTodo);
+  }, [todos, projectFilter, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById, orderBySearchMatch, searchMatchesTodo]);
 
-  const done = useMemo(() => todos.filter((t) => t.done), [todos]);
+  const done = useMemo(
+    () => orderBySearchMatch(todos.filter((t) => t.done), searchMatchesTodo),
+    [orderBySearchMatch, searchMatchesTodo, todos]
+  );
+  const orderedArchivedTodos = useMemo(
+    () => orderBySearchMatch(archivedTodos, searchMatchesTodo),
+    [archivedTodos, orderBySearchMatch, searchMatchesTodo]
+  );
   const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
-  const searching = normalizedSearchQuery.length > 0;
   const selectedProjectOwner = useMemo(() => {
     if (!selectedProject?.created_by) return null;
     return memberById.get(selectedProject.created_by) ?? null;
@@ -1792,6 +1810,18 @@ export default function HomeScreen() {
       owner ? profileDisplayName(owner) : null,
     ]);
   }, [memberById, teams, textMatchesSearch]);
+  const orderedActiveProjects = useMemo(
+    () => orderBySearchMatch(activeProjects, searchMatchesProject),
+    [activeProjects, orderBySearchMatch, searchMatchesProject]
+  );
+  const orderedAssignedToMe = useMemo(
+    () => orderBySearchMatch(assignedToMe, searchMatchesTodo),
+    [assignedToMe, orderBySearchMatch, searchMatchesTodo]
+  );
+  const orderedAssignedFromMe = useMemo(
+    () => orderBySearchMatch(assignedFromMe, searchMatchesTodo),
+    [assignedFromMe, orderBySearchMatch, searchMatchesTodo]
+  );
   const quickCaptureProjects = useMemo(
     () => activeProjects.filter((project) => {
       if (selectedTeamId) return project.team_id === selectedTeamId;
@@ -4331,7 +4361,7 @@ export default function HomeScreen() {
         {assignedToMe.length === 0 ? (
           <Text style={styles.inboxViewEmpty}>No assigned tasks for you right now.</Text>
         ) : (
-          assignedToMe.map(renderAssignedToMeTodo)
+          orderedAssignedToMe.map(renderAssignedToMeTodo)
         )}
 
         <View style={styles.inboxSectionHeader}>
@@ -4340,7 +4370,7 @@ export default function HomeScreen() {
         {assignedFromMe.length === 0 ? (
           <Text style={styles.inboxViewEmpty}>No active assignments from you.</Text>
         ) : (
-          assignedFromMe.map(renderAssignedFromMeTodo)
+          orderedAssignedFromMe.map(renderAssignedFromMeTodo)
         )}
       </>
     );
@@ -5146,7 +5176,7 @@ export default function HomeScreen() {
 
       {projectsViewOpen && (
         <ScrollView style={styles.projectsGrid} contentContainerStyle={styles.projectsGridContent}>
-          {activeProjects.map((project) => {
+          {orderedActiveProjects.map((project) => {
             const linkedTeam = project.team_id ? teams.find((t) => t.id === project.team_id) : null;
             const avatar = projectAvatarFor(project);
             const isSearchDimmed = searching && !searchMatchesProject(project);
@@ -6328,7 +6358,7 @@ export default function HomeScreen() {
                     {completedPaneTab === 'completed' && done.length === 0 && (
                       <Text style={styles.completedPaneEmpty}>No completed todos yet.</Text>
                     )}
-                    {completedPaneTab === 'deleted' && archivedTodos.map((todo) => (
+                    {completedPaneTab === 'deleted' && orderedArchivedTodos.map((todo) => (
                       <View
                         key={todo.id}
                         style={[styles.archivedRow, searching && !searchMatchesTodo(todo) && styles.searchResultDimmed]}
