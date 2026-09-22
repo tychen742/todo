@@ -1664,7 +1664,12 @@ export default function HomeScreen() {
   }, [todos, searchMatchesTodo, projectFilter, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
 
   const done = useMemo(() => todos.filter((t) => t.done && searchMatchesTodo(t)), [todos, searchMatchesTodo]);
-  const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
+  const visibleArchivedTodos = useMemo(
+    () => archivedTodos.filter(searchMatchesTodo),
+    [archivedTodos, searchMatchesTodo]
+  );
+  const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : visibleArchivedTodos.length;
+  const searching = normalizedSearchQuery.length > 0;
   const selectedProjectOwner = useMemo(() => {
     if (!selectedProject?.created_by) return null;
     return memberById.get(selectedProject.created_by) ?? null;
@@ -6181,7 +6186,7 @@ export default function HomeScreen() {
                 />
               </View>
 
-              {(done.length > 0 || archivedTodos.length > 0) && (
+              {(searching || done.length > 0 || visibleArchivedTodos.length > 0) && (
                 <View nativeID={completedDropTargetId} style={styles.completedBox}>
                   <View style={styles.completedBoxHeader}>
                     <Pressable
@@ -6197,7 +6202,7 @@ export default function HomeScreen() {
                       style={[styles.completedPaneTab, completedPaneTab === 'deleted' && styles.completedPaneTabActive]}
                     >
                       <Text style={[styles.completedPaneTabText, completedPaneTab === 'deleted' && styles.completedPaneTabTextActive]}>
-                        Deleted ({archivedTodos.length})
+                        Deleted ({visibleArchivedTodos.length})
                       </Text>
                     </Pressable>
                   </View>
@@ -6233,7 +6238,12 @@ export default function HomeScreen() {
                         />
                       );
                     })}
-                    {completedPaneTab === 'deleted' && archivedTodos.map((todo) => (
+                    {completedPaneTab === 'completed' && done.length === 0 && (
+                      <Text style={styles.completedPaneEmpty}>
+                        {searching ? 'No completed matches.' : 'No completed todos yet.'}
+                      </Text>
+                    )}
+                    {completedPaneTab === 'deleted' && visibleArchivedTodos.map((todo) => (
                       <View key={todo.id} style={styles.archivedRow}>
                         <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
                         <Text style={styles.archivedDateText}>{formatArchiveDate(todo.archived_at)}</Text>
@@ -6242,6 +6252,11 @@ export default function HomeScreen() {
                         </Pressable>
                       </View>
                     ))}
+                    {completedPaneTab === 'deleted' && visibleArchivedTodos.length === 0 && (
+                      <Text style={styles.completedPaneEmpty}>
+                        {searching ? 'No deleted matches.' : 'No deleted todos.'}
+                      </Text>
+                    )}
                   </ScrollView>
                 </View>
               )}
@@ -7874,6 +7889,12 @@ const styles = StyleSheet.create({
   completedBoxScroll: {
     flex: 1,
     minHeight: 0,
+  },
+  completedPaneEmpty: {
+    color: '#9ca3af',
+    fontSize: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   assignedToMePanel: {
     width: workspaceInboxColumnWidth,
