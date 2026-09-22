@@ -1296,6 +1296,8 @@ export default function HomeScreen() {
   const [renameProjectName, setRenameProjectName] = useState('');
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [editDisplayNameValue, setEditDisplayNameValue] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<TextInput>(null);
 
   const rowPV = densityPV[density];
   const rowH = densityRowH[density];
@@ -1304,6 +1306,21 @@ export default function HomeScreen() {
     const id = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && key === 'k') {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (key === 'escape' && searchQuery) {
+        setSearchQuery('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [searchQuery]);
 
   useEffect(() => {
     const uid = session?.user.id;
@@ -1444,6 +1461,10 @@ export default function HomeScreen() {
   const showInboxSidePanel = Platform.OS === 'web' && width >= 900 && isPersonal;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const selectedTeam = isProject ? null : (teams.find((team) => team.id === selectedTeamId) ?? null);
+  const projectById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project])),
+    [projects]
+  );
   const projectFilterProjects = useMemo(
     () => projects
       .filter((project) => !project.archived_at)
@@ -1493,9 +1514,34 @@ export default function HomeScreen() {
     () => new Map(members.map((member) => [member.user_id, member])),
     [members]
   );
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const textMatchesSearch = useCallback((values: (string | null | undefined)[]) => {
+    if (!normalizedSearchQuery) return true;
+    return values.some((value) => value?.toLowerCase().includes(normalizedSearchQuery));
+  }, [normalizedSearchQuery]);
+  const searchMatchesTodo = useCallback((todo: Todo) => {
+    const project = todo.project_id ? projectById.get(todo.project_id) : selectedProject;
+    const assignee = todo.assigned_to ? memberById.get(todo.assigned_to) : null;
+    const creator = todo.created_by ? memberById.get(todo.created_by) : null;
+    const workflowKey = workflowStageForTodo(todo);
+    return textMatchesSearch([
+      todo.text,
+      todo.note,
+      todo.priority,
+      todo.due_date,
+      todo.estimate,
+      workflowKey,
+      workflowColumnLabels[workflowKey],
+      project?.name,
+      assignee?.email,
+      assignee ? profileDisplayName(assignee) : null,
+      creator?.email,
+      creator ? profileDisplayName(creator) : null,
+    ]);
+  }, [memberById, projectById, selectedProject, textMatchesSearch, workflowColumnLabels]);
   const active = useMemo(() => {
     const items = todos.filter((todo) =>
-      !todo.done && (
+      !todo.done && searchMatchesTodo(todo) && (
         projectFilter === 'all' ||
         (projectFilter === 'none' ? todo.project_id === null : todo.project_id === projectFilter)
       )
@@ -1558,9 +1604,9 @@ export default function HomeScreen() {
       if (delta === 0) delta = a.text.localeCompare(b.text);
       return sortDir === 'asc' ? delta : -delta;
     });
-  }, [todos, projectFilter, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
+  }, [todos, searchMatchesTodo, projectFilter, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
 
-  const done = useMemo(() => todos.filter((t) => t.done), [todos]);
+  const done = useMemo(() => todos.filter((t) => t.done && searchMatchesTodo(t)), [todos, searchMatchesTodo]);
   const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
   const selectedProjectOwner = useMemo(() => {
     if (!selectedProject?.created_by) return null;
@@ -1583,6 +1629,27 @@ export default function HomeScreen() {
   const activeProjects = useMemo(
     () => projects.filter((project) => !project.archived_at),
     [projects]
+  );
+  const visibleProjects = useMemo(
+    () => activeProjects.filter((project) => {
+      const linkedTeam = project.team_id ? teams.find((team) => team.id === project.team_id) : null;
+      const owner = memberById.get(project.created_by);
+      return textMatchesSearch([
+        project.name,
+        linkedTeam?.name,
+        owner?.email,
+        owner ? profileDisplayName(owner) : null,
+      ]);
+    }),
+    [activeProjects, memberById, teams, textMatchesSearch]
+  );
+  const visibleAssignedToMe = useMemo(
+    () => assignedToMe.filter(searchMatchesTodo),
+    [assignedToMe, searchMatchesTodo]
+  );
+  const visibleAssignedFromMe = useMemo(
+    () => assignedFromMe.filter(searchMatchesTodo),
+    [assignedFromMe, searchMatchesTodo]
   );
   const quickCaptureProjects = useMemo(
     () => activeProjects.filter((project) => {
@@ -4112,25 +4179,30 @@ export default function HomeScreen() {
   }
 
   function renderWorkspaceInboxPanel(variant: 'side' | 'inline' | 'full') {
-    const totalInboxCount = assignedToMe.length + assignedFromMe.length;
+    const totalInboxCount = visibleAssignedToMe.length + visibleAssignedFromMe.length;
+    const searching = normalizedSearchQuery.length > 0;
     const inboxSections = (
       <>
         <View style={styles.inboxSectionHeader}>
-          <Text style={styles.inboxSectionTitle}>To you ({assignedToMe.length})</Text>
+          <Text style={styles.inboxSectionTitle}>To you ({visibleAssignedToMe.length})</Text>
         </View>
-        {assignedToMe.length === 0 ? (
-          <Text style={styles.inboxViewEmpty}>No assigned tasks for you right now.</Text>
+        {visibleAssignedToMe.length === 0 ? (
+          <Text style={styles.inboxViewEmpty}>
+            {searching ? 'No matching assigned tasks for you.' : 'No assigned tasks for you right now.'}
+          </Text>
         ) : (
-          assignedToMe.map(renderAssignedToMeTodo)
+          visibleAssignedToMe.map(renderAssignedToMeTodo)
         )}
 
         <View style={styles.inboxSectionHeader}>
-          <Text style={styles.inboxSectionTitle}>From you ({assignedFromMe.length})</Text>
+          <Text style={styles.inboxSectionTitle}>From you ({visibleAssignedFromMe.length})</Text>
         </View>
-        {assignedFromMe.length === 0 ? (
-          <Text style={styles.inboxViewEmpty}>No active assignments from you.</Text>
+        {visibleAssignedFromMe.length === 0 ? (
+          <Text style={styles.inboxViewEmpty}>
+            {searching ? 'No matching assignments from you.' : 'No active assignments from you.'}
+          </Text>
         ) : (
-          assignedFromMe.map(renderAssignedFromMeTodo)
+          visibleAssignedFromMe.map(renderAssignedFromMeTodo)
         )}
       </>
     );
@@ -4577,8 +4649,31 @@ export default function HomeScreen() {
             <View style={styles.titleBarCenter}>
               <View style={styles.searchBar}>
                 <Text style={styles.searchIcon}>⌕</Text>
-                <Text style={styles.searchPlaceholder}>Search</Text>
-                <Text style={styles.searchShortcut}>⌘K</Text>
+                <TextInput
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search"
+                  placeholderTextColor="#9ca3af"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                  style={styles.searchInput}
+                  accessibilityLabel="Search tasks and projects"
+                />
+                {searchQuery ? (
+                  <Pressable
+                    onPress={() => setSearchQuery('')}
+                    style={styles.searchClearButton}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear search"
+                  >
+                    <Text style={styles.searchClearText}>×</Text>
+                  </Pressable>
+                ) : (
+                  <Text style={styles.searchShortcut}>⌘K</Text>
+                )}
               </View>
             </View>
 
@@ -4907,7 +5002,7 @@ export default function HomeScreen() {
 
       {projectsViewOpen && (
         <ScrollView style={styles.projectsGrid} contentContainerStyle={styles.projectsGridContent}>
-          {projects.map((project) => {
+          {visibleProjects.map((project) => {
             const linkedTeam = project.team_id ? teams.find((t) => t.id === project.team_id) : null;
             const avatar = projectAvatarFor(project);
             return (
@@ -10023,10 +10118,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#9ca3af',
   },
-  searchPlaceholder: {
+  searchInput: {
     flex: 1,
     fontSize: 13,
-    color: '#9ca3af',
+    color: '#111827',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+  },
+  searchClearButton: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e5e7eb',
+  },
+  searchClearText: {
+    fontSize: 14,
+    lineHeight: 16,
+    color: '#6b7280',
+    fontWeight: '700',
   },
   searchShortcut: {
     fontSize: 11,
