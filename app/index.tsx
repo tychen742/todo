@@ -4679,6 +4679,22 @@ export default function HomeScreen() {
           <View style={styles.titleBar}>
             <View style={styles.titleBarLeft}>
               <View style={styles.userIdentityRow}>
+                <Pressable
+                  onPress={() => setNavExpanded((v) => !v)}
+                  onLongPress={() => setAnimalPickerVisible(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open account menu"
+                  style={styles.accountAvatarButton}
+                  hitSlop={4}
+                >
+                  {profile?.avatar_url ? (
+                    <Image source={{ uri: profile.avatar_url }} style={styles.userAvatarBigPhoto} />
+                  ) : (
+                    <View style={[styles.userAvatarBig, { backgroundColor: avatarColor }]}>
+                      <Text style={styles.userAvatarBigAnimal}>{animal}</Text>
+                    </View>
+                  )}
+                </Pressable>
                 <View style={styles.userMeta}>
                   <Pressable
                     onPress={() => setNavExpanded((v) => !v)}
@@ -4756,22 +4772,6 @@ export default function HomeScreen() {
                   {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
                 </Text>
               </View>
-              <Pressable
-                onPress={() => setNavExpanded((v) => !v)}
-                onLongPress={() => setAnimalPickerVisible(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Open account menu"
-                style={styles.accountAvatarButton}
-                hitSlop={4}
-              >
-                {profile?.avatar_url ? (
-                  <Image source={{ uri: profile.avatar_url }} style={styles.userAvatarBigPhoto} />
-                ) : (
-                  <View style={[styles.userAvatarBig, { backgroundColor: avatarColor }]}>
-                    <Text style={styles.userAvatarBigAnimal}>{animal}</Text>
-                  </View>
-                )}
-              </Pressable>
             </View>
           </View>
         );
@@ -9932,7 +9932,7 @@ const styles = StyleSheet.create({
   userIdentityRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 0,
+    gap: 8,
   },
   userNavRow: {
     flexDirection: 'row',
@@ -10025,7 +10025,7 @@ const styles = StyleSheet.create({
   navDropdownCard: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 112 : 72,
-    right: 14,
+    left: 14,
     backgroundColor: '#fff',
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
@@ -10288,7 +10288,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 10,
     flexShrink: 0,
-    minWidth: 132,
+    minWidth: 78,
   },
   titleBarClock: {
     alignItems: 'flex-end',

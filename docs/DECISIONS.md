@@ -116,6 +116,8 @@ Reason: real photos make the product feel human and are the foundation for prese
 
 **Tap to change:** tapping the avatar anywhere in the app (title bar, profile screen) should open the same picker — upload a photo or choose an emoji.
 
+**Header placement:** the signed-in user's avatar belongs in the upper-left identity block next to display name and status, not in the upper-right utility cluster. That keeps presence, account identity, and future lightweight messaging entry points in one place.
+
 ## 2026-06-10: Section Header Style Is Uniform Across All Panels
 
 Decision: every section or panel header in the app — task list, completed, Notes, and any future panel — must share the same visual style.
