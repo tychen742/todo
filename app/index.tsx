@@ -1177,13 +1177,33 @@ function EditableWorkspaceMindmap({
     color: string;
   };
   const renderNodes: RenderNode[] = [];
-  function childPosition(parentX: number, parentY: number, index: number, count: number, depth: number) {
-    const side = parentX < 46 ? -1 : parentX > 54 ? 1 : index % 2 === 0 ? -1 : 1;
-    const spread = 12;
+  function childPosition(
+    parentX: number,
+    parentY: number,
+    index: number,
+    count: number,
+    depth: number,
+    parentWidth: number,
+    childNodeWidth: number,
+    childNodeHeightValue: number
+  ) {
+    const preferredSide = parentX < 46 ? -1 : parentX > 54 ? 1 : index % 2 === 0 ? -1 : 1;
+    const minX = ((childNodeWidth / 2 + 10) / mapFieldWidth) * 100;
+    const maxX = 100 - minX;
+    const minY = ((childNodeHeightValue / 2 + 10) / mapFieldHeight) * 100;
+    const maxY = 100 - minY;
+    const horizontalGap = compact ? 26 : 34;
+    const requiredOffset = ((parentWidth / 2 + childNodeWidth / 2 + horizontalGap + depth * 10) / mapFieldWidth) * 100;
+    const leftSpace = parentX - minX;
+    const rightSpace = maxX - parentX;
+    const side = preferredSide < 0
+      ? (leftSpace >= requiredOffset || rightSpace < requiredOffset ? -1 : 1)
+      : (rightSpace >= requiredOffset || leftSpace < requiredOffset ? 1 : -1);
+    const spread = Math.max(12, ((childNodeHeightValue + 18) / mapFieldHeight) * 100);
     const yOffset = (index - (count - 1) / 2) * spread;
     return {
-      x: clamp(parentX + side * (18 + depth * 7), 9, 91),
-      y: clamp(parentY + yOffset, 9, 91),
+      x: clamp(parentX + side * requiredOffset, minX, maxX),
+      y: clamp(parentY + yOffset, minY, maxY),
     };
   }
   function collectNodes(
@@ -1195,12 +1215,12 @@ function EditableWorkspaceMindmap({
     depth: number
   ) {
     nodes.forEach((node, index) => {
-      const position = depth === 0
-        ? positions[index]
-        : childPosition(parentX, parentY, index, nodes.length, depth);
-      const color = template.colors[index % template.colors.length] ?? '#e5e7eb';
       const width = depth === 0 ? topicWidth : childWidth;
       const height = depth === 0 ? nodeHeight : childNodeHeight;
+      const position = depth === 0
+        ? positions[index]
+        : childPosition(parentX, parentY, index, nodes.length, depth, parentWidth, width, height);
+      const color = template.colors[index % template.colors.length] ?? '#e5e7eb';
       renderNodes.push({
         node,
         x: position.x,
