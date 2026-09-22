@@ -84,13 +84,13 @@ browser back to the running app after Google completes. For native Expo Go
 testing, the Google Cloud redirect remains the Supabase callback URL; the Expo
 deep link belongs in Supabase redirect URLs.
 
-If a production Google login redirects to `http://localhost:8081/#access_token=...`,
-the callback did not come from the deployed web redirect. Check Supabase
-Dashboard -> Authentication -> URL Configuration and make sure the Site URL is
-`https://rodoflow.com`. Then start a fresh login from
-`https://rodoflow.com`, not from a stale localhost tab or an old
-OAuth browser window. The deployed web app sends `redirect_to` as the Vercel
-production URL.
+Local web Google OAuth uses a small production callback bridge. When a login
+starts from `localhost`, the app asks Supabase to return to `https://rodoflow.com`
+with a loopback-only `rodoflow_local_redirect` parameter. The production page
+then immediately forwards the OAuth callback tokens back to the local origin.
+This keeps local Google testing working even when the OAuth provider is
+configured around the production domain. The bridge only accepts loopback
+targets such as `localhost` or `127.0.0.1`.
 
 Google may still show `to continue to <project-ref>.supabase.co` on the account
 picker because Supabase Auth brokers the OAuth callback through the project

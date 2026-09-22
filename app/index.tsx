@@ -244,6 +244,7 @@ const legacyWebHosts = [
   'todo-eight-gamma.vercel.app',
   'todo-tsangyao-chen-s-projects.vercel.app',
 ];
+const localOAuthRedirectParam = 'rodoflow_local_redirect';
 const oauthReturnStorageKey = 'rodoflow:oauth-return-to-production';
 const themeStorageKey = 'rodoflow:theme';
 
@@ -467,8 +468,29 @@ function authRedirectUrl() {
   return createURL('');
 }
 
-function forceOAuthRedirectUrl(url: string) {
-  const redirectTo = authRedirectUrl();
+function isAllowedLocalWebOrigin(origin: string | null | undefined) {
+  if (!origin) return false;
+  try {
+    const url = new URL(origin);
+    return (
+      ['http:', 'https:'].includes(url.protocol) &&
+      ['localhost', '127.0.0.1', '::1'].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function oauthRedirectUrl() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return authRedirectUrl();
+  if (!isAllowedLocalWebOrigin(window.location.origin)) return authRedirectUrl();
+
+  const destination = new URL(webAppUrl);
+  destination.searchParams.set(localOAuthRedirectParam, window.location.origin);
+  return destination.toString();
+}
+
+function forceOAuthRedirectUrl(url: string, redirectTo = authRedirectUrl()) {
   if (!redirectTo) return url;
 
   try {
@@ -505,6 +527,24 @@ function promoteLocalSessionToProduction(currentSession: Session | null) {
 
 function redirectNonCanonicalWebHost() {
   return redirectLegacyWebHostToProduction();
+}
+
+function forwardOAuthCallbackToLocalDev() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  if (window.location.origin !== new URL(webAppUrl).origin) return false;
+
+  const currentUrl = new URL(window.location.href);
+  const localOrigin = currentUrl.searchParams.get(localOAuthRedirectParam);
+  if (!localOrigin) return false;
+  if (!isAllowedLocalWebOrigin(localOrigin)) return false;
+
+  currentUrl.searchParams.delete(localOAuthRedirectParam);
+  const destination = new URL(localOrigin);
+  destination.pathname = currentUrl.pathname;
+  destination.search = currentUrl.search;
+  destination.hash = currentUrl.hash;
+  window.location.replace(destination.toString());
+  return true;
 }
 
 function getAuthCallbackParams(callbackUrl: string) {
@@ -586,6 +626,7 @@ async function resolveInitialAuthSession() {
   const callbackParams = getWebAuthCallbackParams();
 
   if (callbackParams) {
+    if (forwardOAuthCallbackToLocalDev()) return null;
     const session = await sessionFromAuthCallbackParams(callbackParams);
     clearWebAuthCallbackParams();
     return session;
@@ -2601,7 +2642,7 @@ export default function HomeScreen() {
     setAuthErrorField(null);
 
     try {
-      const redirectTo = authRedirectUrl();
+      const redirectTo = provider === 'google' ? oauthRedirectUrl() : authRedirectUrl();
       const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -2622,7 +2663,7 @@ export default function HomeScreen() {
 
       if (Platform.OS === 'web') {
         markOAuthRedirectIntent();
-        window.location.href = forceOAuthRedirectUrl(data.url);
+        window.location.href = forceOAuthRedirectUrl(data.url, redirectTo);
         return;
       }
 
