@@ -161,6 +161,7 @@ const workspaceContentMaxWidth = 960;
 const workspaceInboxColumnWidth = 340;
 const workspacePaneGap = 12;
 const workspaceBoardPadding = 12;
+const workspaceActiveDaySeconds = 8 * 60 * 60;
 const appThemes: Record<AppThemeKey, AppTheme> = {
   flow: {
     name: 'Flow',
@@ -1575,7 +1576,7 @@ export default function HomeScreen() {
   const workspaceActiveLabel = formatActiveDuration(workspaceActiveSeconds);
   const workspaceActiveProgress = workspaceActiveSeconds === 0
     ? 0
-    : Math.max(4, ((workspaceActiveSeconds % 3600) / 3600) * 100);
+    : Math.min(100, Math.max(2, (workspaceActiveSeconds / workspaceActiveDaySeconds) * 100));
   const renderWorkspaceTabDivider = (active: boolean, nextActive: boolean, isLast = false) => (
     !active && !nextActive && !isLast ? <View pointerEvents="none" style={styles.workspaceTabDivider} /> : null
   );
@@ -4790,7 +4791,7 @@ export default function HomeScreen() {
                     <View style={styles.workspaceActiveTrack}>
                       <View style={[styles.workspaceActiveFill, { width: `${workspaceActiveProgress}%` }]} />
                     </View>
-                    <Text style={styles.workspaceActiveText}>{workspaceActiveLabel} active</Text>
+                    <Text style={styles.workspaceActiveText}>{workspaceActiveLabel}/8h</Text>
                   </View>
                 </View>
               </View>
