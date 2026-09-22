@@ -1639,7 +1639,7 @@ export default function HomeScreen() {
   }, [memberById, projectById, selectedProject, textMatchesSearch, workflowColumnLabels]);
   const active = useMemo(() => {
     const items = todos.filter((todo) =>
-      !todo.done && searchMatchesTodo(todo) && (
+      !todo.done && (
         projectFilter === 'all' ||
         (projectFilter === 'none' ? todo.project_id === null : todo.project_id === projectFilter)
       )
@@ -1702,14 +1702,10 @@ export default function HomeScreen() {
       if (delta === 0) delta = a.text.localeCompare(b.text);
       return sortDir === 'asc' ? delta : -delta;
     });
-  }, [todos, searchMatchesTodo, projectFilter, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
+  }, [todos, projectFilter, sortField, sortDir, projects, selectedProject, isProject, session?.user.id, accountDisplayName, memberById]);
 
-  const done = useMemo(() => todos.filter((t) => t.done && searchMatchesTodo(t)), [todos, searchMatchesTodo]);
-  const visibleArchivedTodos = useMemo(
-    () => archivedTodos.filter(searchMatchesTodo),
-    [archivedTodos, searchMatchesTodo]
-  );
-  const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : visibleArchivedTodos.length;
+  const done = useMemo(() => todos.filter((t) => t.done), [todos]);
+  const completedPanelRowCount = completedPaneTab === 'completed' ? done.length : archivedTodos.length;
   const searching = normalizedSearchQuery.length > 0;
   const selectedProjectOwner = useMemo(() => {
     if (!selectedProject?.created_by) return null;
@@ -1733,27 +1729,16 @@ export default function HomeScreen() {
     () => projects.filter((project) => !project.archived_at),
     [projects]
   );
-  const visibleProjects = useMemo(
-    () => activeProjects.filter((project) => {
-      const linkedTeam = project.team_id ? teams.find((team) => team.id === project.team_id) : null;
-      const owner = memberById.get(project.created_by);
-      return textMatchesSearch([
-        project.name,
-        linkedTeam?.name,
-        owner?.email,
-        owner ? profileDisplayName(owner) : null,
-      ]);
-    }),
-    [activeProjects, memberById, teams, textMatchesSearch]
-  );
-  const visibleAssignedToMe = useMemo(
-    () => assignedToMe.filter(searchMatchesTodo),
-    [assignedToMe, searchMatchesTodo]
-  );
-  const visibleAssignedFromMe = useMemo(
-    () => assignedFromMe.filter(searchMatchesTodo),
-    [assignedFromMe, searchMatchesTodo]
-  );
+  const searchMatchesProject = useCallback((project: Project) => {
+    const linkedTeam = project.team_id ? teams.find((team) => team.id === project.team_id) : null;
+    const owner = memberById.get(project.created_by);
+    return textMatchesSearch([
+      project.name,
+      linkedTeam?.name,
+      owner?.email,
+      owner ? profileDisplayName(owner) : null,
+    ]);
+  }, [memberById, teams, textMatchesSearch]);
   const quickCaptureProjects = useMemo(
     () => activeProjects.filter((project) => {
       if (selectedTeamId) return project.team_id === selectedTeamId;
@@ -4175,8 +4160,9 @@ export default function HomeScreen() {
     const creatorTooltip = creatorName ? `From: ${creatorName}` : `From: ${contextLabel}`;
     const isRowHovered = Platform.OS === 'web' && hoveredInboxTodoId === todo.id;
     const isActionHovered = Platform.OS === 'web' && hoveredInboxActionId === todo.id;
+    const isSearchDimmed = searching && !searchMatchesTodo(todo);
     return (
-      <View key={todo.id} style={[styles.assignedToMeRowOuter, isRowHovered && styles.assignedToMeRowHovered]}>
+      <View key={todo.id} style={[styles.assignedToMeRowOuter, isSearchDimmed && styles.searchResultDimmed, isRowHovered && styles.assignedToMeRowHovered]}>
         <Pressable
           onHoverIn={() => setHoveredInboxTodoId(todo.id)}
           onHoverOut={() => setHoveredInboxTodoId(null)}
@@ -4241,9 +4227,10 @@ export default function HomeScreen() {
     const assigneeColor = pickAvatarColor(assigneeEmail);
     const isRowHovered = Platform.OS === 'web' && hoveredInboxTodoId === todo.id;
     const assignmentState = todo.accepted_at ? 'Accepted' : 'Waiting';
+    const isSearchDimmed = searching && !searchMatchesTodo(todo);
 
     return (
-      <View key={todo.id} style={[styles.assignedToMeRowOuter, isRowHovered && styles.assignedToMeRowHovered]}>
+      <View key={todo.id} style={[styles.assignedToMeRowOuter, isSearchDimmed && styles.searchResultDimmed, isRowHovered && styles.assignedToMeRowHovered]}>
         <Pressable
           onHoverIn={() => setHoveredInboxTodoId(todo.id)}
           onHoverOut={() => setHoveredInboxTodoId(null)}
@@ -4282,30 +4269,25 @@ export default function HomeScreen() {
   }
 
   function renderWorkspaceInboxPanel(variant: 'side' | 'inline' | 'full') {
-    const totalInboxCount = visibleAssignedToMe.length + visibleAssignedFromMe.length;
-    const searching = normalizedSearchQuery.length > 0;
+    const totalInboxCount = assignedToMe.length + assignedFromMe.length;
     const inboxSections = (
       <>
         <View style={styles.inboxSectionHeader}>
-          <Text style={styles.inboxSectionTitle}>To you ({visibleAssignedToMe.length})</Text>
+          <Text style={styles.inboxSectionTitle}>To you ({assignedToMe.length})</Text>
         </View>
-        {visibleAssignedToMe.length === 0 ? (
-          <Text style={styles.inboxViewEmpty}>
-            {searching ? 'No matching assigned tasks for you.' : 'No assigned tasks for you right now.'}
-          </Text>
+        {assignedToMe.length === 0 ? (
+          <Text style={styles.inboxViewEmpty}>No assigned tasks for you right now.</Text>
         ) : (
-          visibleAssignedToMe.map(renderAssignedToMeTodo)
+          assignedToMe.map(renderAssignedToMeTodo)
         )}
 
         <View style={styles.inboxSectionHeader}>
-          <Text style={styles.inboxSectionTitle}>From you ({visibleAssignedFromMe.length})</Text>
+          <Text style={styles.inboxSectionTitle}>From you ({assignedFromMe.length})</Text>
         </View>
-        {visibleAssignedFromMe.length === 0 ? (
-          <Text style={styles.inboxViewEmpty}>
-            {searching ? 'No matching assignments from you.' : 'No active assignments from you.'}
-          </Text>
+        {assignedFromMe.length === 0 ? (
+          <Text style={styles.inboxViewEmpty}>No active assignments from you.</Text>
         ) : (
-          visibleAssignedFromMe.map(renderAssignedFromMeTodo)
+          assignedFromMe.map(renderAssignedFromMeTodo)
         )}
       </>
     );
@@ -5105,11 +5087,12 @@ export default function HomeScreen() {
 
       {projectsViewOpen && (
         <ScrollView style={styles.projectsGrid} contentContainerStyle={styles.projectsGridContent}>
-          {visibleProjects.map((project) => {
+          {activeProjects.map((project) => {
             const linkedTeam = project.team_id ? teams.find((t) => t.id === project.team_id) : null;
             const avatar = projectAvatarFor(project);
+            const isSearchDimmed = searching && !searchMatchesProject(project);
             return (
-              <View key={project.id} style={styles.projectCard}>
+              <View key={project.id} style={[styles.projectCard, isSearchDimmed && styles.searchResultDimmed]}>
                 <Pressable
                   onPress={() => {
                     setSelectedProjectId(project.id);
@@ -6189,6 +6172,7 @@ export default function HomeScreen() {
                   keyboardShouldPersistTaps="handled"
                   renderItem={({ item: todo, drag, isActive }) => {
                     const assigner = getAssignerInfo(todo);
+                    const isSearchDimmed = searching && !searchMatchesTodo(todo);
                     return (
                       <TodoItem
                         text={todo.text} done={todo.done} priority={todo.priority}
@@ -6210,6 +6194,7 @@ export default function HomeScreen() {
                         onPriority={(event) => openPriorityPicker(todo, event)} onDueDate={() => openDueCalendar(todo)}
                         onArchive={() => archiveTodo(todo.id)}
                         onDrag={drag} isDragging={isActive ?? false}
+                        searchDimmed={isSearchDimmed}
                         rowPV={rowPV}
                       />
                     );
@@ -6227,7 +6212,7 @@ export default function HomeScreen() {
                 />
               </View>
 
-              {(searching || done.length > 0 || visibleArchivedTodos.length > 0) && (
+              {(done.length > 0 || archivedTodos.length > 0) && (
                 <View nativeID={completedDropTargetId} style={styles.completedBox}>
                   <View style={styles.completedBoxHeader}>
                     <Pressable
@@ -6243,7 +6228,7 @@ export default function HomeScreen() {
                       style={[styles.completedPaneTab, completedPaneTab === 'deleted' && styles.completedPaneTabActive]}
                     >
                       <Text style={[styles.completedPaneTabText, completedPaneTab === 'deleted' && styles.completedPaneTabTextActive]}>
-                        Deleted ({visibleArchivedTodos.length})
+                        Deleted ({archivedTodos.length})
                       </Text>
                     </Pressable>
                   </View>
@@ -6253,6 +6238,7 @@ export default function HomeScreen() {
                   >
                     {completedPaneTab === 'completed' && done.map((todo) => {
                       const assigner = getAssignerInfo(todo);
+                      const isSearchDimmed = searching && !searchMatchesTodo(todo);
                       return (
                         <TodoItem
                           key={todo.id} text={todo.text} done={todo.done} priority={todo.priority}
@@ -6274,18 +6260,20 @@ export default function HomeScreen() {
                           onPriority={(event) => openPriorityPicker(todo, event)} onDueDate={() => openDueCalendar(todo)}
                           onArchive={() => archiveTodo(todo.id)}
                           reserveDragSpace={Platform.OS === 'web'}
+                          searchDimmed={isSearchDimmed}
                           rowPaddingRight={done.length > 3 ? 0 : 2}
                           rowPV={rowPV}
                         />
                       );
                     })}
                     {completedPaneTab === 'completed' && done.length === 0 && (
-                      <Text style={styles.completedPaneEmpty}>
-                        {searching ? 'No completed matches.' : 'No completed todos yet.'}
-                      </Text>
+                      <Text style={styles.completedPaneEmpty}>No completed todos yet.</Text>
                     )}
-                    {completedPaneTab === 'deleted' && visibleArchivedTodos.map((todo) => (
-                      <View key={todo.id} style={styles.archivedRow}>
+                    {completedPaneTab === 'deleted' && archivedTodos.map((todo) => (
+                      <View
+                        key={todo.id}
+                        style={[styles.archivedRow, searching && !searchMatchesTodo(todo) && styles.searchResultDimmed]}
+                      >
                         <Text style={styles.archivedText} numberOfLines={1}>{todo.text}</Text>
                         <Text style={styles.archivedDateText}>{formatArchiveDate(todo.archived_at)}</Text>
                         <Pressable onPress={() => unarchiveTodo(todo.id)} style={styles.unarchiveBtn}>
@@ -6293,10 +6281,8 @@ export default function HomeScreen() {
                         </Pressable>
                       </View>
                     ))}
-                    {completedPaneTab === 'deleted' && visibleArchivedTodos.length === 0 && (
-                      <Text style={styles.completedPaneEmpty}>
-                        {searching ? 'No deleted matches.' : 'No deleted todos.'}
-                      </Text>
+                    {completedPaneTab === 'deleted' && archivedTodos.length === 0 && (
+                      <Text style={styles.completedPaneEmpty}>No deleted todos.</Text>
                     )}
                   </ScrollView>
                 </View>
@@ -8926,6 +8912,9 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     padding: 14,
     justifyContent: 'center',
+  },
+  searchResultDimmed: {
+    opacity: 0.36,
   },
   projectCardHeader: {
     flexDirection: 'row',

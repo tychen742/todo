@@ -35,6 +35,7 @@ type Props = {
   onDrag?: () => void;
   reserveDragSpace?: boolean;
   isDragging?: boolean;
+  searchDimmed?: boolean;
   rowPV?: number;
   rowPaddingRight?: number;
 };
@@ -127,6 +128,7 @@ export default function TodoItem({
   onDrag,
   reserveDragSpace = false,
   isDragging = false,
+  searchDimmed = false,
   rowPV = 2,
   rowPaddingRight = 2,
 }: Props) {
@@ -187,7 +189,7 @@ export default function TodoItem({
   })();
 
   return (
-    <View style={[styles.rowOuter, isMilestone && styles.rowMilestone, isDragging && styles.rowDragging, isLate && styles.rowLate, (priorityHovered || ageHovered || dueDateHovered || statusHovered || projectHovered || textHovered) && styles.rowTooltipActive]}>
+    <View style={[styles.rowOuter, isMilestone && styles.rowMilestone, isDragging && styles.rowDragging, isLate && styles.rowLate, searchDimmed && styles.rowSearchDimmed, (priorityHovered || ageHovered || dueDateHovered || statusHovered || projectHovered || textHovered) && styles.rowTooltipActive]}>
     <View style={[styles.row, { paddingVertical: rowPV, paddingRight: rowPaddingRight }]}>
       {!!onDrag && (
         <Pressable onPressIn={onDrag} style={styles.dragHandle} hitSlop={8}>
@@ -584,6 +586,9 @@ const styles = StyleSheet.create({
   },
   rowLate: {
     backgroundColor: '#fef2f2',
+  },
+  rowSearchDimmed: {
+    opacity: 0.36,
   },
   textRow: {
     flexDirection: 'row',
