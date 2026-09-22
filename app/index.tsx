@@ -12,6 +12,7 @@ import {
   Modal,
   useWindowDimensions,
   Image,
+  PanResponder,
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
@@ -100,9 +101,16 @@ type Profile = {
 
 type ProfileSummary = Pick<Profile, 'id' | 'email' | 'display_name'>;
 
+type MindmapPoint = {
+  x: number;
+  y: number;
+};
+
 type WorkspaceMindmapNode = {
   id: string;
   label: string;
+  x?: number;
+  y?: number;
   children: WorkspaceMindmapNode[];
 };
 
@@ -113,6 +121,7 @@ type WorkspaceMindmap = {
   created_at: string;
   template: MindmapTemplateKey;
   topics: string[];
+  root_position?: MindmapPoint;
   nodes: WorkspaceMindmapNode[];
 };
 
@@ -862,16 +871,29 @@ function mindmapNodesFromTopics(topics: string[]) {
   return topics.map((topic, index) => createMindmapNode(topic || `Topic ${index + 1}`));
 }
 
+function normalizeMindmapPoint(point: Partial<MindmapPoint> | undefined): MindmapPoint | undefined {
+  if (typeof point?.x !== 'number' || typeof point.y !== 'number') return undefined;
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return undefined;
+  return {
+    x: Math.max(0, Math.min(100, point.x)),
+    y: Math.max(0, Math.min(100, point.y)),
+  };
+}
+
 function normalizeMindmapNodes(
   nodes: Partial<WorkspaceMindmapNode>[] | undefined,
   fallbackTopics: string[]
 ): WorkspaceMindmapNode[] {
   if (!Array.isArray(nodes) || nodes.length === 0) return mindmapNodesFromTopics(fallbackTopics);
-  return nodes.map((node, index) => ({
-    id: node.id ?? `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-    label: node.label ?? fallbackTopics[index] ?? `Topic ${index + 1}`,
-    children: normalizeMindmapNodes(node.children, []),
-  }));
+  return nodes.map((node, index) => {
+    const point = normalizeMindmapPoint(node);
+    return {
+      id: node.id ?? `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+      label: node.label ?? fallbackTopics[index] ?? `Topic ${index + 1}`,
+      ...(point ? point : {}),
+      children: normalizeMindmapNodes(node.children, []),
+    };
+  });
 }
 
 function mindmapBody(title: string, nodes: WorkspaceMindmapNode[]) {
@@ -921,6 +943,10 @@ function deleteMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string): Works
   return nodes
     .filter((node) => node.id !== nodeId)
     .map((node) => ({ ...node, children: deleteMindmapNode(node.children, nodeId) }));
+}
+
+function moveMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string, point: MindmapPoint): WorkspaceMindmapNode[] {
+  return mapMindmapNodes(nodes, nodeId, (node) => ({ ...node, ...point }));
 }
 
 function editableMindmapPositions(templateKey: MindmapTemplateKey, count: number) {
@@ -1100,6 +1126,8 @@ function EditableWorkspaceMindmap({
   onNodeAdd,
   onNodeChange,
   onNodeDelete,
+  onRootPositionChange,
+  onNodeMove,
 }: {
   mindmap: WorkspaceMindmap;
   template: MindmapTemplate;
@@ -1108,9 +1136,14 @@ function EditableWorkspaceMindmap({
   onNodeAdd: (parentNodeId: string | null) => void;
   onNodeChange: (nodeId: string, value: string) => void;
   onNodeDelete: (nodeId: string) => void;
+  onRootPositionChange: (point: MindmapPoint) => void;
+  onNodeMove: (nodeId: string, point: MindmapPoint) => void;
 }) {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const root = { x: 50, y: 50 };
+  const [dragPreview, setDragPreview] = useState<{ id: string; point: MindmapPoint } | null>(null);
+  const root = dragPreview?.id === 'root'
+    ? dragPreview.point
+    : mindmap.root_position ?? { x: 50, y: 50 };
   const topLevelNodes = mindmap.nodes.length > 0 ? mindmap.nodes : mindmapNodesFromTopics(mindmap.topics);
   const positions = editableMindmapPositions(mindmap.template, topLevelNodes.length);
   const topicWidth = compact ? 112 : 138;
@@ -1120,8 +1153,8 @@ function EditableWorkspaceMindmap({
   const rootHeight = 42;
   const childNodeHeight = 32;
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-  const canvasWidth = Math.max(canvasSize.width, 1);
-  const canvasHeight = Math.max(canvasSize.height, 1);
+  const canvasWidth = canvasSize.width > 0 ? canvasSize.width : (compact ? 560 : 760);
+  const canvasHeight = canvasSize.height > 0 ? canvasSize.height : (compact ? 300 : 420);
   const mapFieldWidth = Math.min(canvasWidth, compact ? 560 : 760);
   const mapFieldHeight = Math.min(canvasHeight, compact ? 260 : 380);
   const mapFieldOffsetX = Math.max((canvasWidth - mapFieldWidth) / 2, 0);
@@ -1162,6 +1195,47 @@ function EditableWorkspaceMindmap({
       x: from.x + dx * scale,
       y: from.y + dy * scale,
     };
+  }
+  function clampMapPoint(point: MindmapPoint, width: number, height: number): MindmapPoint {
+    const minX = ((width / 2 + 10) / mapFieldWidth) * 100;
+    const maxX = 100 - minX;
+    const minY = ((height / 2 + 10) / mapFieldHeight) * 100;
+    const maxY = 100 - minY;
+    return {
+      x: clamp(point.x, minX, maxX),
+      y: clamp(point.y, minY, maxY),
+    };
+  }
+  function createDragHandlers(
+    id: string,
+    point: MindmapPoint,
+    width: number,
+    height: number,
+    onCommit: (nextPoint: MindmapPoint) => void
+  ) {
+    let lastPoint = point;
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_event, gestureState) =>
+        Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3,
+      onPanResponderGrant: () => {
+        lastPoint = point;
+        setDragPreview({ id, point });
+      },
+      onPanResponderMove: (_event, gestureState) => {
+        lastPoint = clampMapPoint({
+          x: point.x + (gestureState.dx / mapFieldWidth) * 100,
+          y: point.y + (gestureState.dy / mapFieldHeight) * 100,
+        }, width, height);
+        setDragPreview({ id, point: lastPoint });
+      },
+      onPanResponderRelease: () => {
+        setDragPreview(null);
+        onCommit(lastPoint);
+      },
+      onPanResponderTerminate: () => {
+        setDragPreview(null);
+      },
+    }).panHandlers;
   }
   type RenderNode = {
     node: WorkspaceMindmapNode;
@@ -1217,9 +1291,14 @@ function EditableWorkspaceMindmap({
     nodes.forEach((node, index) => {
       const width = depth === 0 ? topicWidth : childWidth;
       const height = depth === 0 ? nodeHeight : childNodeHeight;
-      const position = depth === 0
+      const autoPosition = depth === 0
         ? positions[index]
         : childPosition(parentX, parentY, index, nodes.length, depth, parentWidth, width, height);
+      const savedPosition = typeof node.x === 'number' && typeof node.y === 'number'
+        ? { x: node.x, y: node.y }
+        : undefined;
+      const previewPosition = dragPreview?.id === node.id ? dragPreview.point : undefined;
+      const position = previewPosition ?? savedPosition ?? autoPosition;
       const color = template.colors[index % template.colors.length] ?? '#e5e7eb';
       renderNodes.push({
         node,
@@ -1279,6 +1358,7 @@ function EditableWorkspaceMindmap({
         })}
       </Svg>
       <View
+        {...createDragHandlers('root', root, rootWidth, rootHeight, onRootPositionChange)}
         style={[
           styles.notesMindmapNode,
           styles.notesMindmapRootNode,
@@ -1307,11 +1387,19 @@ function EditableWorkspaceMindmap({
         const color = renderNode.color;
         const width = renderNode.depth === 0 ? topicWidth : childWidth;
         const nodePoint = toCanvasPoint({ x: renderNode.x, y: renderNode.y });
+        const nodePosition = { x: renderNode.x, y: renderNode.y };
         const isEdgeNode = renderNode.node.children.length === 0;
         const nodeColor = renderNode.depth === 0 ? color : '#ffffff';
         const borderColor = renderNode.depth === 0 ? color : '#cbd5e1';
         return (
           <View
+            {...createDragHandlers(
+              renderNode.node.id,
+              nodePosition,
+              width,
+              renderNode.height,
+              (point) => onNodeMove(renderNode.node.id, point)
+            )}
             key={`${mindmap.id}-node-${renderNode.node.id}`}
             style={[
               styles.notesMindmapNode,
@@ -1642,6 +1730,7 @@ export default function HomeScreen() {
                 created_at: mindmap.created_at ?? new Date().toISOString(),
                 template: template.key,
                 topics: nodes.map((node) => node.label),
+                root_position: normalizeMindmapPoint(mindmap.root_position),
                 nodes,
               };
             })
@@ -2042,7 +2131,7 @@ export default function HomeScreen() {
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
   }
 
-  function updateWorkspaceMindmap(id: string, updates: Partial<Pick<WorkspaceMindmap, 'title' | 'nodes'>>) {
+  function updateWorkspaceMindmap(id: string, updates: Partial<Pick<WorkspaceMindmap, 'title' | 'nodes' | 'root_position'>>) {
     const nextMindmaps = workspaceMindmaps.map((mindmap) => {
       if (mindmap.id !== id) return mindmap;
       const title = updates.title ?? mindmap.title;
@@ -2051,6 +2140,7 @@ export default function HomeScreen() {
         ...mindmap,
         title,
         nodes,
+        root_position: updates.root_position ?? mindmap.root_position,
         topics: nodes.map((node) => node.label),
         body: mindmapBody(title, nodes),
       };
@@ -2080,6 +2170,18 @@ export default function HomeScreen() {
     if (mindmap.nodes.length <= 1 && mindmap.nodes.some((node) => node.id === nodeId)) return;
     updateWorkspaceMindmap(id, {
       nodes: deleteMindmapNode(mindmap.nodes, nodeId),
+    });
+  }
+
+  function updateWorkspaceMindmapRootPosition(id: string, point: MindmapPoint) {
+    updateWorkspaceMindmap(id, { root_position: point });
+  }
+
+  function updateWorkspaceMindmapNodePosition(id: string, nodeId: string, point: MindmapPoint) {
+    const mindmap = workspaceMindmaps.find((item) => item.id === id);
+    if (!mindmap) return;
+    updateWorkspaceMindmap(id, {
+      nodes: moveMindmapNode(mindmap.nodes, nodeId, point),
     });
   }
 
@@ -4588,6 +4690,8 @@ export default function HomeScreen() {
                           onNodeAdd={(parentNodeId) => addWorkspaceMindmapNode(mindmap.id, parentNodeId)}
                           onNodeChange={(nodeId, value) => updateWorkspaceMindmapNodeLabel(mindmap.id, nodeId, value)}
                           onNodeDelete={(nodeId) => deleteWorkspaceMindmapNode(mindmap.id, nodeId)}
+                          onRootPositionChange={(point) => updateWorkspaceMindmapRootPosition(mindmap.id, point)}
+                          onNodeMove={(nodeId, point) => updateWorkspaceMindmapNodePosition(mindmap.id, nodeId, point)}
                         />
                       </View>
                     );

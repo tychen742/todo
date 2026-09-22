@@ -132,7 +132,7 @@ Rules:
 - Editing an existing todo title may also use priority tokens such as `:h` or `:urgent`; project routing stays in the project picker during edits.
 - Due dates should be set and adjusted from each todo row so planning can happen after capture.
 - Completed todos should show when they were completed near their due-date value; this requires tracking completion time separately from creation time.
-- Maps should be a separate workspace-level concept. Current UI gives Maps a primary workspace tab where New Map opens visual templates, created maps are listed on the page, maps save automatically, nodes are edited directly, top-level nodes can be added from the canvas, and edge nodes expose child-node add controls.
+- Maps should be a separate workspace-level concept. Current UI gives Maps a primary workspace tab where New Map opens visual templates, created maps are listed on the page, maps save automatically, nodes are edited directly, pills can be dragged to manual positions, top-level nodes can be added from the canvas, and edge nodes expose child-node add controls.
 - Todo annotations should stay scoped to one task; workspace maps should hold broader planning context, project structure, thoughts, and relationships.
 - Calendar sync should be optional per user and should not be required for basic todo use.
 - Personal calendars should show the user's own todos, assignments, reminders, and synced external calendar context.

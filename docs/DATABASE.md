@@ -110,11 +110,12 @@ Current `todos` columns can answer the latest assignment state: who created the 
 
 Workspace Maps are not in Postgres yet. The current Maps surface stores the
 map template choice for each created map, editable central topic and nested
-node labels, and created map entries in per-user `AsyncStorage`. The previous
-local Ideas value remains in that payload for migration safety but is not
-currently surfaced. Top-level nodes can be added from the canvas, edge nodes
-expose child-node add controls, and nodes can be deleted locally; a future
-synced workspace table should own durable workspace maps.
+node labels, optional root/node percentage positions, and created map entries
+in per-user `AsyncStorage`. The previous local Ideas value remains in that
+payload for migration safety but is not currently surfaced. Top-level nodes can
+be added from the canvas, edge nodes expose child-node add controls, nodes can
+be dragged or deleted locally, and a future synced workspace table should own
+durable workspace maps.
 
 #### Timestamp Modeling Notes
 
