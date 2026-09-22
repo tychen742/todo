@@ -131,6 +131,7 @@ type CreateTarget = 'team' | 'organization' | 'project';
 type ProjectViewMode = 'plan' | 'kanban';
 type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
 type CalendarViewMode = 'day' | 'week' | 'month';
+type AuthErrorField = 'displayName' | 'email' | 'password' | 'all' | null;
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const priorityPopoverWidth = 120;
@@ -191,8 +192,10 @@ const taskAgeColumnWidth = 46;
 const taskArchiveColumnWidth = 20;
 const taskArchiveColumnMarginLeft = 2;
 const taskRowPaddingRight = 2;
-const webAppUrl = 'https://todo-eight-gamma.vercel.app';
-const oauthReturnStorageKey = 'todo:oauth-return-to-production';
+const appName = 'RodoFlow';
+const webAppUrl = 'https://rodoflow.com';
+const legacyWebHost = 'todo-eight-gamma.vercel.app';
+const oauthReturnStorageKey = 'rodoflow:oauth-return-to-production';
 const redirectLocalWebToProductionEnabled =
   process.env.EXPO_PUBLIC_REDIRECT_LOCAL_WEB_TO_PRODUCTION === '1';
 
@@ -434,6 +437,18 @@ function isLocalWebHost() {
   return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 }
 
+function redirectLegacyWebHostToProduction() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  if (window.location.hostname !== legacyWebHost) return false;
+
+  const destination = new URL(webAppUrl);
+  destination.pathname = window.location.pathname;
+  destination.search = window.location.search;
+  destination.hash = window.location.hash;
+  window.location.replace(destination.toString());
+  return true;
+}
+
 function redirectLocalWebToProduction() {
   if (!redirectLocalWebToProductionEnabled) return false;
   if (!isLocalWebHost()) return false;
@@ -450,6 +465,10 @@ function promoteLocalSessionToProduction(currentSession: Session | null) {
   if (!currentSession) return false;
   window.sessionStorage?.removeItem(oauthReturnStorageKey);
   return redirectLocalWebToProduction();
+}
+
+function redirectNonCanonicalWebHost() {
+  return redirectLegacyWebHostToProduction() || redirectLocalWebToProduction();
 }
 
 function getAuthCallbackParams(callbackUrl: string) {
@@ -1159,6 +1178,7 @@ export default function HomeScreen() {
   const [navExpanded, setNavExpanded] = useState(false);
   const [statusEditing, setStatusEditing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
@@ -1251,6 +1271,7 @@ export default function HomeScreen() {
   const [projectFilterPickerVisible, setProjectFilterPickerVisible] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [error, setError] = useState('');
+  const [authErrorField, setAuthErrorField] = useState<AuthErrorField>(null);
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState('');
   const [hoveredInboxTodoId, setHoveredInboxTodoId] = useState<string | null>(null);
@@ -2182,7 +2203,7 @@ export default function HomeScreen() {
   }, [loadArchivedTodos]);
 
   useEffect(() => {
-    if (redirectLocalWebToProduction()) return;
+    if (redirectNonCanonicalWebHost()) return;
 
     if (!isSupabaseConfigured) {
       setAuthInitialized(true);
@@ -2307,28 +2328,44 @@ export default function HomeScreen() {
   }, [loadMembers, loadTodos, selectedTeamId, selectedProjectId, session]);
 
   async function submitAuth() {
-    if (redirectLocalWebToProduction()) return;
+    if (redirectNonCanonicalWebHost()) return;
 
+    const trimmedDisplayName = displayName.trim();
     const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !password) {
-      setError('Enter your email and password.');
+    if (authMode === 'signUp' && !trimmedDisplayName) {
+      setAuthErrorField('displayName');
+      setError('Enter your name.');
+      return;
+    }
+    if (!normalizedEmail) {
+      setAuthErrorField('email');
+      setError('Enter your email.');
+      return;
+    }
+    if (!password) {
+      setAuthErrorField('password');
+      setError('Enter your password.');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setAuthErrorField('email');
       setError('Enter a valid email address.');
       return;
     }
     if (authMode === 'signUp' && password.length < 8) {
+      setAuthErrorField('password');
       setError('Password must be at least 8 characters.');
       return;
     }
     if (!isSupabaseConfigured) {
+      setAuthErrorField('all');
       setError('Add Supabase env vars to sync todos.');
       return;
     }
 
     setAuthLoading(true);
     setError('');
+    setAuthErrorField(null);
     setMessage('');
 
     const result =
@@ -2339,12 +2376,13 @@ export default function HomeScreen() {
             password,
             options: {
               emailRedirectTo: authRedirectUrl(),
-              data: { display_name: null },
+              data: { display_name: trimmedDisplayName },
             },
           });
 
     if (result.error) {
       setAuthLoading(false);
+      setAuthErrorField('all');
       setError(result.error.message);
       return;
     }
@@ -2366,16 +2404,19 @@ export default function HomeScreen() {
   async function sendPasswordReset() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
+      setAuthErrorField('email');
       setError('Enter your email first.');
       return;
     }
     if (!isSupabaseConfigured) {
+      setAuthErrorField('all');
       setError('Add Supabase env vars to sync todos.');
       return;
     }
 
     setAuthLoading(true);
     setError('');
+    setAuthErrorField(null);
     setMessage('');
 
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
@@ -2385,6 +2426,7 @@ export default function HomeScreen() {
     setAuthLoading(false);
 
     if (resetError) {
+      setAuthErrorField('email');
       setError(resetError.message);
       return;
     }
@@ -2393,15 +2435,17 @@ export default function HomeScreen() {
   }
 
   async function signInWithOAuth(provider: 'google' | 'apple') {
-    if (redirectLocalWebToProduction()) return;
+    if (redirectNonCanonicalWebHost()) return;
 
     if (!isSupabaseConfigured) {
+      setAuthErrorField('all');
       setError('Add Supabase env vars to sign in.');
       return;
     }
 
     setAuthLoading(true);
     setError('');
+    setAuthErrorField(null);
 
     try {
       const redirectTo = authRedirectUrl();
@@ -2755,17 +2799,17 @@ export default function HomeScreen() {
 
       const inviterName = profile ? profileDisplayName(profile) : emailDisplayName(session?.user.email);
       const inviteLink = projectInviteUrl(invite.token);
-      const subject = `${inviterName} invited you to ${selectedProject.name} in TODO.prj`;
+      const subject = `${inviterName} invited you to ${selectedProject.name} in ${appName}`;
       const body = [
         `Hi,`,
         '',
-        `${inviterName} has invited you to the project "${selectedProject.name}" in TODO.prj.`,
+        `${inviterName} has invited you to the project "${selectedProject.name}" in ${appName}.`,
         'Would you accept this invitation?',
-        'You will need to create a member account in TODO.prj before you can join the project if you do not already have one.',
+        `You will need to create a member account in ${appName} before you can join the project if you do not already have one.`,
         '',
         `Open this invitation link: ${inviteLink}`,
         '',
-        'If you already have a TODO.prj account, sign in with this email address to accept the invite.',
+        `If you already have a ${appName} account, sign in with this email address to accept the invite.`,
       ].join('\n');
 
       const mailtoUrl = `mailto:${encodeURIComponent(normalizedEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -4121,9 +4165,9 @@ export default function HomeScreen() {
           <View style={styles.authPanel}>
             <View style={styles.authBrand}>
               <View style={styles.authLogo}>
-                <Text style={styles.authLogoText}>✓</Text>
+                <Image source={require('../assets/icon.png')} style={styles.authLogoImage} />
               </View>
-              <Text style={styles.authBrandName}>Todo</Text>
+              <Text style={styles.authBrandName}>{appName}</Text>
             </View>
             <Text style={styles.authTitle}>Set a new password</Text>
             <Text style={styles.authTitleSub}>
@@ -4191,6 +4235,12 @@ export default function HomeScreen() {
 
   if (!session) {
     const isSignIn = authMode === 'signIn';
+    const isAuthSubmitDisabled =
+      authLoading ||
+      !isSupabaseConfigured ||
+      !email.trim() ||
+      !password ||
+      (!isSignIn && !displayName.trim());
     return (
       <KeyboardAvoidingView
         style={styles.root}
@@ -4206,17 +4256,53 @@ export default function HomeScreen() {
             {/* Brand */}
             <View style={styles.authBrand}>
               <View style={styles.authLogo}>
-                <Text style={styles.authLogoText}>✓</Text>
+                <Image source={require('../assets/icon.png')} style={styles.authLogoImage} />
               </View>
-              <Text style={styles.authBrandName}>Todo</Text>
+              <Text style={styles.authBrandName}>{appName}</Text>
             </View>
+
+            {!isSignIn && (
+              <>
+                <Text style={styles.authLabel}>Name</Text>
+                <TextInput
+                  style={[
+                    styles.authInput,
+                    styles.authEmailInput,
+                    (authErrorField === 'displayName' || authErrorField === 'all') && styles.authInputError,
+                  ]}
+                  value={displayName}
+                  onChangeText={(v) => {
+                    setDisplayName(v);
+                    if (authErrorField === 'displayName' || authErrorField === 'all') {
+                      setError('');
+                      setAuthErrorField(null);
+                    }
+                  }}
+                  placeholder="Your name"
+                  placeholderTextColor="#9ca3af"
+                  autoCapitalize="words"
+                  textContentType="name"
+                  autoComplete="name"
+                />
+              </>
+            )}
 
             {/* Email */}
             <Text style={styles.authLabel}>Email</Text>
             <TextInput
-              style={[styles.authInput, styles.authEmailInput, !!error && styles.authInputError]}
+              style={[
+                styles.authInput,
+                styles.authEmailInput,
+                (authErrorField === 'email' || authErrorField === 'all') && styles.authInputError,
+              ]}
               value={email}
-              onChangeText={(v) => { setEmail(v); if (error) setError(''); }}
+              onChangeText={(v) => {
+                setEmail(v);
+                if (authErrorField === 'email' || authErrorField === 'all') {
+                  setError('');
+                  setAuthErrorField(null);
+                }
+              }}
               placeholder="you@example.com"
               placeholderTextColor="#9ca3af"
               autoCapitalize="none"
@@ -4227,16 +4313,27 @@ export default function HomeScreen() {
 
             {/* Password */}
             <Text style={styles.authLabel}>Password</Text>
-            <View style={[styles.authPasswordWrap, !!error && styles.authInputError]}>
+            <View
+              style={[
+                styles.authPasswordWrap,
+                (authErrorField === 'password' || authErrorField === 'all') && styles.authInputError,
+              ]}
+            >
               <TextInput
                 style={styles.authPasswordInput}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(v) => {
+                  setPassword(v);
+                  if (authErrorField === 'password' || authErrorField === 'all') {
+                    setError('');
+                    setAuthErrorField(null);
+                  }
+                }}
                 placeholder="••••••••"
                 placeholderTextColor="#9ca3af"
                 secureTextEntry={!showPassword}
-                textContentType="password"
-                autoComplete="current-password"
+                textContentType={isSignIn ? 'password' : 'newPassword'}
+                autoComplete={isSignIn ? 'current-password' : 'new-password'}
                 onSubmitEditing={submitAuth}
               />
               <Pressable onPress={() => setShowPassword((p) => !p)} hitSlop={8}>
@@ -4245,13 +4342,18 @@ export default function HomeScreen() {
             </View>
 
             {!!error && <Text style={styles.authFieldError}>{error}</Text>}
+            {!!message && (
+              <View style={styles.authSuccessBox}>
+                <Text style={styles.authSuccessText}>{message}</Text>
+              </View>
+            )}
 
             <Pressable
               onPress={submitAuth}
-              disabled={authLoading || !isSupabaseConfigured || !email.trim() || !password}
+              disabled={isAuthSubmitDisabled}
               style={({ pressed }) => [
                 styles.authSubmitBtn,
-                (authLoading || !isSupabaseConfigured || !email.trim() || !password) && styles.authSubmitBtnMuted,
+                isAuthSubmitDisabled && styles.authSubmitBtnMuted,
                 pressed && styles.btnPressed,
               ]}
             >
@@ -4268,6 +4370,7 @@ export default function HomeScreen() {
                 onPress={() => {
                   setAuthMode(isSignIn ? 'signUp' : 'signIn');
                   setError('');
+                  setAuthErrorField(null);
                   setMessage('');
                 }}
               >
@@ -7837,15 +7940,14 @@ const styles = StyleSheet.create({
   authLogo: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: '#6366f1',
+    borderRadius: 9,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  authLogoText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
+  authLogoImage: {
+    width: 36,
+    height: 36,
   },
   authBrandName: {
     fontSize: 22,
@@ -7887,6 +7989,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginTop: 14,
+    marginBottom: 12,
   },
   authSuccessText: {
     color: '#16a34a',

@@ -36,7 +36,7 @@ In Supabase Dashboard -> Authentication -> URL Configuration, set the site URL
 and redirect URLs to the production app URL:
 
 ```text
-https://todo-eight-gamma.vercel.app
+https://rodoflow.com
 ```
 
 You can also keep local development redirect URLs for test-only local auth
@@ -48,9 +48,9 @@ http://localhost:8082
 todo://**
 ```
 
-The app's web OAuth, email confirmation, password reset, and invite URLs are
-hardcoded to `https://todo-eight-gamma.vercel.app`, so Google auth started from
-localhost still returns to the deployed app.
+The app's web OAuth, email confirmation, password reset, and invite URLs use
+`https://rodoflow.com`, so Google auth started from localhost still returns to
+the deployed app.
 Local web visits stay on `localhost` for development by default. If you need to
 force local web visits to the deployed Vercel origin for auth testing, set:
 
@@ -92,10 +92,16 @@ deep link belongs in Supabase redirect URLs.
 If a production Google login redirects to `http://localhost:8081/#access_token=...`,
 the callback did not come from the deployed web redirect. Check Supabase
 Dashboard -> Authentication -> URL Configuration and make sure the Site URL is
-`https://todo-eight-gamma.vercel.app`. Then start a fresh login from
-`https://todo-eight-gamma.vercel.app`, not from a stale localhost tab or an old
+`https://rodoflow.com`. Then start a fresh login from
+`https://rodoflow.com`, not from a stale localhost tab or an old
 OAuth browser window. The deployed web app sends `redirect_to` as the Vercel
 production URL.
+
+Google may still show `to continue to <project-ref>.supabase.co` on the account
+picker because Supabase Auth brokers the OAuth callback through the project
+domain. To replace that with a branded domain, set up a Supabase custom domain
+such as `auth.rodoflow.com` or complete Google Auth Platform branding
+verification.
 
 ## Database
 

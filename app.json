@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "todo",
-    "slug": "todo",
+    "name": "RodoFlow",
+    "slug": "rodoflow",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,7 +18,7 @@
       },
       "predictiveBackGestureEnabled": false
     },
-    "scheme": "todo",
+    "scheme": "rodoflow",
     "web": {
       "bundler": "metro",
       "output": "static",
@@ -29,7 +29,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "TODO.prj uses your photo as your profile avatar in task assignment rows."
+          "photosPermission": "RodoFlow uses your photo as your profile avatar in task assignment rows."
         }
       ]
     ]

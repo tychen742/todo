@@ -1,6 +1,6 @@
 # Product
 
-Todo is a personal task and lightweight project/team management app. It should stay simple enough for individual todos while growing toward collaborative team and project workflows.
+RodoFlow is a personal task and lightweight project/team management app. It should stay simple enough for individual todos while growing toward collaborative team and project workflows.
 
 ## Market Positioning
 

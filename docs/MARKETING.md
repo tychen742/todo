@@ -4,6 +4,10 @@
 
 **Simple and useful** — immediately helpful on day one, without training, setup, or configuration overhead. Adopted in minutes and kept because it genuinely helps.
 
+## Visual Identity Notes
+
+The RodoFlow app icon uses a flowing check path with three connected nodes. The mark should carry three ideas at small sizes: todo completion, project flow, and mindmap-style connected work. The working palette pairs deep blue-green structure with cyan, mint, and orange accents so the product does not collapse into a generic single-color task app.
+
 ## The Simplicity Insight
 
 Most work — in most jobs, on most projects — is not complicated. Day-to-day operations are routine, repetitive, and often bordering on mundane. The problem is not that people need more powerful tools; it is that the tools they have are far more complex than the work itself.

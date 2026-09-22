@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">RodoFlow adaptive background</title>
+  <desc id="desc">A deep blue-green gradient background for the adaptive icon.</desc>
+  <defs>
+    <linearGradient id="bg" x1="74" y1="42" x2="438" y2="470" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="0.5" stop-color="#1E3A5F"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="393" cy="112" r="56" fill="#22D3EE" opacity="0.18"/>
+  <circle cx="124" cy="404" r="78" fill="#F97316" opacity="0.13"/>
+</svg>

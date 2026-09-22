@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">RodoFlow adaptive foreground</title>
+  <desc id="desc">A flowing check path and connected project nodes on a transparent background.</desc>
+  <defs>
+    <linearGradient id="flow" x1="118" y1="316" x2="394" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="0.52" stop-color="#A7F3D0"/>
+      <stop offset="1" stop-color="#F97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="none"/>
+  <path
+    d="M116 269c45 48 82 72 110 72 36 0 61-41 88-87 21-36 42-71 67-83"
+    fill="none"
+    stroke="url(#flow)"
+    stroke-width="56"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+  <path
+    d="M116 269c45 48 82 72 110 72 36 0 61-41 88-87 21-36 42-71 67-83"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="22"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.94"/>
+  <circle cx="116" cy="269" r="44" fill="#111827"/>
+  <circle cx="116" cy="269" r="25" fill="#67E8F9"/>
+  <circle cx="226" cy="341" r="44" fill="#111827"/>
+  <circle cx="226" cy="341" r="25" fill="#A7F3D0"/>
+  <circle cx="381" cy="171" r="44" fill="#111827"/>
+  <circle cx="381" cy="171" r="25" fill="#F97316"/>
+</svg>

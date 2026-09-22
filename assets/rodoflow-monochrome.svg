@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432" role="img" aria-labelledby="title desc">
+  <title id="title">RodoFlow monochrome icon</title>
+  <desc id="desc">A single-color flowing check path and connected project nodes.</desc>
+  <rect width="432" height="432" fill="none"/>
+  <path
+    d="M96 226c39 42 71 63 96 63 32 0 53-36 77-76 18-31 37-62 59-73"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="42"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+  <circle cx="96" cy="226" r="34" fill="#FFFFFF"/>
+  <circle cx="192" cy="289" r="34" fill="#FFFFFF"/>
+  <circle cx="328" cy="140" r="34" fill="#FFFFFF"/>
+</svg>

@@ -12,7 +12,9 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Dashboard tab: workspace tab with a 6-stat grid (Active, Overdue, Due Today, Due This Week, Done This Week, Urgent), team member workload chips, and inline overdue/due-today task lists. Context-aware: reflects personal or team todos depending on what's loaded.
 - Inbox tab: original Workspace assigned-to-me task inbox remains available.
 - Notes tab: separate top-level workspace tab with local Ideas plus a New Mindmap template picker and saved mindmaps with direct node editing, a canvas control for top-level nodes, and child-node add controls on edge nodes.
-- Auth flow improvements: app logo/brand header, display name field on sign-up (saved to `profiles.display_name`), email format validation, password length check (≥8 chars) on sign-up, "Show/Hide" password toggle, success confirmation box (green) instead of red text, password-reset screen matches new design, social OAuth buttons visually disabled with "coming soon" label, footer with terms note.
+- Project assignment icon on task rows: Workspace rows show a subtle project avatar/plus control when not inside a project view; tapping it opens the project picker. Assigned projects show initials and tooltip context.
+- Display Density setting: account Settings now offers Compact / Cozy / Roomy with a checkmark next to the active choice. The current implementation changes list viewport row height; vertical row padding is still 2px in all modes.
+- Auth flow improvements: app logo/brand header, display name field on sign-up (saved to Supabase auth metadata and then `profiles.display_name`), email format validation, password length check (≥8 chars) on sign-up, targeted field error states, "Show/Hide" password toggle, success confirmation box (green), password-reset screen matches the auth design, active Google OAuth button, footer with terms note.
 - Personal workspace remains usable without creating a team.
 - Todo priority levels: low, normal, high, urgent.
 - New todos default to Normal priority.
@@ -27,8 +29,6 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Teams and Organizations live under the account/admin menu.
 
 ## Personal Workspace
-
-- **Project assignment icon on task rows** — in Personal view, add a small icon/button on each todo row to assign it to a project. Tapping opens a compact picker listing existing projects. Preferred over a global pill row above the task list (removed — too prominent for an optional field). The icon should be subtle when no project is assigned and show the project name/initial when one is set.
 
 - In the Personal workspace header/toolbar, add a toggle button with tooltip "Show personal items" that filters the list to todos belonging to the user's personal account (not assigned from other workspaces, not team todos).
 - The filter should be remembered per session (or persisted in user prefs). A filled/highlighted icon indicates the filter is active.
@@ -72,10 +72,18 @@ This file collects product and implementation TODOs from working sessions. Move 
 
 ## Auth UX
 
+- Commercial-readiness pass: finish the signup-to-first-workspace path, including visible confirmation states, account recovery, OAuth reliability, and clear disabled/enabled states for every auth action.
 - **"Continue as [Name]"** — when a returning user hits the login screen, detect the previously signed-in account (from local storage / last session) and surface a single-tap "Continue as [Name]" button with their avatar and email, similar to ClickUp and Google's account-picker pattern. Eliminates re-typing credentials for the common case. Falls back to the full email+password form if dismissed or if no prior session exists.
 - The button should show: avatar (photo > animal emoji > initials), display name, and email. A chevron or "switch account" link lets the user pick a different account instead.
 - For OAuth accounts (Google, Apple, GitHub), tapping "Continue as" re-triggers the same OAuth flow silently if the provider session is still valid, or opens the provider picker if not.
 - Store the last-used identity hint (display name, avatar URL, email, auth method) in `localStorage` / `AsyncStorage` — NOT a credential. Clear it on explicit sign-out.
+
+## Commercial Release Readiness
+
+- Define the release promise in one sentence: who the first paying users are, what job the product reliably does for them, and what is deliberately out of scope.
+- Create a launch checklist covering auth, onboarding, core todo/project flows, database/RLS policies, backups, monitoring, support, pricing, legal pages, and rollback.
+- Add production smoke tests for sign-up/sign-in, personal todo creation, project assignment, due date editing, and web build routing.
+- Audit public copy and first-screen UX so a cold visitor understands what the app is for before being asked to commit.
 
 ## Design System
 
@@ -223,7 +231,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Consider advanced branding as a paid feature for companies or larger teams.
 - Add built-in skins/themes (e.g. light, dark, high-contrast, color accents) for users to choose from without requiring custom branding.
 - Keep theme selection as a personal preference; team or company branding can override or extend it.
-- **Display Density** — add a density picker (Compact / Cozy / Roomy) similar to Outlook's Display Density menu. Controls `paddingVertical` on all rows and section headers. Current preview uses 2px vertical padding for all density modes. Persist the selection in user prefs. Show a checkmark next to the active choice like Outlook does.
+- **Display Density follow-up** — persist the Compact / Cozy / Roomy selection in user prefs, and decide whether density should also control `paddingVertical` on rows and section headers. Current preview uses 2px vertical padding for all density modes while changing list row height.
 
 this is a good UI element to have.
 ![alt text](image.png)

@@ -113,10 +113,10 @@ export default function ProjectInviteScreen() {
                 {' '}
                 {invitation.email}
                 {' '}
-                to this project in TODO.prj.
+                to this project in RodoFlow.
               </Text>
               <Text style={{ marginTop: 12, color: '#374151', lineHeight: 22 }}>
-                If you are not already a member of TODO.prj, create a member account first. Then sign in with this email address to accept the invitation.
+                If you are not already a member of RodoFlow, create a member account first. Then sign in with this email address to accept the invitation.
               </Text>
               {signedInEmail ? (
                 <Text style={{ marginTop: 12, color: signedInEmail === invitation.email.toLowerCase() ? '#059669' : '#b45309', fontWeight: '600' }}>
@@ -148,7 +148,7 @@ export default function ProjectInviteScreen() {
               </View>
               {!signedInEmail && (
                 <Text style={{ marginTop: 12, color: '#6b7280' }}>
-                  Open TODO.prj, sign in or create your account, then return to this link to accept.
+                  Open RodoFlow, sign in or create your account, then return to this link to accept.
                 </Text>
               )}
               {signedInEmail && signedInEmail !== invitation.email.toLowerCase() && (

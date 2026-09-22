@@ -16,6 +16,9 @@ The app should stay free for personal and small-team use. Paid value should come
 
 - Keep personal todos working without team setup.
 - Keep team workspaces optional.
+- Tighten first-run and auth UX so a new user can understand, sign up, and reach a useful workspace without explanation.
+- Treat build, typecheck, lint, and production web smoke checks as release gates.
+- Keep release-critical documentation current with the app's real behavior.
 - Run `supabase/schema.sql` after schema changes.
 - Stabilize priority and assignment UI on web and iPhone.
 - Keep due dates optional for personal and team todos.
@@ -24,6 +27,10 @@ The app should stay free for personal and small-team use. Paid value should come
 
 ## Next
 
+- Define the minimum commercial release scope: core personal todos, lightweight projects, optional teams, auth/account recovery, onboarding, production monitoring, support path, and pricing boundary.
+- Add an onboarding path after signup that confirms display name, explains the default workspace, and creates the first useful todo/project without setup burden.
+- Add production observability for auth failures, database errors, build/deploy status, and the keep-alive cron route.
+- Decide the first paid boundary and supporting billing architecture before adding paid-only UI.
 - Team invitations for emails that do not yet belong to a user profile.
 - Priority dropdown opened from the Add flow.
 - Facebook-style relative timestamps on todo rows.

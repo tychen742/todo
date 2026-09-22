@@ -3,6 +3,13 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "crons": [{ "path": "/api/keep-supabase-awake", "schedule": "17 8 * * *" }],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "todo-eight-gamma.vercel.app" }],
+      "destination": "https://rodoflow.com/$1",
+      "permanent": true
+    }
+  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
-

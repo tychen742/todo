@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">RodoFlow app icon</title>
+  <desc id="desc">A rounded square icon with a flowing check path and connected project nodes.</desc>
+  <defs>
+    <linearGradient id="bg" x1="166" y1="106" x2="858" y2="918" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="0.48" stop-color="#1E3A5F"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="274" y1="656" x2="746" y2="324" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="0.52" stop-color="#A7F3D0"/>
+      <stop offset="1" stop-color="#F97316"/>
+    </linearGradient>
+    <filter id="softShadow" x="160" y="188" width="704" height="700" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="28" stdDeviation="32" flood-color="#020617" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <circle cx="785" cy="224" r="96" fill="#22D3EE" opacity="0.18"/>
+  <circle cx="247" cy="808" r="138" fill="#F97316" opacity="0.13"/>
+  <g filter="url(#softShadow)">
+    <path
+      d="M285 541c82 88 148 132 198 132 66 0 111-75 161-159 38-65 76-129 122-151"
+      fill="none"
+      stroke="url(#flow)"
+      stroke-width="92"
+      stroke-linecap="round"
+      stroke-linejoin="round"/>
+    <path
+      d="M285 541c82 88 148 132 198 132 66 0 111-75 161-159 38-65 76-129 122-151"
+      fill="none"
+      stroke="#FFFFFF"
+      stroke-width="38"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      opacity="0.92"/>
+    <circle cx="285" cy="541" r="74" fill="#111827"/>
+    <circle cx="285" cy="541" r="43" fill="#67E8F9"/>
+    <circle cx="483" cy="673" r="74" fill="#111827"/>
+    <circle cx="483" cy="673" r="43" fill="#A7F3D0"/>
+    <circle cx="766" cy="363" r="74" fill="#111827"/>
+    <circle cx="766" cy="363" r="43" fill="#F97316"/>
+  </g>
+</svg>
