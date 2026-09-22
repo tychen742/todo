@@ -121,6 +121,7 @@ Rules:
 - The original Workspace Inbox should stay available for assigned-to-me tasks. Notes is a separate workspace area for ideas and mindmaps.
 - Users should be able to answer: how many todos have I assigned, who did I send them to, when did I send them, and what is their current status?
 - Header search should keep workspace panes stable by dimming non-matching active, completed, deleted, Inbox To you and From you, and project entries instead of hiding them. Match by task text, notes, project context, assignees, creators, priority, due date, and workflow status.
+- The account header should show presence compactly: the personal status message appears inline after the username, the caret opens account/navigation controls, the green dot means the browser is actively focused, and the small activity bar tracks time actively displaying the Workspace tab.
 - Priority should default to Normal on creation unless quick-capture text includes a priority token. It should stay visible on each todo row and be changeable from that row.
 - Due dates are central to time management and project management; they should support planning, workload visibility, reminders, calendars, and milestone tracking.
 - Adding todos should stay as quick capture: the add area should have one text input for the todo text.

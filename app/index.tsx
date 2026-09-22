@@ -364,6 +364,22 @@ function formatArchiveDate(value: string | null) {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function formatActiveDuration(seconds: number) {
+  const totalMinutes = Math.floor(seconds / 60);
+  if (totalMinutes < 1) return `${seconds}s`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours < 1) return `${totalMinutes}m`;
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+}
+
+function browserDisplayActive() {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return true;
+  const visible = document.visibilityState === 'visible';
+  const focused = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+  return visible && focused;
+}
+
 function toDateTimeInputValue(value: string | null) {
   if (!value) return '';
   const date = new Date(value);
@@ -1252,6 +1268,8 @@ export default function HomeScreen() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState<'signIn' | 'signUp'>('signIn');
   const [now, setNow] = useState(() => new Date());
+  const [browserActive, setBrowserActive] = useState(browserDisplayActive);
+  const [workspaceActiveSeconds, setWorkspaceActiveSeconds] = useState(0);
   const [navExpanded, setNavExpanded] = useState(false);
   const [statusEditing, setStatusEditing] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -1553,6 +1571,10 @@ export default function HomeScreen() {
   const resourcesTabActive = resourcesViewOpen;
   const dashboardTabActive = dashboardViewOpen;
   const peopleTabActive = teamsViewOpen;
+  const workspaceActiveLabel = formatActiveDuration(workspaceActiveSeconds);
+  const workspaceActiveProgress = workspaceActiveSeconds === 0
+    ? 0
+    : Math.max(4, ((workspaceActiveSeconds % 3600) / 3600) * 100);
   const renderWorkspaceTabDivider = (active: boolean, nextActive: boolean, isLast = false) => (
     !active && !nextActive && !isLast ? <View pointerEvents="none" style={styles.workspaceTabDivider} /> : null
   );
@@ -1563,6 +1585,26 @@ export default function HomeScreen() {
     () => new Map(projects.map((project) => [project.id, project])),
     [projects]
   );
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') return undefined;
+    const updateBrowserActive = () => setBrowserActive(browserDisplayActive());
+    updateBrowserActive();
+    window.addEventListener('focus', updateBrowserActive);
+    window.addEventListener('blur', updateBrowserActive);
+    document.addEventListener('visibilitychange', updateBrowserActive);
+    return () => {
+      window.removeEventListener('focus', updateBrowserActive);
+      window.removeEventListener('blur', updateBrowserActive);
+      document.removeEventListener('visibilitychange', updateBrowserActive);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session || !workspaceTabActive || !browserActive) return undefined;
+    const id = setInterval(() => setWorkspaceActiveSeconds((seconds) => seconds + 1), 1000);
+    return () => clearInterval(id);
+  }, [browserActive, session, workspaceTabActive]);
   const projectFilterProjects = useMemo(
     () => projects
       .filter((project) => !project.archived_at)
@@ -4711,17 +4753,17 @@ export default function HomeScreen() {
                   )}
                 </Pressable>
                 <View style={styles.userMeta}>
-                  <Pressable
-                    onPress={() => setNavExpanded((v) => !v)}
-                    style={styles.userMetaNameRow}
-                    accessibilityRole="button"
-                    accessibilityLabel="Toggle account menu"
-                  >
-                    <Text style={styles.userMetaName} numberOfLines={1}>{accountDisplayName}</Text>
-                    <Text style={styles.userNavChevron}>{navExpanded ? '▴' : '▾'}</Text>
-                  </Pressable>
-                  <View style={styles.userMetaStatusRow}>
-                    <View style={styles.onlineDot} />
+                  <View style={styles.userMetaNameRow}>
+                    <View style={[styles.onlineDot, !browserActive && styles.onlineDotInactive]} />
+                    <Pressable
+                      onPress={() => setNavExpanded((v) => !v)}
+                      style={styles.userNameButton}
+                      accessibilityRole="button"
+                      accessibilityLabel="Toggle account menu"
+                    >
+                      <Text style={styles.userMetaName} numberOfLines={1}>{accountDisplayName}</Text>
+                      <Text style={styles.userNavChevron}>{navExpanded ? '▴' : '▾'}</Text>
+                    </Pressable>
                     {statusEditing ? (
                       <TextInput
                         style={styles.statusInput}
@@ -4742,6 +4784,12 @@ export default function HomeScreen() {
                         </Text>
                       </Pressable>
                     )}
+                  </View>
+                  <View style={styles.workspaceActiveBarRow}>
+                    <View style={styles.workspaceActiveTrack}>
+                      <View style={[styles.workspaceActiveFill, { width: `${workspaceActiveProgress}%` }]} />
+                    </View>
+                    <Text style={styles.workspaceActiveText}>{workspaceActiveLabel} active</Text>
                   </View>
                 </View>
               </View>
@@ -9965,7 +10013,7 @@ const styles = StyleSheet.create({
   titleBarLeft: {
     flexDirection: 'column',
     flex: 1,
-    maxWidth: 280,
+    maxWidth: 340,
   },
   userIdentityRow: {
     flexDirection: 'row',
@@ -10229,7 +10277,15 @@ const styles = StyleSheet.create({
   userMetaNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+    minHeight: 21,
+  },
+  userNameButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 0,
+    maxWidth: 128,
   },
   userMetaName: {
     fontSize: 13,
@@ -10237,9 +10293,10 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   userNavChevron: {
-    fontSize: 11,
+    fontSize: 14,
     color: '#9ca3af',
-    lineHeight: 14,
+    lineHeight: 16,
+    fontWeight: '800',
   },
   userMetaStatusRow: {
     flexDirection: 'row',
@@ -10255,8 +10312,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#22c55e',
     flexShrink: 0,
   },
+  onlineDotInactive: {
+    backgroundColor: '#d1d5db',
+  },
   statusPressable: {
     flex: 1,
+    minWidth: 0,
   },
   statusText: {
     fontSize: 11,
@@ -10269,11 +10330,37 @@ const styles = StyleSheet.create({
   },
   statusInput: {
     flex: 1,
+    minWidth: 0,
     fontSize: 11,
     color: '#6b7280',
     fontStyle: 'italic',
     paddingVertical: 0,
     paddingHorizontal: 0,
+  },
+  workspaceActiveBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 5,
+  },
+  workspaceActiveTrack: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#eef2ff',
+    overflow: 'hidden',
+  },
+  workspaceActiveFill: {
+    height: '100%',
+    borderRadius: 2,
+    backgroundColor: '#22c55e',
+  },
+  workspaceActiveText: {
+    width: 56,
+    fontSize: 10,
+    color: '#9ca3af',
+    fontWeight: '700',
+    textAlign: 'right',
   },
   titleBarCenter: {
     flex: 3,
