@@ -194,6 +194,7 @@ const appThemes: Record<AppThemeKey, AppTheme> = {
   },
 };
 const appThemeKeys = Object.keys(appThemes) as AppThemeKey[];
+const webInputNoOutline = { outlineStyle: 'none' } as never;
 const completedDropTargetId = 'todo-completed-drop-target';
 const mindmapTemplates: MindmapTemplate[] = [
   {
@@ -245,8 +246,6 @@ const legacyWebHosts = [
 ];
 const oauthReturnStorageKey = 'rodoflow:oauth-return-to-production';
 const themeStorageKey = 'rodoflow:theme';
-const redirectLocalWebToProductionEnabled =
-  process.env.EXPO_PUBLIC_REDIRECT_LOCAL_WEB_TO_PRODUCTION === '1';
 
 const priorityRank: Record<Priority, number> = {
   urgent: 0,
@@ -462,7 +461,7 @@ function isValidEmailAddress(value: string) {
 
 function authRedirectUrl() {
   if (Platform.OS === 'web') {
-    return typeof window === 'undefined' ? undefined : webAppUrl;
+    return typeof window === 'undefined' ? undefined : window.location.origin;
   }
 
   return createURL('');
@@ -481,11 +480,6 @@ function forceOAuthRedirectUrl(url: string) {
   }
 }
 
-function isLocalWebHost() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
-  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-}
-
 function redirectLegacyWebHostToProduction() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
   if (!legacyWebHosts.includes(window.location.hostname)) return false;
@@ -498,13 +492,6 @@ function redirectLegacyWebHostToProduction() {
   return true;
 }
 
-function redirectLocalWebToProduction() {
-  if (!redirectLocalWebToProductionEnabled) return false;
-  if (!isLocalWebHost()) return false;
-  window.location.replace(webAppUrl);
-  return true;
-}
-
 function markOAuthRedirectIntent() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
   window.sessionStorage?.setItem(oauthReturnStorageKey, '1');
@@ -513,11 +500,11 @@ function markOAuthRedirectIntent() {
 function promoteLocalSessionToProduction(currentSession: Session | null) {
   if (!currentSession) return false;
   window.sessionStorage?.removeItem(oauthReturnStorageKey);
-  return redirectLocalWebToProduction();
+  return false;
 }
 
 function redirectNonCanonicalWebHost() {
-  return redirectLegacyWebHostToProduction() || redirectLocalWebToProduction();
+  return redirectLegacyWebHostToProduction();
 }
 
 function getAuthCallbackParams(callbackUrl: string) {
@@ -4744,7 +4731,7 @@ export default function HomeScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="search"
-                  style={styles.searchInput}
+                  style={[styles.searchInput, Platform.OS === 'web' && webInputNoOutline]}
                   accessibilityLabel="Search tasks and projects"
                 />
                 {searchQuery ? (
@@ -10238,7 +10225,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   titleBarCenter: {
-    flex: 2,
+    flex: 3,
     alignItems: 'center',
   },
   searchBar: {
@@ -10250,7 +10237,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     gap: 6,
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 520,
   },
   searchIcon: {
     fontSize: 15,
@@ -10258,6 +10245,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     fontSize: 13,
     color: '#111827',
     paddingVertical: 0,

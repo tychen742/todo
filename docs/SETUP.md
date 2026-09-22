@@ -48,18 +48,13 @@ http://localhost:8082
 todo://**
 ```
 
-The app's web OAuth, email confirmation, password reset, and invite URLs use
-`https://rodoflow.com`, so Google auth started from localhost still returns to
-the deployed app.
-Local web visits stay on `localhost` for development by default. If you need to
-force local web visits to the deployed Vercel origin for auth testing, set:
+The app's web OAuth, email confirmation, password reset, and invite URLs use the
+current web origin. Local development started from `localhost` returns to
+`localhost`; production started from `https://rodoflow.com` returns to
+`https://rodoflow.com`.
 
-```bash
-EXPO_PUBLIC_REDIRECT_LOCAL_WEB_TO_PRODUCTION=1
-```
-
-That keeps email/password and OAuth sessions on the production origin instead
-of creating browser-local sessions that cannot be shared with Vercel.
+That keeps local email/password and OAuth testing in the local browser origin,
+while production users stay on the production origin.
 
 Native OAuth uses `expo-web-browser` with the runtime URL from Expo Linking.
 In Expo Go, add the redirect URL printed by `Linking.createURL('')` or visible
