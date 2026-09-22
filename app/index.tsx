@@ -4837,16 +4837,6 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <View style={styles.titleBarRight}>
-              <View style={styles.titleBarClock}>
-                <Text style={styles.titleBarDateText}>
-                  {now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                </Text>
-                <Text style={styles.titleBarTimeText}>
-                  {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
-                </Text>
-              </View>
-            </View>
           </View>
         );
       })()}
@@ -10374,17 +10364,17 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   titleBarCenter: {
-    flex: 3,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     gap: 10,
     minWidth: 0,
   },
   messageBoard: {
     flex: 1,
-    maxWidth: 340,
-    minWidth: 220,
+    maxWidth: 360,
+    minWidth: 180,
     height: 36,
     borderRadius: 8,
     backgroundColor: '#f9fafb',
@@ -10423,9 +10413,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     gap: 6,
-    flex: 1,
-    minWidth: 220,
-    maxWidth: 360,
+    width: workspaceInboxColumnWidth,
+    flexShrink: 0,
     height: 36,
   },
   searchIcon: {
@@ -10459,31 +10448,9 @@ const styles = StyleSheet.create({
     color: '#c4c9d4',
     fontWeight: '600',
   },
-  titleBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-    flexShrink: 0,
-    minWidth: 78,
-  },
-  titleBarClock: {
-    alignItems: 'flex-end',
-  },
   accountAvatarButton: {
     borderRadius: 22,
     padding: 2,
-  },
-  titleBarDateText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  titleBarTimeText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111827',
-    marginTop: 2,
   },
   avatarBadge: {
     width: 34,
