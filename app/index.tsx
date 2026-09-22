@@ -203,28 +203,28 @@ const mindmapTemplates: MindmapTemplate[] = [
     name: 'Balanced',
     title: 'Central Topic',
     topics: ['Main Topic 4', 'Main Topic 3', 'Main Topic 1', 'Main Topic 2'],
-    colors: ['#ff6666', '#ff9b66', '#8ed6b0', '#72d7c6'],
+    colors: ['#f87171', '#fb923c', '#34d399', '#22d3ee'],
   },
   {
     key: 'right-stack',
     name: 'Right Stack',
     title: 'Central Topic',
     topics: ['Main Topic 1', 'Main Topic 2', 'Main Topic 3', 'Main Topic 4'],
-    colors: ['#ffcc43', '#e86a5b', '#29488f', '#ffcc43'],
+    colors: ['#facc15', '#f97316', '#3b82f6', '#14b8a6'],
   },
   {
     key: 'workshop',
     name: 'Workshop',
     title: 'Workshop',
     topics: ['Goals', 'Agenda', 'Materials', 'Engage', 'Venue', 'Feedback'],
-    colors: ['#b7e0cd', '#ffad7a', '#d7be9a', '#e6bd8b', '#ffad7a', '#b7e0cd'],
+    colors: ['#86efac', '#fdba74', '#c4b5fd', '#f9a8d4', '#93c5fd', '#5eead4'],
   },
   {
     key: 'business-plan',
     name: 'Business Plan',
     title: 'Business Plan',
     topics: ['Market', 'Strategy', 'Team', 'Summary', 'Company', 'Financial', 'Product'],
-    colors: ['#e9c7a4', '#e9c7a4', '#e9c7a4', '#f1d6b8', '#f1d6b8', '#f1d6b8', '#f1d6b8'],
+    colors: ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#fb7185', '#2dd4bf', '#818cf8'],
   },
 ];
 const taskHandleColumnWidth = 32;
@@ -1111,11 +1111,11 @@ function EditableWorkspaceMindmap({
   const root = { x: 50, y: 50 };
   const topLevelNodes = mindmap.nodes.length > 0 ? mindmap.nodes : mindmapNodesFromTopics(mindmap.topics);
   const positions = editableMindmapPositions(mindmap.template, topLevelNodes.length);
-  const topicWidth = compact ? 104 : 126;
-  const childWidth = compact ? 84 : 98;
-  const rootWidth = compact ? 128 : 154;
-  const nodeHeight = 36;
-  const childNodeHeight = 30;
+  const topicWidth = compact ? 112 : 138;
+  const childWidth = compact ? 94 : 108;
+  const rootWidth = compact ? 138 : 166;
+  const nodeHeight = 38;
+  const childNodeHeight = 32;
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
   type RenderNode = {
     node: WorkspaceMindmapNode;
@@ -1129,11 +1129,11 @@ function EditableWorkspaceMindmap({
   const renderNodes: RenderNode[] = [];
   function childPosition(parentX: number, parentY: number, index: number, count: number, depth: number) {
     const side = parentX < 46 ? -1 : parentX > 54 ? 1 : index % 2 === 0 ? -1 : 1;
-    const spread = 10;
+    const spread = 12;
     const yOffset = (index - (count - 1) / 2) * spread;
     return {
-      x: clamp(parentX + side * (16 + depth * 6), 10, 90),
-      y: clamp(parentY + yOffset, 10, 90),
+      x: clamp(parentX + side * (18 + depth * 7), 9, 91),
+      y: clamp(parentY + yOffset, 9, 91),
     };
   }
   function collectNodes(nodes: WorkspaceMindmapNode[], parentX: number, parentY: number, depth: number) {
@@ -1159,16 +1159,24 @@ function EditableWorkspaceMindmap({
   return (
     <View style={[styles.notesMindmapCanvas, compact && styles.notesMindmapCanvasCompact]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" style={styles.notesMindmapCanvasConnectors}>
+        <Path
+          d="M 20 0 V 100 M 40 0 V 100 M 60 0 V 100 M 80 0 V 100 M 0 20 H 100 M 0 40 H 100 M 0 60 H 100 M 0 80 H 100"
+          stroke="#dbe4f0"
+          strokeWidth={0.22}
+          opacity={0.48}
+          fill="none"
+        />
         {renderNodes.map((renderNode) => {
           const midX = (renderNode.parentX + renderNode.x) / 2;
           return (
             <Path
               key={`${mindmap.id}-connector-${renderNode.node.id}`}
               d={`M ${renderNode.parentX} ${renderNode.parentY} C ${midX} ${renderNode.parentY}, ${midX} ${renderNode.y}, ${renderNode.x} ${renderNode.y}`}
-              stroke={renderNode.depth === 0 ? renderNode.color : '#cbd5e1'}
-              strokeWidth={renderNode.depth === 0 ? 1.4 : 1}
+              stroke={renderNode.depth === 0 ? renderNode.color : '#94a3b8'}
+              strokeWidth={renderNode.depth === 0 ? 1.7 : 1.15}
               fill="none"
               strokeLinecap="round"
+              opacity={renderNode.depth === 0 ? 0.85 : 0.58}
             />
           );
         })}
@@ -1197,10 +1205,11 @@ function EditableWorkspaceMindmap({
       </View>
       {renderNodes.map((renderNode, index) => {
         const color = renderNode.color;
-        const darkText = color === '#29488f' || color === '#20266e';
         const width = renderNode.depth === 0 ? topicWidth : childWidth;
         const heightOffset = renderNode.depth === 0 ? nodeHeight / 2 : childNodeHeight / 2;
         const isEdgeNode = renderNode.node.children.length === 0;
+        const nodeColor = renderNode.depth === 0 ? color : '#ffffff';
+        const borderColor = renderNode.depth === 0 ? color : '#cbd5e1';
         return (
           <View
             key={`${mindmap.id}-node-${renderNode.node.id}`}
@@ -1213,8 +1222,8 @@ function EditableWorkspaceMindmap({
                 width,
                 marginLeft: -width / 2,
                 marginTop: -heightOffset,
-                backgroundColor: color,
-                borderColor: renderNode.depth === 0 ? color : '#d1d5db',
+                backgroundColor: nodeColor,
+                borderColor,
               },
             ]}
           >
@@ -1224,10 +1233,10 @@ function EditableWorkspaceMindmap({
               style={[
                 styles.notesMindmapNodeInput,
                 renderNode.depth > 0 && styles.notesMindmapChildNodeInput,
-                darkText && styles.notesMindmapNodeInputLight,
+                renderNode.depth === 0 && styles.notesMindmapTopicInput,
               ]}
               placeholder={renderNode.depth === 0 ? `Topic ${index + 1}` : 'Child'}
-              placeholderTextColor={darkText ? '#dbeafe' : '#6b7280'}
+              placeholderTextColor={renderNode.depth === 0 ? '#0f172a' : '#94a3b8'}
               accessibilityLabel={`Mindmap node ${index + 1}`}
             />
             {isEdgeNode ? (
@@ -8262,15 +8271,15 @@ const styles = StyleSheet.create({
   },
   notesMindmapCanvas: {
     position: 'relative',
-    height: 250,
+    height: 320,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#dbe4f0',
     backgroundColor: '#f8fafc',
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   notesMindmapCanvasCompact: {
-    height: 220,
+    height: 260,
   },
   notesMindmapCanvasConnectors: {
     position: 'absolute',
@@ -8278,32 +8287,34 @@ const styles = StyleSheet.create({
   },
   notesMindmapNode: {
     position: 'absolute',
-    minHeight: 36,
+    minHeight: 38,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: '#cbd5e1',
     backgroundColor: '#fff',
-    borderRadius: 6,
+    borderRadius: 999,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 8,
-    paddingRight: 20,
+    paddingLeft: 12,
+    paddingRight: 30,
     shadowColor: '#0f172a',
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
   notesMindmapRootNode: {
-    minHeight: 38,
-    borderColor: '#312e81',
-    backgroundColor: '#fff',
-    paddingRight: 8,
+    minHeight: 42,
+    borderColor: '#4f46e5',
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 16,
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
   },
   notesMindmapChildNode: {
-    minHeight: 30,
-    paddingLeft: 7,
+    minHeight: 32,
+    paddingLeft: 10,
     paddingRight: 34,
-    borderStyle: 'dashed',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
   },
   notesMindmapNodeInput: {
     flex: 1,
@@ -8316,60 +8327,69 @@ const styles = StyleSheet.create({
     outlineStyle: 'none' as never,
   },
   notesMindmapRootInput: {
-    color: '#312e81',
-    fontSize: 13,
+    color: '#3730a3',
+    fontSize: 14,
+    fontWeight: '800',
   },
   notesMindmapChildNodeInput: {
     fontSize: 11,
     fontWeight: '600',
   },
-  notesMindmapNodeInputLight: {
-    color: '#fff',
+  notesMindmapTopicInput: {
+    color: '#0f172a',
   },
   notesMindmapNodeAdd: {
     position: 'absolute',
     right: 20,
-    top: 4,
-    width: 14,
-    height: 14,
+    top: -7,
+    width: 18,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 7,
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    borderRadius: 9,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#dbe4f0',
   },
   notesMindmapNodeAddText: {
-    color: '#4f46e5',
-    fontSize: 11,
+    color: '#2563eb',
+    fontSize: 13,
     fontWeight: '800',
-    lineHeight: 13,
+    lineHeight: 15,
   },
   notesMindmapNodeDelete: {
     position: 'absolute',
-    right: 4,
-    top: 4,
-    width: 14,
-    height: 14,
+    right: 2,
+    top: -7,
+    width: 18,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 7,
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    borderRadius: 9,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   notesMindmapNodeDeleteText: {
-    color: '#6b7280',
-    fontSize: 11,
+    color: '#94a3b8',
+    fontSize: 13,
     fontWeight: '800',
-    lineHeight: 13,
+    lineHeight: 15,
   },
   notesMindmapCanvasAddNode: {
     position: 'absolute',
-    right: 10,
-    bottom: 10,
-    width: 28,
-    height: 28,
+    right: 12,
+    bottom: 12,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: '#6366f1',
+    borderRadius: 16,
+    backgroundColor: '#4f46e5',
+    shadowColor: '#312e81',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
   notesMindmapCanvasAddNodeText: {
     color: '#fff',
