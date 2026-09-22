@@ -11,7 +11,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Resources tab: workspace tab showing per-member workload — active tasks, overdue, due today, urgent. Reads from existing todos and members state; no new schema needed.
 - Dashboard tab: workspace tab with a 6-stat grid (Active, Overdue, Due Today, Due This Week, Done This Week, Urgent), team member workload chips, and inline overdue/due-today task lists. Context-aware: reflects personal or team todos depending on what's loaded.
 - Inbox tab: original Workspace assigned-to-me task inbox remains available.
-- Notes tab: separate top-level workspace tab with local Ideas plus a New Mindmap template picker and saved mindmaps with direct node editing, a canvas control for top-level nodes, and child-node add controls on edge nodes.
+- Maps tab: separate top-level workspace tab with a New Map template picker, an on-page saved map list, automatic local saving, direct node editing, a canvas control for top-level nodes, and child-node add controls on edge nodes.
 - Project assignment icon on task rows: Workspace rows show a subtle project avatar/plus control when not inside a project view; tapping it opens the project picker. Assigned projects show initials and tooltip context.
 - Display Density setting: account Settings now offers Compact / Cozy / Roomy with a checkmark next to the active choice. The current implementation changes list viewport row height; vertical row padding is still 2px in all modes.
 - Auth flow improvements: app logo/brand header, display name field on sign-up (saved to Supabase auth metadata and then `profiles.display_name`), email format validation, password length check (≥8 chars) on sign-up, targeted field error states, "Show/Hide" password toggle, success confirmation box (green), password-reset screen matches the auth design, active Google OAuth button, footer with terms note.
@@ -120,20 +120,20 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Use realtime sync so team members can co-edit and see updates quickly.
 - Decide whether Team Pages need edit history, section-level permissions, or conflict handling before adding rich editing.
 
-## Notes
+## Maps
 
-- Treat Notes as a separate workspace concept, not as the same thing as todo annotations.
-- Current implementation: the original Inbox tab and personal workspace side/inline panel remain the assigned-to-me task inbox. Notes is a separate Workspace tab with a left Ideas pane and a larger right mindmap area. New Mindmap opens visual templates; choosing one creates a saved entry whose map nodes can be edited directly, with top-level nodes added from the canvas and child nodes added from edge nodes.
-- Add synced storage for Notes after the workspace scope is settled.
-- Support quick note taking for personal, team, or project context depending on the active workspace.
-- Keep annotations scoped to one task; keep Notes for broader context, thoughts, snippets, and running notes.
+- Treat Maps as a separate workspace concept, not as the same thing as todo annotations.
+- Current implementation: the original Inbox tab and personal workspace side/inline panel remain the assigned-to-me task inbox. Maps is a separate Workspace tab with a template picker and a saved map list. New Map opens visual templates; choosing one creates an auto-saved entry whose map nodes can be edited directly, with top-level nodes added from the canvas and child nodes added from edge nodes.
+- Add synced storage for Maps after the workspace scope is settled.
+- Support visual planning maps for personal, team, or project context depending on the active workspace.
+- Keep annotations scoped to one task; keep Maps for broader context, thoughts, structure, and relationships.
 
 ## Todo Annotations
 
 - Add annotations as a future per-todo feature.
 - Use annotations for task-specific details, comments, clarifications, and context.
 - Keep annotations attached to exactly one todo item.
-- Do not use workspace Notes for task-specific annotation.
+- Do not use workspace Maps for task-specific annotation.
 
 ## Assignment & Collaborators
 

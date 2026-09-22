@@ -1913,11 +1913,6 @@ export default function HomeScreen() {
     });
   }
 
-  function saveWorkspaceIdeas(value: string) {
-    setWorkspaceIdeas(value);
-    saveWorkspaceNotes(value, workspaceMindmaps);
-  }
-
   function createWorkspaceMindmap(templateKey: MindmapTemplateKey) {
     const template = mindmapTemplateFor(templateKey);
     const nodes = mindmapNodesFromTopics(template.topics);
@@ -4404,14 +4399,13 @@ export default function HomeScreen() {
 
   function renderWorkspaceNotesPanel(variant: 'side' | 'inline' | 'full') {
     const isSide = variant === 'side';
-    const isStacked = isSide || width < 760;
     return (
       <View style={[
         variant === 'side' && styles.assignedToMePanel,
         variant === 'inline' && styles.assignedToMeInlinePanel,
         variant === 'full' && styles.inboxViewPanel,
       ]}>
-        <Text style={styles.assignedToMePanelTitle}>NOTES</Text>
+        <Text style={styles.assignedToMePanelTitle}>MAPS</Text>
         <ScrollView
           style={isSide ? styles.notesPanelScroll : undefined}
           contentContainerStyle={[
@@ -4421,39 +4415,25 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={[styles.notesWorkspace, isStacked && styles.notesWorkspaceStacked]}>
-            <View style={[styles.notesIdeasPane, isStacked && styles.notesPaneStacked]}>
-              <Text style={styles.notesFieldLabel}>Ideas</Text>
-              <TextInput
-                value={workspaceIdeas}
-                onChangeText={saveWorkspaceIdeas}
-                style={[
-                  styles.notesTextArea,
-                  styles.notesIdeasInput,
-                  isSide && styles.notesTextAreaSide,
-                  variant === 'full' && styles.notesTextAreaFull,
-                ]}
-                placeholder="Ideas..."
-                placeholderTextColor="#9ca3af"
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-            <View style={[styles.notesMindmapPane, isStacked && styles.notesPaneStacked]}>
+          <View style={styles.notesWorkspace}>
+            <View style={styles.notesMindmapPane}>
               <View style={styles.notesMindmapHeader}>
-                <Text style={styles.notesFieldLabel}>Mindmaps</Text>
+                <View style={styles.notesMindmapHeading}>
+                  <Text style={styles.notesFieldLabel}>Maps</Text>
+                  <Text style={styles.notesAutosaveText}>Saved automatically. New maps appear below.</Text>
+                </View>
                 <Pressable
                   onPress={() => setMindmapTemplatePickerOpen((open) => !open)}
                   style={styles.notesCreateButton}
                   accessibilityRole="button"
-                  accessibilityLabel="New mindmap"
+                  accessibilityLabel="New map"
                 >
-                  <Text style={styles.notesCreateButtonText}>New Mindmap</Text>
+                  <Text style={styles.notesCreateButtonText}>New Map</Text>
                 </Pressable>
               </View>
               {mindmapTemplatePickerOpen && (
                 <View style={styles.notesTemplatePicker}>
-                  <Text style={styles.notesTemplatePickerTitle}>Choose a template</Text>
+                  <Text style={styles.notesTemplatePickerTitle}>Choose a map template</Text>
                   <View style={styles.notesTemplateGrid}>
                     {mindmapTemplates.map((template) => (
                       <Pressable
@@ -4475,14 +4455,17 @@ export default function HomeScreen() {
               )}
               <View style={styles.notesMindmapList}>
                 {workspaceMindmaps.length === 0 ? (
-                  <Text style={styles.notesMindmapEmpty}>Created mindmaps will appear here.</Text>
+                  <Text style={styles.notesMindmapEmpty}>Create a map to see it here. Maps save automatically.</Text>
                 ) : (
                   workspaceMindmaps.map((mindmap) => {
                     const template = mindmapTemplateFor(mindmap.template);
                     return (
                       <View key={mindmap.id} style={styles.notesMindmapCard}>
                         <View style={styles.notesMindmapCardHeader}>
-                          <Text style={styles.notesMindmapTitle} numberOfLines={1}>{template.name}</Text>
+                          <View style={styles.notesMindmapTitleGroup}>
+                            <Text style={styles.notesMindmapTitle} numberOfLines={1}>{mindmap.title || template.name}</Text>
+                            <Text style={styles.notesMindmapMeta} numberOfLines={1}>{template.name} - Auto-saved</Text>
+                          </View>
                           <View style={styles.notesMindmapCardActions}>
                             <Pressable
                               onPress={() => deleteWorkspaceMindmap(mindmap.id)}
@@ -4973,7 +4956,7 @@ export default function HomeScreen() {
             style={[styles.workspaceTab, styles.workspaceTabJoined, notesTabActive && styles.workspaceTabActive]}
           >
             <Text style={[styles.workspaceTabText, notesTabActive && styles.workspaceTabTextActive]}>
-              Notes
+              Maps
             </Text>
             {renderWorkspaceTabDivider(notesTabActive, calendarTabActive)}
           </Pressable>
@@ -8120,60 +8103,29 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   notesWorkspace: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 14,
-  },
-  notesWorkspaceStacked: {
-    flexDirection: 'column',
-  },
-  notesIdeasPane: {
-    flexBasis: '32%',
-    flexGrow: 0,
-    flexShrink: 0,
-    gap: 5,
+    width: '100%',
   },
   notesMindmapPane: {
     flex: 1,
-    gap: 8,
+    gap: 10,
     minWidth: 0,
   },
-  notesPaneStacked: {
-    flexBasis: 'auto',
-    width: '100%',
-  },
   notesMindmapHeader: {
-    minHeight: 24,
+    minHeight: 34,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
   },
-  notesTextArea: {
-    minHeight: 118,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#f9fafb',
-    color: '#374151',
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    outlineStyle: 'none' as never,
+  notesMindmapHeading: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
-  notesTextAreaSide: {
-    minHeight: 142,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  notesTextAreaFull: {
-    minHeight: 360,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  notesIdeasInput: {
-    minHeight: 340,
+  notesAutosaveText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
   },
   notesCreateButton: {
     minHeight: 24,
@@ -8228,7 +8180,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   notesMindmapList: {
-    gap: 8,
+    gap: 12,
   },
   notesMindmapEmpty: {
     paddingVertical: 10,
@@ -8247,17 +8199,26 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   notesMindmapCardHeader: {
-    minHeight: 20,
+    minHeight: 34,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
   },
-  notesMindmapTitle: {
+  notesMindmapTitleGroup: {
     flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  notesMindmapTitle: {
     color: '#374151',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
+  },
+  notesMindmapMeta: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '600',
   },
   notesMindmapCardActions: {
     flexDirection: 'row',
@@ -8271,7 +8232,7 @@ const styles = StyleSheet.create({
   },
   notesMindmapCanvas: {
     position: 'relative',
-    height: 320,
+    height: 420,
     borderWidth: 1,
     borderColor: '#dbe4f0',
     backgroundColor: '#f8fafc',
@@ -8279,7 +8240,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   notesMindmapCanvasCompact: {
-    height: 260,
+    height: 300,
   },
   notesMindmapCanvasConnectors: {
     position: 'absolute',

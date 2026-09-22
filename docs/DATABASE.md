@@ -106,14 +106,15 @@ Current `todos` columns can answer the latest assignment state: who created the 
 
 `due_date` is optional. Todos without a due date should store `null`.
 
-`note` currently stores optional per-task detail text. Product language should treat this as a future todo annotation concept, not workspace-level Notes.
+`note` currently stores optional per-task detail text. Product language should treat this as a future todo annotation concept, not workspace-level Maps.
 
-Workspace Notes are not in Postgres yet. The current Notes surface stores local
-Ideas, the mindmap template choice for each created map, editable central topic
-and nested node labels, and created mindmap entries in per-user `AsyncStorage`.
-Top-level nodes can be added from the canvas, edge nodes expose child-node add
-controls, and nodes can be deleted locally; a future synced `workspace_notes`
-table should own durable workspace notes.
+Workspace Maps are not in Postgres yet. The current Maps surface stores the
+map template choice for each created map, editable central topic and nested
+node labels, and created map entries in per-user `AsyncStorage`. The previous
+local Ideas value remains in that payload for migration safety but is not
+currently surfaced. Top-level nodes can be added from the canvas, edge nodes
+expose child-node add controls, and nodes can be deleted locally; a future
+synced workspace table should own durable workspace maps.
 
 #### Timestamp Modeling Notes
 

@@ -54,7 +54,7 @@ Reason: both web and iPhone clients talk directly to Supabase, so database polic
 
 **Self-assignment rule:** A task assigned to the signed-in user by that same user is accepted immediately. Inbox is for incoming work from someone else, not a holding area for tasks the user created for themself.
 
-Superseded UI decision: Inbox no longer owns a primary Workspace tab or persistent side panel. That surface is now Notes for ideas and mindmaps. Assignment notifications should move to a lighter notification surface instead of competing with the main workspace.
+Superseded UI decision: Inbox is available as a primary Workspace tab, while Maps owns the visual planning surface. Assignment notifications should move to a lighter notification surface instead of competing with the main workspace.
 
 **Pre-acceptance rule:** Before a task is accepted, the assignee cannot mutate any task field (priority, due date, text, phase). The only actions available are: comment, accept, or decline.
 

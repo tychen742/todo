@@ -26,7 +26,7 @@ The product should compete through simplicity and genuine usefulness — a tool 
 - **Team Pages**: collaboratively edited team homepages for notes, links, lightweight widgets, and shared context.
 - **Projects**: bounded efforts that belong to a team or user and support lifecycle planning, schedule management, phases, milestones, critical path awareness, and closure.
 - **Todo Workflow**: task text, annotations/comments, completion, priority, optional due dates, assignment with acceptance lifecycle, timestamps, archiving, and filtering.
-- **Notes**: workspace-level note taking for broader personal, team, or project context.
+- **Maps**: workspace-level visual planning maps for broader personal, team, or project context.
 - **Calendars**: personal calendars, team calendars, recurring tasks, reminders, project milestones, and external calendar sync.
 - **Communications**: personal messages, team chat, todo/project discussion, assignment notifications, acknowledgements, and external messages.
 - **Customization**: user, team, and company branding such as logos, colors, and workspace appearance.
@@ -73,7 +73,7 @@ This model keeps teams clean (no bloat from one-off contributors) while supporti
 - **Team Knowledge Management**: shared team pages, editable sections, team notes, links, and lightweight dashboard widgets.
 - **Project Management**: projects, project scope, project status, lifecycle planning, phases, milestones, critical path awareness, schedule management, resource planning, risk planning, and project closure.
 - **Todo Management**: todos, future annotations, priority, optional due dates, assignment, timestamps, completion, and filtering.
-- **Notes Management**: workspace notes, note ownership, note visibility, and future note tabs.
+- **Maps Management**: workspace maps, map ownership, map visibility, and future note/map tabs.
 - **Calendar Management**: personal calendar views, team calendar views, recurrence rules, external calendar connections, and sync state.
 - **Communications Management**: personal messaging, team chat, threaded discussion, unread state, notifications, acknowledgements, delivery channels, and moderation.
 - **Customization Management**: personal themes, team branding, company logos, color palettes, and feature availability by plan.
@@ -118,7 +118,7 @@ Rules:
 - Resource management and risk management should start as lightweight planning and annotation workflows, not as a heavy enterprise module.
 - Todo annotations and project planning/annotation should capture resource constraints, risks, assumptions, blockers, and mitigation notes.
 - Assignment only makes sense in a team or project context with multiple users.
-- The original Workspace Inbox should stay available for assigned-to-me tasks. Notes is a separate workspace area for ideas and mindmaps.
+- The original Workspace Inbox should stay available for assigned-to-me tasks. Maps is a separate workspace area for visual planning maps.
 - Users should be able to answer: how many todos have I assigned, who did I send them to, when did I send them, and what is their current status?
 - Header search should keep workspace panes stable by moving matching active, completed, deleted, Inbox To you and From you, and project entries to the top of their panes while keeping non-matches visible and dimmed. Match by task text, notes, project context, assignees, creators, priority, due date, and workflow status.
 - The account header should show presence compactly: the personal status message appears inline after the username, the caret opens account/navigation controls, and the green dot means the browser is actively focused. The small activity bar represents an 8-hour work window; it fills green while the Workspace tab is open and visibly shown, even if the browser window is not focused.
@@ -132,8 +132,8 @@ Rules:
 - Editing an existing todo title may also use priority tokens such as `:h` or `:urgent`; project routing stays in the project picker during edits.
 - Due dates should be set and adjusted from each todo row so planning can happen after capture.
 - Completed todos should show when they were completed near their due-date value; this requires tracking completion time separately from creation time.
-- Notes should be a separate workspace-level concept. Current UI gives Notes a primary workspace tab with Ideas on the left and a larger right-side mindmap area where New Mindmap opens visual templates, created maps are edited directly on the nodes, top-level nodes can be added from the canvas, and edge nodes expose child-node add controls.
-- Todo annotations should stay scoped to one task; workspace Notes should hold broader context, thoughts, snippets, and running notes.
+- Maps should be a separate workspace-level concept. Current UI gives Maps a primary workspace tab where New Map opens visual templates, created maps are listed on the page, maps save automatically, nodes are edited directly, top-level nodes can be added from the canvas, and edge nodes expose child-node add controls.
+- Todo annotations should stay scoped to one task; workspace maps should hold broader planning context, project structure, thoughts, and relationships.
 - Calendar sync should be optional per user and should not be required for basic todo use.
 - Personal calendars should show the user's own todos, assignments, reminders, and synced external calendar context.
 - Team calendars should show shared team tasks, recurring team duties, and project milestones visible to team members.

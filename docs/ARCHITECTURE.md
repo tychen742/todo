@@ -135,29 +135,30 @@ Supabase Row Level Security is the main security boundary.
 - Adding unknown users to teams is not complete; it needs `team_invitations`.
 - The main screen is doing too much and should eventually split into domain components.
 
-## Notes Architecture
+## Maps Architecture
 
-Notes should be modeled separately from todo annotations and Team Pages.
+Maps should be modeled separately from todo annotations and Team Pages.
 
 Current implementation:
 
 - The original Inbox tab and personal workspace side/inline panel remain the
   assigned-to-me task inbox.
-- Notes has its own Workspace tab with a left Ideas pane, a right mindmap
-  template picker, and created
-  mindmap entries in `AsyncStorage` per signed-in user. Created mindmaps keep
-  their template key, central topic, branch labels, and nested child nodes. The
+- Maps has its own Workspace tab with a map template picker and created map
+  entries in `AsyncStorage` per signed-in user. Created maps keep their
+  template key, central topic, branch labels, and nested child nodes. The
   rendered map nodes are editable directly, top-level nodes can be added from
-  the canvas, and edge nodes expose child-node add controls.
-- These notes are local-only until the shared workspace notes scope is settled.
+  the canvas, and edge nodes expose child-node add controls. The prior local
+  Ideas value remains in the storage payload for migration safety, but it is
+  not currently surfaced in the UI.
+- These maps are local-only until the shared workspace notes/maps scope is settled.
 
 Likely synced architecture:
 
-- Store workspace-level notes in a first-party table such as `workspace_notes`.
+- Store workspace-level notes/maps in a first-party table such as `workspace_notes`.
 - Scope notes to the active workspace: personal, team, or project.
-- Preserve Ideas and created mindmaps as first-class sections or migrate them
-  into structured note blocks.
-- Keep todo annotations as task detail records or fields; keep workspace Notes for broader context.
+- Preserve created maps as first-class sections or migrate them into structured
+  note/map blocks.
+- Keep todo annotations as task detail records or fields; keep workspace maps for broader planning context.
 
 ## Future Team Page Architecture
 
