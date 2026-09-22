@@ -1430,27 +1430,31 @@ function EditableWorkspaceMindmap({
               placeholderTextColor={renderNode.depth === 0 ? '#0f172a' : '#94a3b8'}
               accessibilityLabel={`Mindmap node ${index + 1}`}
             />
-            {isEdgeNode ? (
-              <Pressable
-                onPress={() => onNodeAdd(renderNode.node.id)}
-                style={styles.notesMindmapNodeAdd}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={`Add child node to ${renderNode.node.label}`}
-              >
-                <Text style={styles.notesMindmapNodeAddText}>+</Text>
-              </Pressable>
-            ) : null}
-            {topLevelNodes.length > 1 || renderNode.depth > 0 ? (
-              <Pressable
-                onPress={() => onNodeDelete(renderNode.node.id)}
-                style={styles.notesMindmapNodeDelete}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={`Delete node ${renderNode.node.label}`}
-              >
-                <Text style={styles.notesMindmapNodeDeleteText}>×</Text>
-              </Pressable>
+            {isEdgeNode || topLevelNodes.length > 1 || renderNode.depth > 0 ? (
+              <View style={styles.notesMindmapNodeActionGroup}>
+                {isEdgeNode ? (
+                  <Pressable
+                    onPress={() => onNodeAdd(renderNode.node.id)}
+                    style={styles.notesMindmapNodeAction}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add child node to ${renderNode.node.label}`}
+                  >
+                    <Text style={styles.notesMindmapNodeActionText}>+</Text>
+                  </Pressable>
+                ) : null}
+                {topLevelNodes.length > 1 || renderNode.depth > 0 ? (
+                  <Pressable
+                    onPress={() => onNodeDelete(renderNode.node.id)}
+                    style={styles.notesMindmapNodeAction}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete node ${renderNode.node.label}`}
+                  >
+                    <Text style={styles.notesMindmapNodeActionText}>×</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
           </View>
         );
@@ -8506,40 +8510,33 @@ const styles = StyleSheet.create({
   notesMindmapTopicInput: {
     color: '#0f172a',
   },
-  notesMindmapNodeAdd: {
-    position: 'absolute',
-    right: 20,
-    top: -7,
-    width: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 9,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#dbe4f0',
-  },
-  notesMindmapNodeAddText: {
-    color: '#2563eb',
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 15,
-  },
-  notesMindmapNodeDelete: {
+  notesMindmapNodeActionGroup: {
     position: 'absolute',
     right: 2,
-    top: -7,
+    top: -9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    padding: 2,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderWidth: 1,
+    borderColor: '#dbe4f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  notesMindmapNodeAction: {
     width: 18,
     height: 18,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 9,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
   },
-  notesMindmapNodeDeleteText: {
-    color: '#94a3b8',
+  notesMindmapNodeActionText: {
+    color: '#64748b',
     fontSize: 13,
     fontWeight: '800',
     lineHeight: 15,
