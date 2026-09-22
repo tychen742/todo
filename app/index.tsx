@@ -381,6 +381,11 @@ function browserDisplayActive() {
   return visible && focused;
 }
 
+function browserTabShown() {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return true;
+  return document.visibilityState === 'visible';
+}
+
 function toDateTimeInputValue(value: string | null) {
   if (!value) return '';
   const date = new Date(value);
@@ -1270,6 +1275,7 @@ export default function HomeScreen() {
   const [authMode, setAuthMode] = useState<'signIn' | 'signUp'>('signIn');
   const [now, setNow] = useState(() => new Date());
   const [browserActive, setBrowserActive] = useState(browserDisplayActive);
+  const [browserShown, setBrowserShown] = useState(browserTabShown);
   const [workspaceActiveSeconds, setWorkspaceActiveSeconds] = useState(0);
   const [navExpanded, setNavExpanded] = useState(false);
   const [statusEditing, setStatusEditing] = useState(false);
@@ -1590,23 +1596,26 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') return undefined;
-    const updateBrowserActive = () => setBrowserActive(browserDisplayActive());
-    updateBrowserActive();
-    window.addEventListener('focus', updateBrowserActive);
-    window.addEventListener('blur', updateBrowserActive);
-    document.addEventListener('visibilitychange', updateBrowserActive);
+    const updateBrowserPresence = () => {
+      setBrowserActive(browserDisplayActive());
+      setBrowserShown(browserTabShown());
+    };
+    updateBrowserPresence();
+    window.addEventListener('focus', updateBrowserPresence);
+    window.addEventListener('blur', updateBrowserPresence);
+    document.addEventListener('visibilitychange', updateBrowserPresence);
     return () => {
-      window.removeEventListener('focus', updateBrowserActive);
-      window.removeEventListener('blur', updateBrowserActive);
-      document.removeEventListener('visibilitychange', updateBrowserActive);
+      window.removeEventListener('focus', updateBrowserPresence);
+      window.removeEventListener('blur', updateBrowserPresence);
+      document.removeEventListener('visibilitychange', updateBrowserPresence);
     };
   }, []);
 
   useEffect(() => {
-    if (!session || !workspaceTabActive || !browserActive) return undefined;
+    if (!session || !workspaceTabActive || !browserShown) return undefined;
     const id = setInterval(() => setWorkspaceActiveSeconds((seconds) => seconds + 1), 1000);
     return () => clearInterval(id);
-  }, [browserActive, session, workspaceTabActive]);
+  }, [browserShown, session, workspaceTabActive]);
   const projectFilterProjects = useMemo(
     () => projects
       .filter((project) => !project.archived_at)
