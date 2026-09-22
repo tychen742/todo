@@ -1571,6 +1571,7 @@ export default function HomeScreen() {
   const resourcesTabActive = resourcesViewOpen;
   const dashboardTabActive = dashboardViewOpen;
   const peopleTabActive = teamsViewOpen;
+  const showHeaderMessageBoard = Platform.OS === 'web' && width >= 980;
   const workspaceActiveLabel = formatActiveDuration(workspaceActiveSeconds);
   const workspaceActiveProgress = workspaceActiveSeconds === 0
     ? 0
@@ -4796,6 +4797,16 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.titleBarCenter}>
+              {showHeaderMessageBoard && (
+                <View style={styles.messageBoard}>
+                  <View style={[styles.messageBoardItem, styles.messageBoardPresence]}>
+                    <Text style={styles.messageBoardText} numberOfLines={1}>Alice is online</Text>
+                  </View>
+                  <View style={[styles.messageBoardItem, styles.messageBoardChat]}>
+                    <Text style={styles.messageBoardText} numberOfLines={1}>Alice: I am up to something</Text>
+                  </View>
+                </View>
+              )}
               <View style={styles.searchBar}>
                 <Text style={styles.searchIcon}>⌕</Text>
                 <TextInput
@@ -10364,7 +10375,45 @@ const styles = StyleSheet.create({
   },
   titleBarCenter: {
     flex: 3,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    minWidth: 0,
+  },
+  messageBoard: {
+    flex: 1,
+    maxWidth: 340,
+    minWidth: 220,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  messageBoardItem: {
+    flex: 1,
+    minWidth: 0,
+    height: '100%',
+    justifyContent: 'center',
+    borderLeftWidth: 4,
+    paddingHorizontal: 9,
+  },
+  messageBoardPresence: {
+    borderLeftColor: '#22c55e',
+    backgroundColor: '#f0fdf4',
+  },
+  messageBoardChat: {
+    borderLeftColor: '#6366f1',
+    backgroundColor: '#eef2ff',
+  },
+  messageBoardText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
   },
   searchBar: {
     flexDirection: 'row',
@@ -10374,8 +10423,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     gap: 6,
-    width: '100%',
-    maxWidth: 520,
+    flex: 1,
+    minWidth: 220,
+    maxWidth: 360,
+    height: 36,
   },
   searchIcon: {
     fontSize: 15,

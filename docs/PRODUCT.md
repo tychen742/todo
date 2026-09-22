@@ -122,6 +122,7 @@ Rules:
 - Users should be able to answer: how many todos have I assigned, who did I send them to, when did I send them, and what is their current status?
 - Header search should keep workspace panes stable by dimming non-matching active, completed, deleted, Inbox To you and From you, and project entries instead of hiding them. Match by task text, notes, project context, assignees, creators, priority, due date, and workflow status.
 - The account header should show presence compactly: the personal status message appears inline after the username, the caret opens account/navigation controls, the green dot means the browser is actively focused, and the small activity bar tracks time actively displaying the Workspace tab.
+- The header should reserve a compact message board beside search on desktop. It should use distinct left-bar colors for browser/presence activity and personal chat or status messages, starting with lightweight items such as "Alice is online" and "Alice: I am up to something."
 - Priority should default to Normal on creation unless quick-capture text includes a priority token. It should stay visible on each todo row and be changeable from that row.
 - Due dates are central to time management and project management; they should support planning, workload visibility, reminders, calendars, and milestone tracking.
 - Adding todos should stay as quick capture: the add area should have one text input for the todo text.
