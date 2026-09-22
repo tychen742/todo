@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Filter, MoreHorizontal } from 'lucide-react-native';
+import { ArrowLeft, Filter, MoreHorizontal, Plus } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -132,6 +132,18 @@ type ProjectViewMode = 'plan' | 'kanban';
 type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
 type CalendarViewMode = 'day' | 'week' | 'month';
 type AuthErrorField = 'displayName' | 'email' | 'password' | 'all' | null;
+type AppThemeKey = 'flow' | 'focus' | 'graphite';
+
+type AppTheme = {
+  name: string;
+  accent: string;
+  accentStrong: string;
+  accentSoft: string;
+  accentTint: string;
+  inputBackground: string;
+  inputBorder: string;
+  inputFocusBorder: string;
+};
 
 const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const priorityPopoverWidth = 120;
@@ -149,6 +161,39 @@ const workspaceContentMaxWidth = 960;
 const workspaceInboxColumnWidth = 340;
 const workspacePaneGap = 12;
 const workspaceBoardPadding = 12;
+const appThemes: Record<AppThemeKey, AppTheme> = {
+  flow: {
+    name: 'Flow',
+    accent: '#0f766e',
+    accentStrong: '#115e59',
+    accentSoft: '#ccfbf1',
+    accentTint: '#f0fdfa',
+    inputBackground: '#f8fafc',
+    inputBorder: '#d1d5db',
+    inputFocusBorder: '#5eead4',
+  },
+  focus: {
+    name: 'Focus',
+    accent: '#2563eb',
+    accentStrong: '#1d4ed8',
+    accentSoft: '#dbeafe',
+    accentTint: '#eff6ff',
+    inputBackground: '#f8fafc',
+    inputBorder: '#cbd5e1',
+    inputFocusBorder: '#93c5fd',
+  },
+  graphite: {
+    name: 'Graphite',
+    accent: '#374151',
+    accentStrong: '#111827',
+    accentSoft: '#e5e7eb',
+    accentTint: '#f9fafb',
+    inputBackground: '#f9fafb',
+    inputBorder: '#d1d5db',
+    inputFocusBorder: '#9ca3af',
+  },
+};
+const appThemeKeys = Object.keys(appThemes) as AppThemeKey[];
 const completedDropTargetId = 'todo-completed-drop-target';
 const mindmapTemplates: MindmapTemplate[] = [
   {
@@ -199,6 +244,7 @@ const legacyWebHosts = [
   'todo-tsangyao-chen-s-projects.vercel.app',
 ];
 const oauthReturnStorageKey = 'rodoflow:oauth-return-to-production';
+const themeStorageKey = 'rodoflow:theme';
 const redirectLocalWebToProductionEnabled =
   process.env.EXPO_PUBLIC_REDIRECT_LOCAL_WEB_TO_PRODUCTION === '1';
 
@@ -1254,6 +1300,7 @@ export default function HomeScreen() {
   const [newTodoProjectId] = useState<string | null>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState('');
+  const [quickCaptureFocused, setQuickCaptureFocused] = useState(false);
   const [dueTodo, setDueTodo] = useState<Todo | null>(null);
   const [priorityPicker, setPriorityPicker] = useState<{ todo: Todo; x: number; y: number } | null>(null);
   const [statusPicker, setStatusPicker] = useState<{ todo: Todo; x: number; y: number } | null>(null);
@@ -1287,6 +1334,8 @@ export default function HomeScreen() {
   const [archivedTodos, setArchivedTodos] = useState<Todo[]>([]);
   const [completedPaneTab, setCompletedPaneTab] = useState<'completed' | 'deleted'>('completed');
   const [density, setDensity] = useState<Density>('cozy');
+  const [themeKey, setThemeKey] = useState<AppThemeKey>('flow');
+  const [themeReady, setThemeReady] = useState(false);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [renamingTeam, setRenamingTeam] = useState<Team | null>(null);
   const [renameTeamName, setRenameTeamName] = useState('');
@@ -1301,11 +1350,32 @@ export default function HomeScreen() {
 
   const rowPV = densityPV[density];
   const rowH = densityRowH[density];
+  const appTheme = appThemes[themeKey];
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(themeStorageKey)
+      .then((value) => {
+        if (cancelled) return;
+        if (value && value in appThemes) setThemeKey(value as AppThemeKey);
+      })
+      .finally(() => {
+        if (!cancelled) setThemeReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!themeReady) return;
+    AsyncStorage.setItem(themeStorageKey, themeKey).catch(() => undefined);
+  }, [themeKey, themeReady]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined;
@@ -5977,12 +6047,20 @@ export default function HomeScreen() {
           <View style={[styles.inputBar, showInboxSidePanel && styles.inputBarWithInboxSidePanel]}>
             <View style={styles.todoInputWrap}>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: appTheme.inputBackground,
+                    borderColor: quickCaptureFocused ? appTheme.inputFocusBorder : appTheme.inputBorder,
+                  },
+                ]}
                 value={input}
                 onChangeText={setInput}
                 placeholder="Add a todo..."
                 placeholderTextColor="#9ca3af"
                 onSubmitEditing={addTodo}
+                onFocus={() => setQuickCaptureFocused(true)}
+                onBlur={() => setQuickCaptureFocused(false)}
                 returnKeyType="done"
               />
 
@@ -6010,7 +6088,15 @@ export default function HomeScreen() {
                 </ScrollView>
               )}
             </View>
-            <Pressable onPress={addTodo} style={({ pressed }) => [styles.addBtn, pressed && styles.btnPressed]}>
+            <Pressable
+              onPress={addTodo}
+              style={({ pressed }) => [
+                styles.addBtn,
+                { backgroundColor: appTheme.accent, borderColor: appTheme.accentStrong },
+                pressed && styles.addBtnPressed,
+              ]}
+            >
+              <Plus size={16} color="#fff" strokeWidth={2.6} />
               <Text style={styles.addBtnText}>Add</Text>
             </Pressable>
           </View>
@@ -6565,6 +6651,24 @@ export default function HomeScreen() {
                     </View>
                   </Pressable>
                 ))}
+                <Text style={styles.navDropdownSettingsHeader}>Theme</Text>
+                {appThemeKeys.map((key) => {
+                  const theme = appThemes[key];
+                  const selected = themeKey === key;
+                  return (
+                    <Pressable
+                      key={key}
+                      style={[styles.navDropdownThemeItem, selected && { backgroundColor: theme.accentTint }]}
+                      onPress={() => setThemeKey(key)}
+                    >
+                      <Text style={[styles.navDropdownThemeCheck, { color: theme.accent }]}>{selected ? '✓' : ''}</Text>
+                      <View style={[styles.navDropdownThemeSwatch, { backgroundColor: theme.accent, borderColor: theme.accentStrong }]} />
+                      <Text style={[styles.navDropdownItemText, selected && { color: theme.accentStrong, fontWeight: '700' }]}>
+                        {theme.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             )}
             <Pressable onPress={() => { setAboutVisible(true); setNavExpanded(false); }} style={styles.navDropdownItem}>
@@ -9304,8 +9408,8 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 36,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
+    borderRadius: 8,
+    borderWidth: 1,
     paddingHorizontal: 14,
     fontSize: 15,
     color: '#111827',
@@ -9331,17 +9435,24 @@ const styles = StyleSheet.create({
     color: '#4338ca',
   },
   addBtn: {
-    backgroundColor: '#6366f1',
-    borderRadius: 10,
-    paddingHorizontal: 18,
-    height: 36,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    height: 36,
     justifyContent: 'center',
+    minWidth: 86,
   },
   addBtnText: {
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 15,
+  },
+  addBtnPressed: {
+    opacity: 0.88,
+    transform: [{ translateY: 1 }],
   },
   btnPressed: {
     opacity: 0.8,
@@ -10017,6 +10128,33 @@ const styles = StyleSheet.create({
   navDropdownMutedText: {
     fontSize: 13,
     color: '#9ca3af',
+  },
+  navDropdownSettingsHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9ca3af',
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  navDropdownThemeItem: {
+    minHeight: 34,
+    paddingLeft: 20,
+    paddingRight: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  navDropdownThemeCheck: {
+    fontSize: 11,
+    width: 12,
+    fontWeight: '700',
+  },
+  navDropdownThemeSwatch: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
   },
   navDropdownSignOutText: {
     fontSize: 13,

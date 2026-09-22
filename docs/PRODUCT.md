@@ -142,6 +142,7 @@ Rules:
 - Email or text messaging should be later optional delivery channels beyond the default app UI notification.
 - UI customization should let users, teams, and companies adjust branding without breaking app consistency or accessibility.
 - Users should be able to choose different todo row spacing or density modes without changing task content or behavior.
+- Themes should start as focused product accents, not full reskins. The first-pass themes are Flow, Focus, and Graphite, and they affect primary action color and quick-capture focus states while preserving the table-first workspace layout.
 - The app should remain free for personal and small-team use; monetization should come from advanced features rather than blocking basic task management.
 - The signup email field should use the placeholder "Email", not "Work email". Work email cannot be enforced without domain validation, and enforcing it would exclude personal users, students, and academics — all named target segments. Work-email-only access and domain-based SSO enforcement are appropriate as paid or enterprise features, not free-tier gates.
 - Supported authentication channels: email + password, Google OAuth, Apple Sign In (required for iOS App Store), GitHub OAuth, and SSO/SAML. Phone number is not used for primary sign-in or signup. Magic link (passwordless email) is a near-term candidate. Microsoft/Azure AD is deferred to the SSO implementation. Password recovery uses email only.
