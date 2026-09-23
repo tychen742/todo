@@ -1573,6 +1573,7 @@ export default function HomeScreen() {
   const [calendarViewNotes, setCalendarViewNotes] = useState<Record<string, string>>({});
   const [workspaceIdeas, setWorkspaceIdeas] = useState('');
   const [workspaceMindmaps, setWorkspaceMindmaps] = useState<WorkspaceMindmap[]>([]);
+  const [activeMindmapId, setActiveMindmapId] = useState<string | null>(null);
   const [mindmapTemplatePickerOpen, setMindmapTemplatePickerOpen] = useState(false);
   const [animalPickerVisible, setAnimalPickerVisible] = useState(false);
   const [customAnimal, setCustomAnimal] = useState<string | null>(null);
@@ -1718,6 +1719,7 @@ export default function HomeScreen() {
       setCalendarViewNotes({});
       setWorkspaceIdeas('');
       setWorkspaceMindmaps([]);
+      setActiveMindmapId(null);
       setMindmapTemplatePickerOpen(false);
       return;
     }
@@ -1796,11 +1798,17 @@ export default function HomeScreen() {
           : loadedMindmaps;
         setWorkspaceIdeas(notes.ideas ?? '');
         setWorkspaceMindmaps(migratedMindmaps);
+        setActiveMindmapId((currentId) => (
+          currentId && migratedMindmaps.some((mindmap) => mindmap.id === currentId)
+            ? currentId
+            : migratedMindmaps[0]?.id ?? null
+        ));
       })
       .catch(() => {
         if (!cancelled) {
           setWorkspaceIdeas('');
           setWorkspaceMindmaps([]);
+          setActiveMindmapId(null);
           setMindmapTemplatePickerOpen(false);
         }
       });
@@ -2149,9 +2157,10 @@ export default function HomeScreen() {
   function createWorkspaceMindmap(templateKey: MindmapTemplateKey) {
     const template = mindmapTemplateFor(templateKey);
     const nodes = mindmapNodesFromTopics(template.topics);
+    const id = `${Date.now()}`;
     const nextMindmaps = [
       {
-        id: `${Date.now()}`,
+        id,
         title: template.title,
         body: mindmapBody(template.title, nodes),
         created_at: new Date().toISOString(),
@@ -2162,6 +2171,7 @@ export default function HomeScreen() {
       ...workspaceMindmaps,
     ];
     setWorkspaceMindmaps(nextMindmaps);
+    setActiveMindmapId(id);
     setMindmapTemplatePickerOpen(false);
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
   }
@@ -2169,6 +2179,9 @@ export default function HomeScreen() {
   function deleteWorkspaceMindmap(id: string) {
     const nextMindmaps = workspaceMindmaps.filter((mindmap) => mindmap.id !== id);
     setWorkspaceMindmaps(nextMindmaps);
+    setActiveMindmapId((currentId) => (
+      currentId === id ? nextMindmaps[0]?.id ?? null : currentId
+    ));
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
   }
 
@@ -4645,6 +4658,10 @@ export default function HomeScreen() {
 
   function renderWorkspaceNotesPanel(variant: 'side' | 'inline' | 'full') {
     const isSide = variant === 'side';
+    const activeMindmap = activeMindmapId
+      ? workspaceMindmaps.find((mindmap) => mindmap.id === activeMindmapId) ?? null
+      : null;
+    const activeMindmapTemplate = activeMindmap ? mindmapTemplateFor(activeMindmap.template) : null;
     return (
       <View style={[
         variant === 'side' && styles.assignedToMePanel,
@@ -4666,7 +4683,7 @@ export default function HomeScreen() {
               <View style={styles.notesMindmapHeader}>
                 <View style={styles.notesMindmapHeading}>
                   <Text style={styles.notesFieldLabel}>Maps</Text>
-                  <Text style={styles.notesAutosaveText}>Saved automatically. New maps appear below.</Text>
+                  <Text style={styles.notesAutosaveText}>Saved automatically. Use tabs to switch maps.</Text>
                 </View>
                 <Pressable
                   onPress={() => setMindmapTemplatePickerOpen((open) => !open)}
@@ -4699,46 +4716,70 @@ export default function HomeScreen() {
                   </View>
                 </View>
               )}
-              <View style={styles.notesMindmapList}>
+              <View style={styles.notesMindmapTabs}>
                 {workspaceMindmaps.length === 0 ? (
                   <Text style={styles.notesMindmapEmpty}>Create a map to see it here. Maps save automatically.</Text>
                 ) : (
                   workspaceMindmaps.map((mindmap) => {
-                    const template = mindmapTemplateFor(mindmap.template);
+                    const isActive = activeMindmap?.id === mindmap.id;
                     return (
-                      <View key={mindmap.id} style={styles.notesMindmapCard}>
-                        <View style={styles.notesMindmapCardHeader}>
-                          <View style={styles.notesMindmapTitleGroup}>
-                            <Text style={styles.notesMindmapTitle} numberOfLines={1}>{mindmap.title || template.name}</Text>
-                            <Text style={styles.notesMindmapMeta} numberOfLines={1}>{template.name} - Auto-saved</Text>
-                          </View>
-                          <View style={styles.notesMindmapCardActions}>
-                            <Pressable
-                              onPress={() => deleteWorkspaceMindmap(mindmap.id)}
-                              hitSlop={8}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Delete mindmap ${mindmap.title}`}
-                            >
-                              <Text style={styles.notesMindmapDelete}>Delete</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                        <EditableWorkspaceMindmap
-                          mindmap={mindmap}
-                          template={template}
-                          compact={isSide || width < 980}
-                          onTitleChange={(value) => updateWorkspaceMindmap(mindmap.id, { title: value })}
-                          onNodeAdd={(parentNodeId) => addWorkspaceMindmapNode(mindmap.id, parentNodeId)}
-                          onNodeChange={(nodeId, value) => updateWorkspaceMindmapNodeLabel(mindmap.id, nodeId, value)}
-                          onNodeDelete={(nodeId) => deleteWorkspaceMindmapNode(mindmap.id, nodeId)}
-                          onRootPositionChange={(point) => updateWorkspaceMindmapRootPosition(mindmap.id, point)}
-                          onNodeMove={(nodeId, point) => updateWorkspaceMindmapNodePosition(mindmap.id, nodeId, point)}
-                        />
-                      </View>
+                      <Pressable
+                        key={mindmap.id}
+                        onPress={() => setActiveMindmapId(mindmap.id)}
+                        style={[styles.notesMindmapTab, isActive && styles.notesMindmapTabActive]}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: isActive }}
+                        accessibilityLabel={`Open map ${mindmap.title}`}
+                      >
+                        <Text style={[styles.notesMindmapTabText, isActive && styles.notesMindmapTabTextActive]} numberOfLines={1}>
+                          {mindmap.title || 'Untitled map'}
+                        </Text>
+                      </Pressable>
                     );
                   })
                 )}
               </View>
+              {activeMindmap && activeMindmapTemplate ? (
+                <View style={styles.notesMindmapCard}>
+                  <View style={styles.notesMindmapCardHeader}>
+                    <View style={styles.notesMindmapTitleGroup}>
+                      <Text style={styles.notesMindmapTitle} numberOfLines={1}>{activeMindmap.title || activeMindmapTemplate.name}</Text>
+                      <Text style={styles.notesMindmapMeta} numberOfLines={1}>{activeMindmapTemplate.name} - Auto-saved</Text>
+                    </View>
+                    <View style={styles.notesMindmapCardActions}>
+                      <Pressable
+                        onPress={() => setActiveMindmapId(null)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Close map ${activeMindmap.title}`}
+                      >
+                        <Text style={styles.notesMindmapDelete}>Close</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => deleteWorkspaceMindmap(activeMindmap.id)}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete map ${activeMindmap.title}`}
+                      >
+                        <Text style={styles.notesMindmapDelete}>Delete</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <EditableWorkspaceMindmap
+                    mindmap={activeMindmap}
+                    template={activeMindmapTemplate}
+                    compact={isSide || width < 980}
+                    onTitleChange={(value) => updateWorkspaceMindmap(activeMindmap.id, { title: value })}
+                    onNodeAdd={(parentNodeId) => addWorkspaceMindmapNode(activeMindmap.id, parentNodeId)}
+                    onNodeChange={(nodeId, value) => updateWorkspaceMindmapNodeLabel(activeMindmap.id, nodeId, value)}
+                    onNodeDelete={(nodeId) => deleteWorkspaceMindmapNode(activeMindmap.id, nodeId)}
+                    onRootPositionChange={(point) => updateWorkspaceMindmapRootPosition(activeMindmap.id, point)}
+                    onNodeMove={(nodeId, point) => updateWorkspaceMindmapNodePosition(activeMindmap.id, nodeId, point)}
+                  />
+                </View>
+              ) : workspaceMindmaps.length > 0 ? (
+                <Text style={styles.notesMindmapEmpty}>Select a map tab to open it.</Text>
+              ) : null}
             </View>
           </View>
         </ScrollView>
@@ -8427,14 +8468,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  notesMindmapList: {
-    gap: 12,
+  notesMindmapTabs: {
+    minHeight: 34,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
   },
   notesMindmapEmpty: {
     paddingVertical: 10,
     color: '#9ca3af',
     fontSize: 12,
     fontWeight: '600',
+  },
+  notesMindmapTab: {
+    maxWidth: 210,
+    minHeight: 30,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+  },
+  notesMindmapTabActive: {
+    borderColor: '#4f46e5',
+    backgroundColor: '#eef2ff',
+  },
+  notesMindmapTabText: {
+    color: '#6b7280',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  notesMindmapTabTextActive: {
+    color: '#3730a3',
   },
   notesMindmapCard: {
     borderWidth: 1,

@@ -143,8 +143,8 @@ Current implementation:
 
 - The original Inbox tab and personal workspace side/inline panel remain the
   assigned-to-me task inbox.
-- Maps has its own Workspace tab with a map template picker and created map
-  entries in `AsyncStorage` per signed-in user. Created maps keep their
+- Maps has its own Workspace tab with a map template picker and saved-map tabs
+  backed by `AsyncStorage` per signed-in user. Created maps keep their
   template key, central topic, branch labels, and nested child nodes. The
   rendered map nodes are editable directly, top-level nodes can be added from
   the canvas, edge nodes expose child-node add controls, and dragged root/node
