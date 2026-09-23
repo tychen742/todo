@@ -79,6 +79,21 @@ This is the first Kanban experience that does not require a Kanban expert to set
 
 **For marketing:** Lead with "Backlog to delivery in three columns." Show the phase date ranges. Show a milestone task with its countdown. That is the whole pitch in one screenshot.
 
+## The Maps Story
+
+Maps should feel like thinking on paper, but with enough structure that the work can become todos, projects, assignments, and communication later.
+
+What feels strongest already:
+
+- Stable grid as spatial anchor
+- Draggable pills
+- Saved map tabs
+- Smart connector ports
+- Level-one branches can keep growing
+- Maps save automatically
+
+**For marketing:** Lead with the feeling of a map that stays where the user put it. The grid creates spatial memory, draggable pills make planning tactile, saved tabs make maps feel like documents, and smart connector ports make the diagram look intentional instead of improvised.
+
 ## The Honest Pitch
 
 Most project management tools are built for the 5% of projects that are genuinely complex: enterprise software rollouts, construction bids, government contracts. They make the other 95% harder.
