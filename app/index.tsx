@@ -1426,6 +1426,8 @@ function EditableWorkspaceMindmap({
         const nodePoint = toCanvasPoint({ x: renderNode.x, y: renderNode.y });
         const nodePosition = { x: renderNode.x, y: renderNode.y };
         const isEdgeNode = renderNode.node.children.length === 0;
+        const canAddChild = renderNode.depth === 0 || isEdgeNode;
+        const canDeleteNode = topLevelNodes.length > 1 || renderNode.depth > 0;
         const nodeColor = renderNode.depth === 0 ? color : '#ffffff';
         const borderColor = renderNode.depth === 0 ? color : '#cbd5e1';
         return (
@@ -1467,9 +1469,9 @@ function EditableWorkspaceMindmap({
               placeholderTextColor={renderNode.depth === 0 ? '#0f172a' : '#94a3b8'}
               accessibilityLabel={`Mindmap node ${index + 1}`}
             />
-            {isEdgeNode || topLevelNodes.length > 1 || renderNode.depth > 0 ? (
+            {canAddChild || canDeleteNode ? (
               <View style={styles.notesMindmapNodeActionGroup}>
-                {isEdgeNode ? (
+                {canAddChild ? (
                   <Pressable
                     onPress={() => onNodeAdd(renderNode.node.id)}
                     style={styles.notesMindmapNodeAction}
@@ -1480,7 +1482,7 @@ function EditableWorkspaceMindmap({
                     <Text style={styles.notesMindmapNodeActionText}>+</Text>
                   </Pressable>
                 ) : null}
-                {topLevelNodes.length > 1 || renderNode.depth > 0 ? (
+                {canDeleteNode ? (
                   <Pressable
                     onPress={() => onNodeDelete(renderNode.node.id)}
                     style={styles.notesMindmapNodeAction}
