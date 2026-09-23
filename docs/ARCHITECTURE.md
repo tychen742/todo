@@ -152,10 +152,13 @@ Current implementation:
   use explicit drag handles so dragging and text editing remain distinct, and
   the selected pill emphasizes its connector path while unrelated connectors
   fade back.
-  Connectors attach to angle-selected pill ports so lines choose a sensible
-  top, side, bottom, or shoulder connection point based on relative node
-  position. The prior local Ideas value remains in the storage payload for
-  migration safety, but it is not currently surfaced in the UI.
+  Connectors attach to angle-selected pill ports and use adaptive cubic curves
+  so lines choose a sensible top, side, bottom, or shoulder connection point
+  based on relative node position. The map field keeps a stable visual boundary
+  inside wider browser space so additional width gives the user room around the
+  map rather than stretching the map itself. The prior local Ideas value remains
+  in the storage payload for migration safety, but it is not currently surfaced
+  in the UI.
 - These maps are local-only until the shared workspace notes/maps scope is settled.
 
 Likely synced architecture:

@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Filter, GripVertical, MoreHorizontal, Plus } from 'lucide-react-native';
+import { ArrowLeft, Filter, GripVertical, MoreHorizontal, Plus, Trash2, X } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -1212,6 +1212,16 @@ function EditableWorkspaceMindmap({
       y: from.y + bestPort.port.y,
     };
   }
+  function connectorPath(start: { x: number; y: number }, end: { x: number; y: number }) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      const handleX = Math.max(28, Math.min(92, Math.abs(dx) * 0.48));
+      return `M ${start.x} ${start.y} C ${start.x + Math.sign(dx || 1) * handleX} ${start.y}, ${end.x - Math.sign(dx || 1) * handleX} ${end.y}, ${end.x} ${end.y}`;
+    }
+    const handleY = Math.max(22, Math.min(76, Math.abs(dy) * 0.45));
+    return `M ${start.x} ${start.y} C ${start.x} ${start.y + Math.sign(dy || 1) * handleY}, ${end.x} ${end.y - Math.sign(dy || 1) * handleY}, ${end.x} ${end.y}`;
+  }
   function clampMapPoint(point: MindmapPoint, width: number, height: number): MindmapPoint {
     const minX = ((width / 2 + 10) / mapFieldWidth) * 100;
     const maxX = 100 - minX;
@@ -1357,12 +1367,23 @@ function EditableWorkspaceMindmap({
           opacity={0.48}
           fill="none"
         />
+        <Rect
+          x={mapFieldOffsetX}
+          y={mapFieldOffsetY}
+          width={mapFieldWidth}
+          height={mapFieldHeight}
+          rx={16}
+          stroke="#cbd5e1"
+          strokeWidth={1.2}
+          strokeDasharray="8 8"
+          opacity={0.56}
+          fill="none"
+        />
         {renderNodes.map((renderNode) => {
           const parentPoint = toCanvasPoint({ x: renderNode.parentX, y: renderNode.parentY });
           const nodePoint = toCanvasPoint({ x: renderNode.x, y: renderNode.y });
           const start = connectorPort(parentPoint, nodePoint, renderNode.parentWidth, renderNode.parentHeight);
           const end = connectorPort(nodePoint, parentPoint, renderNode.width, renderNode.height);
-          const midX = (start.x + end.x) / 2;
           const stroke = renderNode.depth === 0 ? renderNode.color : '#94a3b8';
           const isSelectedConnector = selectedMindmapNodeId === renderNode.node.id || selectedMindmapNodeId === renderNode.parentId;
           const hasSelectedNode = selectedMindmapNodeId !== null;
@@ -1374,7 +1395,7 @@ function EditableWorkspaceMindmap({
           return (
             <G key={`${mindmap.id}-connector-${renderNode.node.id}`}>
               <Path
-                d={`M ${start.x} ${start.y} C ${midX} ${start.y}, ${midX} ${end.y}, ${end.x} ${end.y}`}
+                d={connectorPath(start, end)}
                 stroke={stroke}
                 strokeWidth={strokeWidth}
                 fill="none"
@@ -4719,6 +4740,7 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="New map"
                 >
+                  <Plus size={14} color="#ffffff" strokeWidth={2.8} />
                   <Text style={styles.notesCreateButtonText}>New Map</Text>
                 </Pressable>
               </View>
@@ -4754,7 +4776,11 @@ export default function HomeScreen() {
                       <Pressable
                         key={mindmap.id}
                         onPress={() => setActiveMindmapId(mindmap.id)}
-                        style={[styles.notesMindmapTab, isActive && styles.notesMindmapTabActive]}
+                        style={({ pressed }) => [
+                          styles.notesMindmapTab,
+                          isActive && styles.notesMindmapTabActive,
+                          pressed && styles.notesMindmapTabPressed,
+                        ]}
                         accessibilityRole="tab"
                         accessibilityState={{ selected: isActive }}
                         accessibilityLabel={`Open map ${mindmap.title}`}
@@ -4777,19 +4803,23 @@ export default function HomeScreen() {
                     <View style={styles.notesMindmapCardActions}>
                       <Pressable
                         onPress={() => setActiveMindmapId(null)}
+                        style={styles.notesMindmapHeaderAction}
                         hitSlop={8}
                         accessibilityRole="button"
                         accessibilityLabel={`Close map ${activeMindmap.title}`}
                       >
-                        <Text style={styles.notesMindmapDelete}>Close</Text>
+                        <X size={14} color="#64748b" strokeWidth={2.4} />
+                        <Text style={styles.notesMindmapHeaderActionText}>Close</Text>
                       </Pressable>
                       <Pressable
                         onPress={() => deleteWorkspaceMindmap(activeMindmap.id)}
+                        style={[styles.notesMindmapHeaderAction, styles.notesMindmapDangerAction]}
                         hitSlop={8}
                         accessibilityRole="button"
                         accessibilityLabel={`Delete map ${activeMindmap.title}`}
                       >
-                        <Text style={styles.notesMindmapDelete}>Delete</Text>
+                        <Trash2 size={13} color="#be123c" strokeWidth={2.4} />
+                        <Text style={[styles.notesMindmapHeaderActionText, styles.notesMindmapDangerActionText]}>Delete</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -8447,8 +8477,10 @@ const styles = StyleSheet.create({
   notesCreateButton: {
     minHeight: 24,
     paddingHorizontal: 10,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
     backgroundColor: '#6366f1',
     borderRadius: 6,
   },
@@ -8518,11 +8550,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#d1d5db',
     backgroundColor: '#f9fafb',
-    borderRadius: 8,
+    borderRadius: 7,
   },
   notesMindmapTabActive: {
     borderColor: '#4f46e5',
     backgroundColor: '#eef2ff',
+  },
+  notesMindmapTabPressed: {
+    borderColor: '#818cf8',
+    backgroundColor: '#f1f5ff',
   },
   notesMindmapTabText: {
     color: '#6b7280',
@@ -8567,12 +8603,31 @@ const styles = StyleSheet.create({
   notesMindmapCardActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
   },
-  notesMindmapDelete: {
-    color: '#9ca3af',
+  notesMindmapHeaderAction: {
+    minHeight: 24,
+    paddingHorizontal: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#dbe4f0',
+    backgroundColor: '#f8fafc',
+    borderRadius: 6,
+  },
+  notesMindmapHeaderActionText: {
+    color: '#64748b',
     fontSize: 11,
     fontWeight: '700',
+  },
+  notesMindmapDangerAction: {
+    borderColor: '#fecdd3',
+    backgroundColor: '#fff1f2',
+  },
+  notesMindmapDangerActionText: {
+    color: '#be123c',
   },
   notesMindmapCanvas: {
     position: 'relative',
