@@ -114,6 +114,14 @@ type WorkspaceMindmapNode = {
   children: WorkspaceMindmapNode[];
 };
 
+type MindmapLayoutMode = 'balanced' | 'right';
+
+type WorkspaceMindmapSettings = {
+  layout: MindmapLayoutMode;
+  coloredBranches: boolean;
+  compactSpacing: boolean;
+};
+
 type WorkspaceMindmap = {
   id: string;
   title: string;
@@ -123,6 +131,7 @@ type WorkspaceMindmap = {
   topics: string[];
   root_position?: MindmapPoint;
   nodes: WorkspaceMindmapNode[];
+  settings: WorkspaceMindmapSettings;
 };
 
 type MindmapTemplateKey = 'balanced' | 'right-stack' | 'workshop' | 'business-plan';
@@ -882,6 +891,32 @@ function normalizeMindmapPoint(point: Partial<MindmapPoint> | undefined): Mindma
   };
 }
 
+function defaultMindmapSettings(templateKey: MindmapTemplateKey): WorkspaceMindmapSettings {
+  return {
+    layout: templateKey === 'right-stack' ? 'right' : 'balanced',
+    coloredBranches: true,
+    compactSpacing: false,
+  };
+}
+
+function normalizeMindmapSettings(
+  settings: Partial<WorkspaceMindmapSettings> | undefined,
+  templateKey: MindmapTemplateKey
+): WorkspaceMindmapSettings {
+  const fallback = defaultMindmapSettings(templateKey);
+  return {
+    layout: settings?.layout === 'right' || settings?.layout === 'balanced'
+      ? settings.layout
+      : fallback.layout,
+    coloredBranches: typeof settings?.coloredBranches === 'boolean'
+      ? settings.coloredBranches
+      : fallback.coloredBranches,
+    compactSpacing: typeof settings?.compactSpacing === 'boolean'
+      ? settings.compactSpacing
+      : fallback.compactSpacing,
+  };
+}
+
 function normalizeMindmapNodes(
   nodes: Partial<WorkspaceMindmapNode>[] | undefined,
   fallbackTopics: string[],
@@ -1001,6 +1036,30 @@ function addMindmapNode(nodes: WorkspaceMindmapNode[], parentNodeId: string | nu
     return [...materializedNodes, createMindmapNode(label, nextPosition)];
   }
   return appendMindmapNodeToParent(materializedNodes, parentNodeId, label);
+}
+
+function clearNestedMindmapPositions(nodes: WorkspaceMindmapNode[]): WorkspaceMindmapNode[] {
+  return nodes.map((node) => {
+    const { x: _x, y: _y, ...nodeWithoutPosition } = node;
+    return {
+      ...nodeWithoutPosition,
+      children: clearNestedMindmapPositions(node.children),
+    };
+  });
+}
+
+function relayoutMindmapNodes(
+  nodes: WorkspaceMindmapNode[],
+  templateKey: MindmapTemplateKey,
+  layout: MindmapLayoutMode
+): WorkspaceMindmapNode[] {
+  const layoutTemplateKey = layout === 'right' ? 'right-stack' : templateKey;
+  const positions = editableMindmapPositions(layoutTemplateKey, nodes.length);
+  return nodes.map((node, index) => ({
+    ...node,
+    ...(positions[index] ?? {}),
+    children: clearNestedMindmapPositions(node.children),
+  }));
 }
 
 function deleteMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string): WorkspaceMindmapNode[] {
@@ -1206,22 +1265,24 @@ function EditableWorkspaceMindmap({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [dragPreview, setDragPreview] = useState<{ id: string; point: MindmapPoint } | null>(null);
   const [selectedMindmapNodeId, setSelectedMindmapNodeId] = useState<string | null>(null);
+  const effectiveCompact = compact || mindmap.settings.compactSpacing;
   const root = dragPreview?.id === 'root'
     ? dragPreview.point
     : mindmap.root_position ?? { x: 50, y: 50 };
   const topLevelNodes = mindmap.nodes.length > 0 ? mindmap.nodes : mindmapNodesFromTopics(mindmap.topics, mindmap.template);
-  const positions = editableMindmapPositions(mindmap.template, topLevelNodes.length);
-  const topicWidth = compact ? 112 : 138;
-  const childWidth = compact ? 94 : 108;
-  const rootWidth = compact ? 138 : 166;
+  const layoutTemplateKey = mindmap.settings.layout === 'right' ? 'right-stack' : mindmap.template;
+  const positions = editableMindmapPositions(layoutTemplateKey, topLevelNodes.length);
+  const topicWidth = effectiveCompact ? 112 : 138;
+  const childWidth = effectiveCompact ? 94 : 108;
+  const rootWidth = effectiveCompact ? 138 : 166;
   const nodeHeight = 38;
   const rootHeight = 42;
   const childNodeHeight = 32;
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-  const canvasWidth = canvasSize.width > 0 ? canvasSize.width : (compact ? 560 : 760);
-  const canvasHeight = canvasSize.height > 0 ? canvasSize.height : (compact ? 300 : 420);
-  const mapFieldWidth = Math.min(canvasWidth, compact ? 560 : 760);
-  const mapFieldHeight = Math.min(canvasHeight, compact ? 260 : 380);
+  const canvasWidth = canvasSize.width > 0 ? canvasSize.width : (effectiveCompact ? 560 : 760);
+  const canvasHeight = canvasSize.height > 0 ? canvasSize.height : (effectiveCompact ? 300 : 420);
+  const mapFieldWidth = Math.min(canvasWidth, effectiveCompact ? 520 : 760);
+  const mapFieldHeight = Math.min(canvasHeight, effectiveCompact ? 240 : 380);
   const mapFieldOffsetX = Math.max((canvasWidth - mapFieldWidth) / 2, 0);
   const mapFieldOffsetY = Math.max((canvasHeight - mapFieldHeight) / 2, 0);
   const toCanvasPoint = (point: { x: number; y: number }) => ({
@@ -1357,14 +1418,14 @@ function EditableWorkspaceMindmap({
     const maxX = 100 - minX;
     const minY = ((childNodeHeightValue / 2 + 10) / mapFieldHeight) * 100;
     const maxY = 100 - minY;
-    const horizontalGap = compact ? 26 : 34;
+    const horizontalGap = effectiveCompact ? 20 : 34;
     const requiredOffset = ((parentWidth / 2 + childNodeWidth / 2 + horizontalGap + depth * 10) / mapFieldWidth) * 100;
     const leftSpace = parentX - minX;
     const rightSpace = maxX - parentX;
     const side = preferredSide < 0
       ? (leftSpace >= requiredOffset || rightSpace < requiredOffset ? -1 : 1)
       : (rightSpace >= requiredOffset || leftSpace < requiredOffset ? 1 : -1);
-    const spread = Math.max(12, ((childNodeHeightValue + 18) / mapFieldHeight) * 100);
+    const spread = Math.max(effectiveCompact ? 8 : 12, ((childNodeHeightValue + (effectiveCompact ? 10 : 18)) / mapFieldHeight) * 100);
     const yOffset = (index - (count - 1) / 2) * spread;
     return {
       x: clamp(parentX + side * requiredOffset, minX, maxX),
@@ -1391,7 +1452,8 @@ function EditableWorkspaceMindmap({
         : undefined;
       const previewPosition = dragPreview?.id === node.id ? dragPreview.point : undefined;
       const position = previewPosition ?? savedPosition ?? autoPosition;
-      const color = template.colors[index % template.colors.length] ?? '#e5e7eb';
+      const branchColor = template.colors[index % template.colors.length] ?? '#e5e7eb';
+      const color = mindmap.settings.coloredBranches ? branchColor : '#94a3b8';
       renderNodes.push({
         node,
         x: position.x,
@@ -1414,7 +1476,7 @@ function EditableWorkspaceMindmap({
 
   return (
     <View
-      style={[styles.notesMindmapCanvas, compact && styles.notesMindmapCanvasCompact]}
+      style={[styles.notesMindmapCanvas, effectiveCompact && styles.notesMindmapCanvasCompact]}
       onLayout={handleCanvasLayout}
     >
       <Svg
@@ -1867,6 +1929,7 @@ export default function HomeScreen() {
         const loadedMindmaps = Array.isArray(notes.mindmaps)
           ? notes.mindmaps.map((mindmap, index) => {
               const template = mindmapTemplateFor(mindmap.template ?? 'balanced');
+              const settings = normalizeMindmapSettings(mindmap.settings, template.key);
               const fields = mindmapFieldsFromBody(mindmap.body ?? '', template);
               const title = mindmap.title ?? fields.title;
               const savedTopics = Array.isArray(mindmap.topics) ? mindmap.topics : [];
@@ -1888,6 +1951,7 @@ export default function HomeScreen() {
                 topics: nodes.map((node) => node.label),
                 root_position: normalizeMindmapPoint(mindmap.root_position),
                 nodes,
+                settings,
               };
             })
           : [];
@@ -1905,6 +1969,7 @@ export default function HomeScreen() {
                   template: template.key,
                   topics: nodes.map((node) => node.label),
                   nodes,
+                  settings: defaultMindmapSettings(template.key),
                 },
               ];
             })()
@@ -2270,6 +2335,7 @@ export default function HomeScreen() {
   function createWorkspaceMindmap(templateKey: MindmapTemplateKey) {
     const template = mindmapTemplateFor(templateKey);
     const nodes = mindmapNodesFromTopics(template.topics, template.key);
+    const settings = defaultMindmapSettings(template.key);
     const id = `${Date.now()}`;
     const nextMindmaps = [
       {
@@ -2280,6 +2346,7 @@ export default function HomeScreen() {
         template: template.key,
         topics: nodes.map((node) => node.label),
         nodes,
+        settings,
       },
       ...workspaceMindmaps,
     ];
@@ -2298,7 +2365,7 @@ export default function HomeScreen() {
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
   }
 
-  function updateWorkspaceMindmap(id: string, updates: Partial<Pick<WorkspaceMindmap, 'title' | 'nodes' | 'root_position'>>) {
+  function updateWorkspaceMindmap(id: string, updates: Partial<Pick<WorkspaceMindmap, 'title' | 'nodes' | 'root_position' | 'settings'>>) {
     const nextMindmaps = workspaceMindmaps.map((mindmap) => {
       if (mindmap.id !== id) return mindmap;
       const title = updates.title ?? mindmap.title;
@@ -2307,6 +2374,7 @@ export default function HomeScreen() {
         ...mindmap,
         title,
         nodes,
+        settings: updates.settings ?? mindmap.settings,
         root_position: updates.root_position ?? mindmap.root_position,
         topics: nodes.map((node) => node.label),
         body: mindmapBody(title, nodes),
@@ -2320,7 +2388,21 @@ export default function HomeScreen() {
     const mindmap = workspaceMindmaps.find((item) => item.id === id);
     if (!mindmap) return;
     const label = parentNodeId ? 'Child node' : `Topic ${mindmap.nodes.length + 1}`;
-    updateWorkspaceMindmap(id, { nodes: addMindmapNode(mindmap.nodes, parentNodeId, label, mindmap.template) });
+    const layoutTemplateKey = mindmap.settings.layout === 'right' ? 'right-stack' : mindmap.template;
+    updateWorkspaceMindmap(id, { nodes: addMindmapNode(mindmap.nodes, parentNodeId, label, layoutTemplateKey) });
+  }
+
+  function updateWorkspaceMindmapSettings(id: string, updates: Partial<WorkspaceMindmapSettings>) {
+    const mindmap = workspaceMindmaps.find((item) => item.id === id);
+    if (!mindmap) return;
+    const nextSettings = { ...mindmap.settings, ...updates };
+    const shouldRelayout = updates.layout !== undefined && updates.layout !== mindmap.settings.layout;
+    updateWorkspaceMindmap(id, {
+      settings: nextSettings,
+      nodes: shouldRelayout
+        ? relayoutMindmapNodes(mindmap.nodes, mindmap.template, nextSettings.layout)
+        : mindmap.nodes,
+    });
   }
 
   function updateWorkspaceMindmapNodeLabel(id: string, nodeId: string, value: string) {
@@ -4884,6 +4966,81 @@ export default function HomeScreen() {
                       >
                         <Trash2 size={13} color="#be123c" strokeWidth={2.4} />
                         <Text style={[styles.notesMindmapHeaderActionText, styles.notesMindmapDangerActionText]}>Delete</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <View style={styles.notesMindmapInspector}>
+                    <View style={styles.notesMindmapInspectorGroup}>
+                      <Text style={styles.notesMindmapInspectorLabel}>Layout</Text>
+                      <View style={styles.notesMindmapSegmentedControl}>
+                        {([
+                          ['balanced', 'Balanced'],
+                          ['right', 'Right'],
+                        ] as [MindmapLayoutMode, string][]).map(([layout, label]) => {
+                          const isActiveLayout = activeMindmap.settings.layout === layout;
+                          return (
+                            <Pressable
+                              key={layout}
+                              onPress={() => updateWorkspaceMindmapSettings(activeMindmap.id, { layout })}
+                              style={[
+                                styles.notesMindmapSegment,
+                                isActiveLayout && styles.notesMindmapSegmentActive,
+                              ]}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: isActiveLayout }}
+                              accessibilityLabel={`Use ${label} map layout`}
+                            >
+                              <Text style={[
+                                styles.notesMindmapSegmentText,
+                                isActiveLayout && styles.notesMindmapSegmentTextActive,
+                              ]}>{label}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+                    <View style={styles.notesMindmapInspectorToggles}>
+                      <Pressable
+                        onPress={() => updateWorkspaceMindmapSettings(activeMindmap.id, {
+                          coloredBranches: !activeMindmap.settings.coloredBranches,
+                        })}
+                        style={[
+                          styles.notesMindmapToggle,
+                          activeMindmap.settings.coloredBranches && styles.notesMindmapToggleActive,
+                        ]}
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: activeMindmap.settings.coloredBranches }}
+                        accessibilityLabel="Colored branches"
+                      >
+                        <View style={[
+                          styles.notesMindmapToggleDot,
+                          activeMindmap.settings.coloredBranches && styles.notesMindmapToggleDotActive,
+                        ]} />
+                        <Text style={[
+                          styles.notesMindmapToggleText,
+                          activeMindmap.settings.coloredBranches && styles.notesMindmapToggleTextActive,
+                        ]}>Colored branches</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => updateWorkspaceMindmapSettings(activeMindmap.id, {
+                          compactSpacing: !activeMindmap.settings.compactSpacing,
+                        })}
+                        style={[
+                          styles.notesMindmapToggle,
+                          activeMindmap.settings.compactSpacing && styles.notesMindmapToggleActive,
+                        ]}
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: activeMindmap.settings.compactSpacing }}
+                        accessibilityLabel="Compact spacing"
+                      >
+                        <View style={[
+                          styles.notesMindmapToggleDot,
+                          activeMindmap.settings.compactSpacing && styles.notesMindmapToggleDotActive,
+                        ]} />
+                        <Text style={[
+                          styles.notesMindmapToggleText,
+                          activeMindmap.settings.compactSpacing && styles.notesMindmapToggleTextActive,
+                        ]}>Compact spacing</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -8692,6 +8849,99 @@ const styles = StyleSheet.create({
   },
   notesMindmapDangerActionText: {
     color: '#be123c',
+  },
+  notesMindmapInspector: {
+    minHeight: 34,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
+    borderRadius: 7,
+  },
+  notesMindmapInspectorGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
+  notesMindmapInspectorLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  notesMindmapSegmentedControl: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#dbe4f0',
+    backgroundColor: '#fff',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  notesMindmapSegment: {
+    minHeight: 24,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notesMindmapSegmentActive: {
+    backgroundColor: '#eef2ff',
+  },
+  notesMindmapSegmentText: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  notesMindmapSegmentTextActive: {
+    color: '#3730a3',
+  },
+  notesMindmapInspectorToggles: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  notesMindmapToggle: {
+    minHeight: 24,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#dbe4f0',
+    backgroundColor: '#fff',
+    borderRadius: 6,
+  },
+  notesMindmapToggleActive: {
+    borderColor: '#a5b4fc',
+    backgroundColor: '#eef2ff',
+  },
+  notesMindmapToggleDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#cbd5e1',
+  },
+  notesMindmapToggleDotActive: {
+    backgroundColor: '#4f46e5',
+  },
+  notesMindmapToggleText: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  notesMindmapToggleTextActive: {
+    color: '#3730a3',
   },
   notesMindmapCanvas: {
     position: 'relative',

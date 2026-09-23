@@ -155,6 +155,10 @@ Current implementation:
   New maps materialize template starting positions in the saved node payload,
   and adding a child materializes existing branch positions before inserting the
   new child so growth does not reshuffle the current map.
+  Each map also stores a small settings payload for essential map-level controls:
+  layout (`balanced` or `right`), colored branches, and compact spacing. These
+  controls are intentionally small and inline with the active map rather than a
+  full diagram-editor inspector.
   Connectors attach to angle-selected pill ports and use adaptive cubic curves
   so lines choose a sensible top, side, bottom, or shoulder connection point
   based on relative node position. The map field keeps a stable visual boundary
