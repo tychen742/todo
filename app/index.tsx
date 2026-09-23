@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Filter, GripVertical, MoreHorizontal, Plus, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, Filter, GripVertical, ListTodo, MoreHorizontal, Plus, Trash2, X } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -1249,6 +1249,7 @@ function EditableWorkspaceMindmap({
   onNodeAdd,
   onNodeChange,
   onNodeDelete,
+  onNodeCreateTodo,
   onRootPositionChange,
   onNodeMove,
 }: {
@@ -1259,6 +1260,7 @@ function EditableWorkspaceMindmap({
   onNodeAdd: (parentNodeId: string | null) => void;
   onNodeChange: (nodeId: string, value: string) => void;
   onNodeDelete: (nodeId: string) => void;
+  onNodeCreateTodo: (label: string) => void;
   onRootPositionChange: (point: MindmapPoint) => void;
   onNodeMove: (nodeId: string, point: MindmapPoint) => void;
 }) {
@@ -1655,6 +1657,15 @@ function EditableWorkspaceMindmap({
                     <Text style={styles.notesMindmapNodeActionText}>+</Text>
                   </Pressable>
                 ) : null}
+                <Pressable
+                  onPress={() => onNodeCreateTodo(renderNode.node.label)}
+                  style={styles.notesMindmapNodeAction}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Create todo from ${renderNode.node.label}`}
+                >
+                  <ListTodo size={11} color="#64748b" strokeWidth={2.5} />
+                </Pressable>
                 {canDeleteNode ? (
                   <Pressable
                     onPress={() => onNodeDelete(renderNode.node.id)}
@@ -3718,13 +3729,13 @@ export default function HomeScreen() {
     loadOrgMembers(orgModalId);
   }
 
-  async function addTodo() {
-    const text = input.trim();
-    if (!text || !session) return;
+  async function createTodoFromText(rawText: string) {
+    const text = rawText.trim();
+    if (!text || !session) return null;
     const quickCapture = parseTodoQuickCapture(text, quickCaptureProjects, { allowProjectRouting: !isProject });
     if (quickCapture.error) {
       setError(quickCapture.error);
-      return;
+      return null;
     }
     const targetProjectId = isProject ? selectedProjectId : quickCapture.project?.id ?? newTodoProjectId;
     const assignedTo = selectedTeamId && !isProject ? newTodoAssignee : null;
@@ -3748,15 +3759,27 @@ export default function HomeScreen() {
 
     if (insertError) {
       setError(insertError.message);
-      return;
+      return null;
     }
 
     if (data) {
       setTodos((prev) => sortTodos([data as Todo, ...prev]));
     }
     loadAssignedFromMe();
-    setInput('');
     setError('');
+    return data as Todo | null;
+  }
+
+  async function addTodo() {
+    const createdTodo = await createTodoFromText(input);
+    if (!createdTodo) return;
+    setInput('');
+  }
+
+  async function createTodoFromMindmapNode(label: string) {
+    const createdTodo = await createTodoFromText(label);
+    if (!createdTodo) return;
+    showToast('Todo created from map node.');
   }
 
   async function addTodoToPhase(phaseId: string | null) {
@@ -5052,6 +5075,7 @@ export default function HomeScreen() {
                     onNodeAdd={(parentNodeId) => addWorkspaceMindmapNode(activeMindmap.id, parentNodeId)}
                     onNodeChange={(nodeId, value) => updateWorkspaceMindmapNodeLabel(activeMindmap.id, nodeId, value)}
                     onNodeDelete={(nodeId) => deleteWorkspaceMindmapNode(activeMindmap.id, nodeId)}
+                    onNodeCreateTodo={createTodoFromMindmapNode}
                     onRootPositionChange={(point) => updateWorkspaceMindmapRootPosition(activeMindmap.id, point)}
                     onNodeMove={(nodeId, point) => updateWorkspaceMindmapNodePosition(activeMindmap.id, nodeId, point)}
                   />

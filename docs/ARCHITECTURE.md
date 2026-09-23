@@ -159,6 +159,10 @@ Current implementation:
   layout (`balanced` or `right`), colored branches, and compact spacing. These
   controls are intentionally small and inline with the active map rather than a
   full diagram-editor inspector.
+  Map node actions can create a regular todo from the node label through the
+  same quick-capture insert path as the main Workspace add box. This keeps Maps
+  connected to project management without introducing a separate map-task model
+  before synced map storage is designed.
   Connectors attach to angle-selected pill ports and use adaptive cubic curves
   so lines choose a sensible top, side, bottom, or shoulder connection point
   based on relative node position. The map field keeps a stable visual boundary
