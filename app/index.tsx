@@ -23,7 +23,7 @@ import { Stack } from 'expo-router';
 import { createURL } from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Svg, { Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, Filter, MoreHorizontal, Plus } from 'lucide-react-native';
@@ -1176,7 +1176,7 @@ function EditableWorkspaceMindmap({
         : { width: nextWidth, height: nextHeight }
     ));
   }
-  function connectorEndpoint(
+  function connectorPort(
     from: { x: number; y: number },
     to: { x: number; y: number },
     width: number,
@@ -1184,16 +1184,31 @@ function EditableWorkspaceMindmap({
   ) {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
-    if (dx === 0 && dy === 0) return from;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return from;
+    const targetVector = { x: dx / distance, y: dy / distance };
     const halfWidth = width / 2;
     const halfHeight = height / 2;
-    const scale = Math.min(
-      Math.abs(dx) > 0 ? halfWidth / Math.abs(dx) : Number.POSITIVE_INFINITY,
-      Math.abs(dy) > 0 ? halfHeight / Math.abs(dy) : Number.POSITIVE_INFINITY
-    );
+    const ports = [
+      { x: -halfWidth, y: 0 },
+      { x: -halfWidth * 0.62, y: -halfHeight },
+      { x: 0, y: -halfHeight },
+      { x: halfWidth * 0.62, y: -halfHeight },
+      { x: halfWidth, y: 0 },
+      { x: halfWidth * 0.62, y: halfHeight },
+      { x: 0, y: halfHeight },
+      { x: -halfWidth * 0.62, y: halfHeight },
+    ];
+    const bestPort = ports.reduce((best, port) => {
+      const portDistance = Math.hypot(port.x, port.y);
+      if (portDistance === 0) return best;
+      const portVector = { x: port.x / portDistance, y: port.y / portDistance };
+      const score = portVector.x * targetVector.x + portVector.y * targetVector.y;
+      return score > best.score ? { port, score } : best;
+    }, { port: ports[0], score: Number.NEGATIVE_INFINITY });
     return {
-      x: from.x + dx * scale,
-      y: from.y + dy * scale,
+      x: from.x + bestPort.port.x,
+      y: from.y + bestPort.port.y,
     };
   }
   function clampMapPoint(point: MindmapPoint, width: number, height: number): MindmapPoint {
@@ -1341,19 +1356,41 @@ function EditableWorkspaceMindmap({
         {renderNodes.map((renderNode) => {
           const parentPoint = toCanvasPoint({ x: renderNode.parentX, y: renderNode.parentY });
           const nodePoint = toCanvasPoint({ x: renderNode.x, y: renderNode.y });
-          const start = connectorEndpoint(parentPoint, nodePoint, renderNode.parentWidth, renderNode.parentHeight);
-          const end = connectorEndpoint(nodePoint, parentPoint, renderNode.width, renderNode.height);
+          const start = connectorPort(parentPoint, nodePoint, renderNode.parentWidth, renderNode.parentHeight);
+          const end = connectorPort(nodePoint, parentPoint, renderNode.width, renderNode.height);
           const midX = (start.x + end.x) / 2;
+          const stroke = renderNode.depth === 0 ? renderNode.color : '#94a3b8';
+          const strokeWidth = renderNode.depth === 0 ? 3 : 2;
+          const portRadius = renderNode.depth === 0 ? 3.1 : 2.5;
           return (
-            <Path
-              key={`${mindmap.id}-connector-${renderNode.node.id}`}
-              d={`M ${start.x} ${start.y} C ${midX} ${start.y}, ${midX} ${end.y}, ${end.x} ${end.y}`}
-              stroke={renderNode.depth === 0 ? renderNode.color : '#94a3b8'}
-              strokeWidth={renderNode.depth === 0 ? 3 : 2}
-              fill="none"
-              strokeLinecap="round"
-              opacity={renderNode.depth === 0 ? 0.85 : 0.58}
-            />
+            <G key={`${mindmap.id}-connector-${renderNode.node.id}`}>
+              <Path
+                d={`M ${start.x} ${start.y} C ${midX} ${start.y}, ${midX} ${end.y}, ${end.x} ${end.y}`}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+                fill="none"
+                strokeLinecap="round"
+                opacity={renderNode.depth === 0 ? 0.85 : 0.58}
+              />
+              <Circle
+                cx={start.x}
+                cy={start.y}
+                r={portRadius}
+                fill="#ffffff"
+                stroke={stroke}
+                strokeWidth={1.4}
+                opacity={0.9}
+              />
+              <Circle
+                cx={end.x}
+                cy={end.y}
+                r={portRadius}
+                fill="#ffffff"
+                stroke={stroke}
+                strokeWidth={1.4}
+                opacity={0.9}
+              />
+            </G>
           );
         })}
       </Svg>

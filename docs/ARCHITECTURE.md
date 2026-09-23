@@ -148,9 +148,11 @@ Current implementation:
   template key, central topic, branch labels, and nested child nodes. The
   rendered map nodes are editable directly, top-level nodes can be added from
   the canvas, edge nodes expose child-node add controls, and dragged root/node
-  pill positions are saved as percentage coordinates in the map payload. The
-  prior local Ideas value remains in the storage payload for migration safety,
-  but it is not currently surfaced in the UI.
+  pill positions are saved as percentage coordinates in the map payload.
+  Connectors attach to angle-selected pill ports so lines choose a sensible
+  top, side, bottom, or shoulder connection point based on relative node
+  position. The prior local Ideas value remains in the storage payload for
+  migration safety, but it is not currently surfaced in the UI.
 - These maps are local-only until the shared workspace notes/maps scope is settled.
 
 Likely synced architecture:
