@@ -1644,11 +1644,14 @@ function EditableWorkspaceMindmap({
               placeholderTextColor={renderNode.depth === 0 ? '#0f172a' : '#94a3b8'}
               accessibilityLabel={`Mindmap node ${index + 1}`}
             />
-            {canAddChild || canDeleteNode ? (
+            {isSelected && (canAddChild || canDeleteNode) ? (
               <View style={styles.notesMindmapNodeActionGroup}>
                 {canAddChild ? (
                   <Pressable
-                    onPress={() => onNodeAdd(renderNode.node.id)}
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      onNodeAdd(renderNode.node.id);
+                    }}
                     style={styles.notesMindmapNodeAction}
                     hitSlop={6}
                     accessibilityRole="button"
@@ -1658,7 +1661,10 @@ function EditableWorkspaceMindmap({
                   </Pressable>
                 ) : null}
                 <Pressable
-                  onPress={() => onNodeCreateTodo(renderNode.node.label)}
+                  onPress={(event) => {
+                    event.stopPropagation?.();
+                    onNodeCreateTodo(renderNode.node.label);
+                  }}
                   style={styles.notesMindmapNodeAction}
                   hitSlop={6}
                   accessibilityRole="button"
@@ -1668,7 +1674,10 @@ function EditableWorkspaceMindmap({
                 </Pressable>
                 {canDeleteNode ? (
                   <Pressable
-                    onPress={() => onNodeDelete(renderNode.node.id)}
+                    onPress={(event) => {
+                      event.stopPropagation?.();
+                      onNodeDelete(renderNode.node.id);
+                    }}
                     style={styles.notesMindmapNodeAction}
                     hitSlop={6}
                     accessibilityRole="button"
@@ -8994,7 +9003,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingLeft: 12,
-    paddingRight: 30,
+    paddingRight: 12,
     shadowColor: '#0f172a',
     shadowOpacity: 0.12,
     shadowRadius: 8,
@@ -9016,7 +9025,7 @@ const styles = StyleSheet.create({
   notesMindmapChildNode: {
     minHeight: 32,
     paddingLeft: 10,
-    paddingRight: 34,
+    paddingRight: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
   },
   notesMindmapDragHandle: {
