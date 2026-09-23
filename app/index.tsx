@@ -859,16 +859,18 @@ function mindmapTemplateFor(key: MindmapTemplateKey) {
   return mindmapTemplates.find((template) => template.key === key) ?? mindmapTemplates[0];
 }
 
-function createMindmapNode(label: string): WorkspaceMindmapNode {
+function createMindmapNode(label: string, point?: MindmapPoint): WorkspaceMindmapNode {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     label,
+    ...(point ? point : {}),
     children: [],
   };
 }
 
-function mindmapNodesFromTopics(topics: string[]) {
-  return topics.map((topic, index) => createMindmapNode(topic || `Topic ${index + 1}`));
+function mindmapNodesFromTopics(topics: string[], templateKey: MindmapTemplateKey = 'balanced') {
+  const positions = editableMindmapPositions(templateKey, topics.length);
+  return topics.map((topic, index) => createMindmapNode(topic || `Topic ${index + 1}`, positions[index]));
 }
 
 function normalizeMindmapPoint(point: Partial<MindmapPoint> | undefined): MindmapPoint | undefined {
@@ -882,16 +884,17 @@ function normalizeMindmapPoint(point: Partial<MindmapPoint> | undefined): Mindma
 
 function normalizeMindmapNodes(
   nodes: Partial<WorkspaceMindmapNode>[] | undefined,
-  fallbackTopics: string[]
+  fallbackTopics: string[],
+  templateKey: MindmapTemplateKey = 'balanced'
 ): WorkspaceMindmapNode[] {
-  if (!Array.isArray(nodes) || nodes.length === 0) return mindmapNodesFromTopics(fallbackTopics);
+  if (!Array.isArray(nodes) || nodes.length === 0) return mindmapNodesFromTopics(fallbackTopics, templateKey);
   return nodes.map((node, index) => {
     const point = normalizeMindmapPoint(node);
     return {
       id: node.id ?? `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
       label: node.label ?? fallbackTopics[index] ?? `Topic ${index + 1}`,
       ...(point ? point : {}),
-      children: normalizeMindmapNodes(node.children, []),
+      children: normalizeMindmapNodes(node.children, [], templateKey),
     };
   });
 }
@@ -930,13 +933,74 @@ function mapMindmapNodes(
   });
 }
 
-function addMindmapNode(nodes: WorkspaceMindmapNode[], parentNodeId: string | null, label: string): WorkspaceMindmapNode[] {
-  const nextNode = createMindmapNode(label);
-  if (!parentNodeId) return [...nodes, nextNode];
-  return mapMindmapNodes(nodes, parentNodeId, (node) => ({
-    ...node,
-    children: [...node.children, nextNode],
-  }));
+function clampMindmapPercentPoint(point: MindmapPoint): MindmapPoint {
+  return {
+    x: Math.max(4, Math.min(96, point.x)),
+    y: Math.max(5, Math.min(95, point.y)),
+  };
+}
+
+function childMindmapGrowthPoint(parentPoint: MindmapPoint, index: number, count: number, depth: number): MindmapPoint {
+  const side = parentPoint.x < 48 ? -1 : parentPoint.x > 52 ? 1 : index % 2 === 0 ? 1 : -1;
+  const horizontalOffset = 18 + Math.min(depth, 3) * 6;
+  const verticalSpread = Math.max(10, 16 - Math.min(depth, 4) * 2);
+  return clampMindmapPercentPoint({
+    x: parentPoint.x + side * horizontalOffset,
+    y: parentPoint.y + (index - (count - 1) / 2) * verticalSpread,
+  });
+}
+
+function materializeMindmapNodePositions(
+  nodes: WorkspaceMindmapNode[],
+  templateKey: MindmapTemplateKey,
+  parentPoint?: MindmapPoint,
+  depth = 0
+): WorkspaceMindmapNode[] {
+  const topLevelPositions = depth === 0 ? editableMindmapPositions(templateKey, nodes.length) : [];
+  return nodes.map((node, index) => {
+    const savedPoint = normalizeMindmapPoint(node);
+    const point = savedPoint
+      ?? (depth === 0
+        ? topLevelPositions[index]
+        : childMindmapGrowthPoint(parentPoint ?? { x: 50, y: 50 }, index, nodes.length, depth));
+    const normalizedPoint = clampMindmapPercentPoint(point ?? { x: 50, y: 50 });
+    return {
+      ...node,
+      ...normalizedPoint,
+      children: materializeMindmapNodePositions(node.children, templateKey, normalizedPoint, depth + 1),
+    };
+  });
+}
+
+function appendMindmapNodeToParent(
+  nodes: WorkspaceMindmapNode[],
+  parentNodeId: string,
+  label: string,
+  depth = 0
+): WorkspaceMindmapNode[] {
+  return nodes.map((node) => {
+    if (node.id === parentNodeId) {
+      const parentPoint = normalizeMindmapPoint(node) ?? { x: 50, y: 50 };
+      const nextPoint = childMindmapGrowthPoint(parentPoint, node.children.length, node.children.length + 1, depth + 1);
+      return {
+        ...node,
+        children: [...node.children, createMindmapNode(label, nextPoint)],
+      };
+    }
+    return {
+      ...node,
+      children: appendMindmapNodeToParent(node.children, parentNodeId, label, depth + 1),
+    };
+  });
+}
+
+function addMindmapNode(nodes: WorkspaceMindmapNode[], parentNodeId: string | null, label: string, templateKey: MindmapTemplateKey): WorkspaceMindmapNode[] {
+  const materializedNodes = materializeMindmapNodePositions(nodes, templateKey);
+  if (!parentNodeId) {
+    const nextPosition = editableMindmapPositions(templateKey, materializedNodes.length + 1)[materializedNodes.length];
+    return [...materializedNodes, createMindmapNode(label, nextPosition)];
+  }
+  return appendMindmapNodeToParent(materializedNodes, parentNodeId, label);
 }
 
 function deleteMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string): WorkspaceMindmapNode[] {
@@ -1145,7 +1209,7 @@ function EditableWorkspaceMindmap({
   const root = dragPreview?.id === 'root'
     ? dragPreview.point
     : mindmap.root_position ?? { x: 50, y: 50 };
-  const topLevelNodes = mindmap.nodes.length > 0 ? mindmap.nodes : mindmapNodesFromTopics(mindmap.topics);
+  const topLevelNodes = mindmap.nodes.length > 0 ? mindmap.nodes : mindmapNodesFromTopics(mindmap.topics, mindmap.template);
   const positions = editableMindmapPositions(mindmap.template, topLevelNodes.length);
   const topicWidth = compact ? 112 : 138;
   const childWidth = compact ? 94 : 108;
@@ -1814,7 +1878,7 @@ export default function HomeScreen() {
                 : Array.from({ length: topicCount }, (_, topicIndex) =>
                     fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
                   );
-              const nodes = normalizeMindmapNodes(mindmap.nodes, topics);
+              const nodes = normalizeMindmapNodes(mindmap.nodes, topics, template.key);
               return {
                 id: mindmap.id ?? `legacy-${index}-${Date.now()}`,
                 title,
@@ -1831,7 +1895,7 @@ export default function HomeScreen() {
           ? (() => {
               const template = mindmapTemplateFor('balanced');
               const fields = mindmapFieldsFromBody(legacyDraft, template);
-              const nodes = mindmapNodesFromTopics(fields.topics);
+              const nodes = mindmapNodesFromTopics(fields.topics, template.key);
               return [
                 {
                   id: `legacy-draft-${Date.now()}`,
@@ -2205,7 +2269,7 @@ export default function HomeScreen() {
 
   function createWorkspaceMindmap(templateKey: MindmapTemplateKey) {
     const template = mindmapTemplateFor(templateKey);
-    const nodes = mindmapNodesFromTopics(template.topics);
+    const nodes = mindmapNodesFromTopics(template.topics, template.key);
     const id = `${Date.now()}`;
     const nextMindmaps = [
       {
@@ -2256,7 +2320,7 @@ export default function HomeScreen() {
     const mindmap = workspaceMindmaps.find((item) => item.id === id);
     if (!mindmap) return;
     const label = parentNodeId ? 'Child node' : `Topic ${mindmap.nodes.length + 1}`;
-    updateWorkspaceMindmap(id, { nodes: addMindmapNode(mindmap.nodes, parentNodeId, label) });
+    updateWorkspaceMindmap(id, { nodes: addMindmapNode(mindmap.nodes, parentNodeId, label, mindmap.template) });
   }
 
   function updateWorkspaceMindmapNodeLabel(id: string, nodeId: string, value: string) {
