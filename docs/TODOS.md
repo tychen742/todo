@@ -125,6 +125,7 @@ This file collects product and implementation TODOs from working sessions. Move 
 - Treat Maps as a separate workspace concept, not as the same thing as todo annotations.
 - Current implementation: the original Inbox tab and personal workspace side/inline panel remain the assigned-to-me task inbox. Maps is a separate Workspace tab with a template picker and saved map tabs under MAPS. New Map opens visual templates; choosing one creates an auto-saved entry whose map nodes can be edited directly, selected, and dragged from explicit handles to manual positions, with adaptive connector curves, saved starting positions, top-level nodes added from the canvas, child nodes added from edge nodes without shifting already materialized siblings, a node action that creates a regular todo from the node label, and a small inline inspector for Balanced/Right layout, colored branches, and compact spacing.
 - Add synced storage for Maps after the workspace scope is settled.
+- Plan persistent map-to-project and node-to-todo links. A map should optionally belong to one project, and a map node should optionally link to an existing todo or create a linked todo. This needs schema, migration, RLS, sync, unlink/delete behavior, and UI states for showing todo status on a node.
 - Support visual planning maps for personal, team, or project context depending on the active workspace.
 - Keep annotations scoped to one task; keep Maps for broader context, thoughts, structure, and relationships.
 

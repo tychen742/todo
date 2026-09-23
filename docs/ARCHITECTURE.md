@@ -176,6 +176,14 @@ Likely synced architecture:
 
 - Store workspace-level notes/maps in a first-party table such as `workspace_notes`.
 - Scope notes to the active workspace: personal, team, or project.
+- Let a map optionally attach to one primary project. A project map should live
+  with project context, show up from that project's planning surface, and still
+  be usable from Workspace when the user is executing project work.
+- Let individual map nodes optionally link to existing todos or create new todos
+  with a persistent node-to-todo reference. This should support visual planning
+  without duplicating tasks: the todo remains the execution object, while the
+  map node remains the planning object and can show todo status, owner, due date,
+  and completion state.
 - Preserve created maps as first-class sections or migrate them into structured
   note/map blocks.
 - Keep todo annotations as task detail records or fields; keep workspace maps for broader planning context.
