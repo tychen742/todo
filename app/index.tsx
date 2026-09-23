@@ -1281,10 +1281,10 @@ function EditableWorkspaceMindmap({
   const rootHeight = 42;
   const childNodeHeight = 32;
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-  const canvasWidth = canvasSize.width > 0 ? canvasSize.width : (effectiveCompact ? 560 : 760);
-  const canvasHeight = canvasSize.height > 0 ? canvasSize.height : (effectiveCompact ? 300 : 420);
-  const mapFieldWidth = Math.min(canvasWidth, effectiveCompact ? 520 : 760);
-  const mapFieldHeight = Math.min(canvasHeight, effectiveCompact ? 240 : 380);
+  const canvasWidth = canvasSize.width > 0 ? canvasSize.width : (effectiveCompact ? 640 : 980);
+  const canvasHeight = canvasSize.height > 0 ? canvasSize.height : (effectiveCompact ? 380 : 560);
+  const mapFieldWidth = Math.min(canvasWidth, effectiveCompact ? 600 : 980);
+  const mapFieldHeight = Math.min(canvasHeight, effectiveCompact ? 320 : 500);
   const mapFieldOffsetX = Math.max((canvasWidth - mapFieldWidth) / 2, 0);
   const mapFieldOffsetY = Math.max((canvasHeight - mapFieldHeight) / 2, 0);
   const toCanvasPoint = (point: { x: number; y: number }) => ({
@@ -8978,7 +8978,7 @@ const styles = StyleSheet.create({
   },
   notesMindmapCanvas: {
     position: 'relative',
-    height: 420,
+    height: 560,
     borderWidth: 1,
     borderColor: '#dbe4f0',
     backgroundColor: '#f8fafc',
@@ -8986,7 +8986,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   notesMindmapCanvasCompact: {
-    height: 300,
+    height: 380,
   },
   notesMindmapCanvasConnectors: {
     position: 'absolute',
