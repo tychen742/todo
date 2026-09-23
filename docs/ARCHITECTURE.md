@@ -148,7 +148,10 @@ Current implementation:
   template key, central topic, branch labels, and nested child nodes. The
   rendered map nodes are editable directly, top-level nodes can be added from
   the canvas, edge nodes expose child-node add controls, and dragged root/node
-  pill positions are saved as percentage coordinates in the map payload.
+  pill positions are saved as percentage coordinates in the map payload. Pills
+  use explicit drag handles so dragging and text editing remain distinct, and
+  the selected pill emphasizes its connector path while unrelated connectors
+  fade back.
   Connectors attach to angle-selected pill ports so lines choose a sensible
   top, side, bottom, or shoulder connection point based on relative node
   position. The prior local Ideas value remains in the storage payload for

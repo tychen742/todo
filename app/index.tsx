@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Filter, MoreHorizontal, Plus } from 'lucide-react-native';
+import { ArrowLeft, Filter, GripVertical, MoreHorizontal, Plus } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -1141,6 +1141,7 @@ function EditableWorkspaceMindmap({
 }) {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [dragPreview, setDragPreview] = useState<{ id: string; point: MindmapPoint } | null>(null);
+  const [selectedMindmapNodeId, setSelectedMindmapNodeId] = useState<string | null>(null);
   const root = dragPreview?.id === 'root'
     ? dragPreview.point
     : mindmap.root_position ?? { x: 50, y: 50 };
@@ -1256,6 +1257,7 @@ function EditableWorkspaceMindmap({
     node: WorkspaceMindmapNode;
     x: number;
     y: number;
+    parentId: string;
     parentX: number;
     parentY: number;
     width: number;
@@ -1297,6 +1299,7 @@ function EditableWorkspaceMindmap({
   }
   function collectNodes(
     nodes: WorkspaceMindmapNode[],
+    parentId: string,
     parentX: number,
     parentY: number,
     parentWidth: number,
@@ -1319,6 +1322,7 @@ function EditableWorkspaceMindmap({
         node,
         x: position.x,
         y: position.y,
+        parentId,
         parentX,
         parentY,
         width,
@@ -1328,10 +1332,10 @@ function EditableWorkspaceMindmap({
         depth,
         color: depth === 0 ? color : '#ffffff',
       });
-      collectNodes(node.children, position.x, position.y, width, height, depth + 1);
+      collectNodes(node.children, node.id, position.x, position.y, width, height, depth + 1);
     });
   }
-  collectNodes(topLevelNodes, root.x, root.y, rootWidth, rootHeight, 0);
+  collectNodes(topLevelNodes, 'root', root.x, root.y, rootWidth, rootHeight, 0);
   const rootPoint = toCanvasPoint(root);
 
   return (
@@ -1360,8 +1364,13 @@ function EditableWorkspaceMindmap({
           const end = connectorPort(nodePoint, parentPoint, renderNode.width, renderNode.height);
           const midX = (start.x + end.x) / 2;
           const stroke = renderNode.depth === 0 ? renderNode.color : '#94a3b8';
-          const strokeWidth = renderNode.depth === 0 ? 3 : 2;
+          const isSelectedConnector = selectedMindmapNodeId === renderNode.node.id || selectedMindmapNodeId === renderNode.parentId;
+          const hasSelectedNode = selectedMindmapNodeId !== null;
+          const strokeWidth = isSelectedConnector ? (renderNode.depth === 0 ? 3.6 : 2.6) : (renderNode.depth === 0 ? 3 : 2);
           const portRadius = renderNode.depth === 0 ? 3.1 : 2.5;
+          const connectorOpacity = !hasSelectedNode || isSelectedConnector
+            ? (renderNode.depth === 0 ? 0.9 : 0.66)
+            : 0.24;
           return (
             <G key={`${mindmap.id}-connector-${renderNode.node.id}`}>
               <Path
@@ -1370,7 +1379,7 @@ function EditableWorkspaceMindmap({
                 strokeWidth={strokeWidth}
                 fill="none"
                 strokeLinecap="round"
-                opacity={renderNode.depth === 0 ? 0.85 : 0.58}
+                opacity={connectorOpacity}
               />
               <Circle
                 cx={start.x}
@@ -1379,7 +1388,7 @@ function EditableWorkspaceMindmap({
                 fill="#ffffff"
                 stroke={stroke}
                 strokeWidth={1.4}
-                opacity={0.9}
+                opacity={connectorOpacity}
               />
               <Circle
                 cx={end.x}
@@ -1388,14 +1397,14 @@ function EditableWorkspaceMindmap({
                 fill="#ffffff"
                 stroke={stroke}
                 strokeWidth={1.4}
-                opacity={0.9}
+                opacity={connectorOpacity}
               />
             </G>
           );
         })}
       </Svg>
       <View
-        {...createDragHandlers('root', root, rootWidth, rootHeight, onRootPositionChange)}
+        onTouchStart={() => setSelectedMindmapNodeId('root')}
         style={[
           styles.notesMindmapNode,
           styles.notesMindmapRootNode,
@@ -1409,11 +1418,19 @@ function EditableWorkspaceMindmap({
               { translateY: -rootHeight / 2 },
             ],
           },
+          selectedMindmapNodeId === 'root' && styles.notesMindmapNodeSelected,
         ]}
       >
+        <View
+          {...createDragHandlers('root', root, rootWidth, rootHeight, onRootPositionChange)}
+          style={styles.notesMindmapDragHandle}
+        >
+          <GripVertical size={13} color="#94a3b8" strokeWidth={2.4} />
+        </View>
         <TextInput
           value={mindmap.title}
           onChangeText={onTitleChange}
+          onFocus={() => setSelectedMindmapNodeId('root')}
           style={[styles.notesMindmapNodeInput, styles.notesMindmapRootInput]}
           placeholder="Central topic"
           placeholderTextColor="#9ca3af"
@@ -1428,17 +1445,12 @@ function EditableWorkspaceMindmap({
         const isEdgeNode = renderNode.node.children.length === 0;
         const canAddChild = renderNode.depth === 0 || isEdgeNode;
         const canDeleteNode = topLevelNodes.length > 1 || renderNode.depth > 0;
+        const isSelected = selectedMindmapNodeId === renderNode.node.id;
         const nodeColor = renderNode.depth === 0 ? color : '#ffffff';
         const borderColor = renderNode.depth === 0 ? color : '#cbd5e1';
         return (
           <View
-            {...createDragHandlers(
-              renderNode.node.id,
-              nodePosition,
-              width,
-              renderNode.height,
-              (point) => onNodeMove(renderNode.node.id, point)
-            )}
+            onTouchStart={() => setSelectedMindmapNodeId(renderNode.node.id)}
             key={`${mindmap.id}-node-${renderNode.node.id}`}
             style={[
               styles.notesMindmapNode,
@@ -1455,11 +1467,25 @@ function EditableWorkspaceMindmap({
                 backgroundColor: nodeColor,
                 borderColor,
               },
+              isSelected && styles.notesMindmapNodeSelected,
             ]}
           >
+            <View
+              {...createDragHandlers(
+                renderNode.node.id,
+                nodePosition,
+                width,
+                renderNode.height,
+                (point) => onNodeMove(renderNode.node.id, point)
+              )}
+              style={styles.notesMindmapDragHandle}
+            >
+              <GripVertical size={13} color={renderNode.depth === 0 ? '#e0f2fe' : '#94a3b8'} strokeWidth={2.4} />
+            </View>
             <TextInput
               value={renderNode.node.label}
               onChangeText={(value) => onNodeChange(renderNode.node.id, value)}
+              onFocus={() => setSelectedMindmapNodeId(renderNode.node.id)}
               style={[
                 styles.notesMindmapNodeInput,
                 renderNode.depth > 0 && styles.notesMindmapChildNodeInput,
@@ -8581,6 +8607,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
+  notesMindmapNodeSelected: {
+    borderColor: '#4f46e5',
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+  },
   notesMindmapRootNode: {
     minHeight: 42,
     borderColor: '#4f46e5',
@@ -8594,6 +8625,16 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 34,
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
+  },
+  notesMindmapDragHandle: {
+    width: 18,
+    height: '100%',
+    minHeight: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -4,
+    marginRight: 3,
+    cursor: 'grab' as never,
   },
   notesMindmapNodeInput: {
     flex: 1,
