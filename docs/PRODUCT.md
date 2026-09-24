@@ -118,7 +118,7 @@ Rules:
 - Resource management and risk management should start as lightweight planning and annotation workflows, not as a heavy enterprise module.
 - Todo annotations and project planning/annotation should capture resource constraints, risks, assumptions, blockers, and mitigation notes.
 - Assignment only makes sense in a team or project context with multiple users.
-- The original Workspace Inbox should stay available for assigned-to-me tasks. Maps is a separate workspace area for visual planning maps.
+- The Workspace embedded inbox should stay available for assigned-to-me tasks without a separate top-level Inbox tab. Maps is a separate workspace area for visual planning maps.
 - Users should be able to answer: how many todos have I assigned, who did I send them to, when did I send them, and what is their current status?
 - Header search should keep workspace panes stable by moving matching active, completed, deleted, Inbox To you and From you, and project entries to the top of their panes while keeping non-matches visible and dimmed. Match by task text, notes, project context, assignees, creators, priority, due date, and workflow status.
 - The account header should show presence compactly: the personal status message appears inline after the username, the caret opens account/navigation controls, and the green dot means the browser is actively focused. The small activity bar represents an 8-hour work window; it fills green while the Workspace tab is open and visibly shown, even if the browser window is not focused.

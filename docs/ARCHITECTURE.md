@@ -141,8 +141,8 @@ Maps should be modeled separately from todo annotations and Team Pages.
 
 Current implementation:
 
-- The original Inbox tab and personal workspace side/inline panel remain the
-  assigned-to-me task inbox.
+- The personal workspace side/inline panel is the assigned-to-me task inbox;
+  there is no separate top-level Inbox tab.
 - Maps has its own Workspace tab with a map template picker and saved-map tabs
   backed by `AsyncStorage` per signed-in user. Created maps keep their
   template key, central topic, branch labels, and nested child nodes. The

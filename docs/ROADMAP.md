@@ -52,7 +52,7 @@ The app should stay free for personal and small-team use. Paid value should come
 - Project closure summary: phases completed, todos completed vs dropped, milestones hit or missed.
 - Due-date-based project planning and milestone tracking.
 - Project/team dashboards.
-- Dedicated Maps tab separate from the original Workspace Inbox.
+- Dedicated Maps tab separate from the Workspace embedded assignment inbox.
 - Personal calendar and team calendar views.
 - Recurring (weekly/monthly/annually) personal/team tasks.
 - Roles and permissions beyond owner/admin/member.

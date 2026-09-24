@@ -1757,7 +1757,6 @@ export default function HomeScreen() {
   const [aboutVisible, setAboutVisible] = useState(false);
   const [projectsViewOpen, setProjectsViewOpen] = useState(false);
   const [teamsViewOpen, setTeamsViewOpen] = useState(false);
-  const [inboxViewOpen, setInboxViewOpen] = useState(false);
   const [notesViewOpen, setNotesViewOpen] = useState(false);
   const [calendarViewOpen, setCalendarViewOpen] = useState(false);
   const [resourcesViewOpen, setResourcesViewOpen] = useState(false);
@@ -2017,10 +2016,9 @@ export default function HomeScreen() {
   }, [session]);
 
   const isProject = selectedProjectId !== null;
-  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
+  const isPersonal = selectedTeamId === null && !isProject && !projectsViewOpen && !teamsViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen;
   const workspaceTabActive = isPersonal && !teamsViewOpen;
   const projectsTabActive = (isProject || projectsViewOpen) && !teamsViewOpen;
-  const inboxTabActive = inboxViewOpen;
   const notesTabActive = notesViewOpen;
   const calendarTabActive = calendarViewOpen;
   const resourcesTabActive = resourcesViewOpen;
@@ -4841,7 +4839,7 @@ export default function HomeScreen() {
     );
   }
 
-  function renderWorkspaceInboxPanel(variant: 'side' | 'inline' | 'full') {
+  function renderWorkspaceInboxPanel(variant: 'side' | 'inline') {
     const totalInboxCount = assignedToMe.length + assignedFromMe.length;
     const inboxSections = (
       <>
@@ -4869,16 +4867,11 @@ export default function HomeScreen() {
       <View style={[
         variant === 'side' && styles.assignedToMePanel,
         variant === 'inline' && styles.assignedToMeInlinePanel,
-        variant === 'full' && styles.inboxViewPanel,
       ]}>
         <Text style={styles.assignedToMePanelTitle}>INBOX ({totalInboxCount})</Text>
-        {variant === 'full' ? (
-          inboxSections
-        ) : (
-          <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
-            {inboxSections}
-          </ScrollView>
-        )}
+        <ScrollView style={styles.assignedToMePanelList} showsVerticalScrollIndicator={false}>
+          {inboxSections}
+        </ScrollView>
       </View>
     );
   }
@@ -5487,7 +5480,6 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
-              setInboxViewOpen(false);
               setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
@@ -5508,7 +5500,6 @@ export default function HomeScreen() {
               setSelectedProjectId(rememberedProject?.id ?? null);
               setProjectsViewOpen(!rememberedProject);
               setTeamsViewOpen(false);
-              setInboxViewOpen(false);
               setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
@@ -5519,7 +5510,7 @@ export default function HomeScreen() {
             <Text style={[styles.workspaceTabText, projectsTabActive && styles.workspaceTabTextActive]}>
               Projects
             </Text>
-            {renderWorkspaceTabDivider(projectsTabActive, inboxTabActive)}
+            {renderWorkspaceTabDivider(projectsTabActive, notesTabActive)}
           </Pressable>
 
           <Pressable
@@ -5528,27 +5519,6 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
-              setInboxViewOpen(true);
-              setNotesViewOpen(false);
-              setCalendarViewOpen(false);
-              setResourcesViewOpen(false);
-              setDashboardViewOpen(false);
-            }}
-            style={[styles.workspaceTab, styles.workspaceTabJoined, inboxTabActive && styles.workspaceTabActive]}
-          >
-            <Text style={[styles.workspaceTabText, inboxTabActive && styles.workspaceTabTextActive]}>
-              Inbox
-            </Text>
-            {renderWorkspaceTabDivider(inboxTabActive, notesTabActive)}
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              setSelectedTeamId(null);
-              setSelectedProjectId(null);
-              setProjectsViewOpen(false);
-              setTeamsViewOpen(false);
-              setInboxViewOpen(false);
               setNotesViewOpen(true);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
@@ -5568,7 +5538,6 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
-              setInboxViewOpen(false);
               setNotesViewOpen(false);
               setCalendarViewOpen(true);
               setResourcesViewOpen(false);
@@ -5588,7 +5557,6 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
-              setInboxViewOpen(false);
               setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(true);
@@ -5608,7 +5576,6 @@ export default function HomeScreen() {
               setSelectedProjectId(null);
               setProjectsViewOpen(false);
               setTeamsViewOpen(false);
-              setInboxViewOpen(false);
               setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
@@ -5625,7 +5592,6 @@ export default function HomeScreen() {
           <Pressable
             onPress={() => {
               setProjectsViewOpen(false);
-              setInboxViewOpen(false);
               setNotesViewOpen(false);
               setCalendarViewOpen(false);
               setResourcesViewOpen(false);
@@ -5681,7 +5647,6 @@ export default function HomeScreen() {
                           setSelectedTeamId(team.id);
                           setSelectedProjectId(null);
                           setTeamsViewOpen(false);
-                          setInboxViewOpen(false);
                           setNotesViewOpen(false);
                           setCalendarViewOpen(false);
                         }}
@@ -5734,7 +5699,6 @@ export default function HomeScreen() {
                       setSelectedTeamId(team.id);
                       setSelectedProjectId(null);
                       setTeamsViewOpen(false);
-                      setInboxViewOpen(false);
                       setNotesViewOpen(false);
                       setCalendarViewOpen(false);
                     }}
@@ -5782,7 +5746,6 @@ export default function HomeScreen() {
                     setSelectedTeamId(null);
                     setProjectsViewOpen(false);
                     setTeamsViewOpen(false);
-                    setInboxViewOpen(false);
                     setNotesViewOpen(false);
                     setCalendarViewOpen(false);
                   }}
@@ -5812,7 +5775,7 @@ export default function HomeScreen() {
             );
           })}
           <Pressable
-            onPress={() => { setTeamsViewOpen(false); setInboxViewOpen(false); setNotesViewOpen(false); setCalendarViewOpen(false); openCreateTarget('project'); }}
+            onPress={() => { setTeamsViewOpen(false); setNotesViewOpen(false); setCalendarViewOpen(false); openCreateTarget('project'); }}
             style={styles.projectCardNew}
             accessibilityRole="button"
             accessibilityLabel="Create project"
@@ -5820,12 +5783,6 @@ export default function HomeScreen() {
             <Text style={styles.projectCardNewIcon}>+</Text>
             <Text style={styles.projectCardNewText}>New Project</Text>
           </Pressable>
-        </ScrollView>
-      )}
-
-      {inboxViewOpen && (
-        <ScrollView style={styles.inboxView} contentContainerStyle={styles.inboxViewContent}>
-          {renderWorkspaceInboxPanel('full')}
         </ScrollView>
       )}
 
@@ -6299,7 +6256,7 @@ export default function HomeScreen() {
         );
       })()}
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && selectedTeam && (
+      {!projectsViewOpen && !teamsViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && selectedTeam && (
         <View style={styles.memberPanel}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={styles.panelTitle}>{selectedTeam.name}</Text>
@@ -6337,7 +6294,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && nextMilestone && (
+      {!projectsViewOpen && !teamsViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && nextMilestone && (
         <View style={[styles.milestoneBanner, nextMilestone.daysLeft < 0 && styles.milestoneBannerOverdue]}>
           <Text style={styles.milestoneBannerText}>
             ◆ {nextMilestone.text}
@@ -6350,7 +6307,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
+      {!projectsViewOpen && !teamsViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectSwitchBar}>
           <ScrollView
             horizontal
@@ -6403,7 +6360,7 @@ export default function HomeScreen() {
       )}
 
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
+      {!projectsViewOpen && !teamsViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && isProject && (
         <View style={styles.projectViewModeBar}>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             {(['plan', 'kanban'] as ProjectViewMode[]).map((mode) => (
@@ -6475,7 +6432,7 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {!projectsViewOpen && !teamsViewOpen && !inboxViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && (isProject ? (
+      {!projectsViewOpen && !teamsViewOpen && !notesViewOpen && !calendarViewOpen && !resourcesViewOpen && !dashboardViewOpen && (isProject ? (
         projectViewMode === 'plan' ? (
         <KanbanDragProvider onMove={(todoId, targetPhaseId, _targetWorkflowStatus, overTodoId) => movePlanTodo(todoId, targetPhaseId, overTodoId)}>
           {/* Backlog strip — one-line capture bar; tasks land here by default */}
