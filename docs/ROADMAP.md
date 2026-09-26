@@ -35,7 +35,7 @@ The app should stay free for personal and small-team use. Paid value should come
 - Priority dropdown opened from the Add flow.
 - Facebook-style relative timestamps on todo rows.
 - Due-date views for overdue, due soon, today, and unscheduled work.
-- Synced workspace Maps storage for the current local map entries.
+- Team/project-scoped Maps storage beyond the current personal synced maps.
 - Team Pages for shared notes, links, status, and lightweight widgets.
 - Filters for urgent, assigned to me, created by me, completed, and active.
 - Empty states for Personal and Team workspaces.

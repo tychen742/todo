@@ -541,6 +541,68 @@ create policy "Project members can delete project todos"
     )
   );
 
+-- Workspace Maps: personal synced planning maps.
+create table if not exists workspace_mindmaps (
+  id text primary key,
+  owner_id uuid not null references profiles(id) on delete cascade default auth.uid(),
+  title text not null,
+  body text not null default '',
+  template text not null
+    check (template in ('balanced', 'right-stack', 'workshop', 'business-plan')),
+  topics text[] not null default '{}',
+  root_position jsonb,
+  nodes jsonb not null default '[]'::jsonb,
+  settings jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists workspace_mindmaps_owner_created_idx
+  on workspace_mindmaps (owner_id, created_at desc);
+
+alter table workspace_mindmaps enable row level security;
+
+drop policy if exists "Users can read own workspace mindmaps" on workspace_mindmaps;
+drop policy if exists "Users can insert own workspace mindmaps" on workspace_mindmaps;
+drop policy if exists "Users can update own workspace mindmaps" on workspace_mindmaps;
+drop policy if exists "Users can delete own workspace mindmaps" on workspace_mindmaps;
+
+create policy "Users can read own workspace mindmaps"
+  on workspace_mindmaps for select
+  to authenticated
+  using (owner_id = auth.uid());
+
+create policy "Users can insert own workspace mindmaps"
+  on workspace_mindmaps for insert
+  to authenticated
+  with check (owner_id = auth.uid());
+
+create policy "Users can update own workspace mindmaps"
+  on workspace_mindmaps for update
+  to authenticated
+  using (owner_id = auth.uid())
+  with check (owner_id = auth.uid());
+
+create policy "Users can delete own workspace mindmaps"
+  on workspace_mindmaps for delete
+  to authenticated
+  using (owner_id = auth.uid());
+
+grant select, insert, update, delete on workspace_mindmaps to authenticated;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'workspace_mindmaps'
+  ) then
+    alter publication supabase_realtime add table workspace_mindmaps;
+  end if;
+end $$;
+
 -- Organizations: company or workspace containers that sit above teams.
 create table if not exists organizations (
   id uuid primary key default gen_random_uuid(),

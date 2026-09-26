@@ -151,6 +151,31 @@ type WorkspaceMindmap = {
   settings: WorkspaceMindmapSettings;
 };
 
+type WorkspaceMindmapInput = Omit<Partial<WorkspaceMindmap>, 'root_position' | 'nodes' | 'settings'> & {
+  root_position?: Partial<MindmapPoint>;
+  nodes?: Partial<WorkspaceMindmapNode>[];
+  settings?: Partial<WorkspaceMindmapSettings>;
+};
+
+type StoredWorkspaceNotes = {
+  ideas?: string;
+  mindmap?: string;
+  mindmapDraft?: string;
+  mindmaps?: WorkspaceMindmapInput[];
+};
+
+type WorkspaceMindmapRow = {
+  id: string;
+  title: string | null;
+  body: string | null;
+  created_at: string | null;
+  template: string | null;
+  topics: string[] | null;
+  root_position: Partial<MindmapPoint> | null;
+  nodes: Partial<WorkspaceMindmapNode>[] | null;
+  settings: Partial<WorkspaceMindmapSettings> | null;
+};
+
 type MindmapTemplateKey = 'balanced' | 'right-stack' | 'workshop' | 'business-plan';
 
 type MindmapTemplate = {
@@ -959,6 +984,106 @@ function mindmapFieldsFromBody(body: string, fallback: MindmapTemplate) {
   return {
     title,
     topics: Array.from({ length: topicCount }, (_, index) => bodyTopics[index] ?? fallback.topics[index] ?? `Topic ${index + 1}`),
+  };
+}
+
+function normalizeWorkspaceMindmap(
+  mindmap: WorkspaceMindmapInput,
+  index = 0
+): WorkspaceMindmap {
+  const template = mindmapTemplateFor(mindmap.template ?? 'balanced');
+  const fields = mindmapFieldsFromBody(mindmap.body ?? '', template);
+  const title = mindmap.title ?? fields.title;
+  const savedTopics = Array.isArray(mindmap.topics) ? mindmap.topics : [];
+  const topicCount = Math.max(template.topics.length, savedTopics.length, fields.topics.length);
+  const topics = savedTopics.length > 0
+    ? Array.from({ length: topicCount }, (_, topicIndex) =>
+        savedTopics[topicIndex] ?? fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
+      )
+    : Array.from({ length: topicCount }, (_, topicIndex) =>
+        fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
+      );
+  const nodes = normalizeMindmapNodes(mindmap.nodes, topics, template.key);
+
+  return {
+    id: mindmap.id ?? `legacy-${index}-${Date.now()}`,
+    title,
+    body: mindmap.body ?? mindmapBody(title, nodes),
+    created_at: mindmap.created_at ?? new Date().toISOString(),
+    template: template.key,
+    topics: nodes.map((node) => node.label),
+    root_position: normalizeMindmapPoint(mindmap.root_position),
+    nodes,
+    settings: normalizeMindmapSettings(mindmap.settings, template.key),
+  };
+}
+
+function workspaceNotesStorageKey(userId: string) {
+  return `todo:workspace-notes:${userId}`;
+}
+
+function workspaceMindmapFromRow(row: WorkspaceMindmapRow): WorkspaceMindmap {
+  return normalizeWorkspaceMindmap({
+    id: row.id,
+    title: row.title ?? undefined,
+    body: row.body ?? undefined,
+    created_at: row.created_at ?? undefined,
+    template: (row.template ?? undefined) as MindmapTemplateKey | undefined,
+    topics: row.topics ?? undefined,
+    root_position: row.root_position ?? undefined,
+    nodes: Array.isArray(row.nodes) ? row.nodes : undefined,
+    settings: row.settings ?? undefined,
+  });
+}
+
+function workspaceMindmapDbPayload(ownerId: string, mindmap: WorkspaceMindmap) {
+  return {
+    id: mindmap.id,
+    owner_id: ownerId,
+    title: mindmap.title,
+    body: mindmap.body,
+    template: mindmap.template,
+    topics: mindmap.topics,
+    root_position: mindmap.root_position ?? null,
+    nodes: mindmap.nodes,
+    settings: mindmap.settings,
+    created_at: mindmap.created_at,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function readLocalWorkspaceNotes(userId: string) {
+  const value = await AsyncStorage.getItem(workspaceNotesStorageKey(userId));
+  if (!value) return { ideas: '', mindmaps: [] as WorkspaceMindmap[] };
+
+  const notes = JSON.parse(value) as StoredWorkspaceNotes;
+  const loadedMindmaps = Array.isArray(notes.mindmaps)
+    ? notes.mindmaps.map((mindmap, index) => normalizeWorkspaceMindmap(mindmap, index))
+    : [];
+  const legacyDraft = notes.mindmapDraft ?? notes.mindmap ?? '';
+  const migratedMindmaps = legacyDraft.trim() && loadedMindmaps.length === 0
+    ? (() => {
+        const template = mindmapTemplateFor('balanced');
+        const fields = mindmapFieldsFromBody(legacyDraft, template);
+        const nodes = mindmapNodesFromTopics(fields.topics, template.key);
+        return [
+          normalizeWorkspaceMindmap({
+            id: `legacy-draft-${Date.now()}`,
+            title: fields.title,
+            body: mindmapBody(fields.title, nodes),
+            created_at: new Date().toISOString(),
+            template: template.key,
+            topics: nodes.map((node) => node.label),
+            nodes,
+            settings: defaultMindmapSettings(template.key),
+          }),
+        ];
+      })()
+    : loadedMindmaps;
+
+  return {
+    ideas: notes.ideas ?? '',
+    mindmaps: migratedMindmaps,
   };
 }
 
@@ -1940,71 +2065,48 @@ export default function HomeScreen() {
     let cancelled = false;
     if (!uid) return;
 
-    AsyncStorage.getItem(`todo:workspace-notes:${uid}`)
-      .then((value) => {
-        if (cancelled || !value) return;
-        const notes = JSON.parse(value) as {
-          ideas?: string;
-          mindmap?: string;
-          mindmapDraft?: string;
-          mindmaps?: Partial<WorkspaceMindmap>[];
-        };
-        const legacyDraft = notes.mindmapDraft ?? notes.mindmap ?? '';
-        const loadedMindmaps = Array.isArray(notes.mindmaps)
-          ? notes.mindmaps.map((mindmap, index) => {
-              const template = mindmapTemplateFor(mindmap.template ?? 'balanced');
-              const settings = normalizeMindmapSettings(mindmap.settings, template.key);
-              const fields = mindmapFieldsFromBody(mindmap.body ?? '', template);
-              const title = mindmap.title ?? fields.title;
-              const savedTopics = Array.isArray(mindmap.topics) ? mindmap.topics : [];
-              const topicCount = Math.max(template.topics.length, savedTopics.length, fields.topics.length);
-              const topics = Array.isArray(mindmap.topics) && mindmap.topics.length > 0
-                ? Array.from({ length: topicCount }, (_, topicIndex) =>
-                    savedTopics[topicIndex] ?? fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
-                  )
-                : Array.from({ length: topicCount }, (_, topicIndex) =>
-                    fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
-                  );
-              const nodes = normalizeMindmapNodes(mindmap.nodes, topics, template.key);
-              return {
-                id: mindmap.id ?? `legacy-${index}-${Date.now()}`,
-                title,
-                body: mindmap.body ?? mindmapBody(title, nodes),
-                created_at: mindmap.created_at ?? new Date().toISOString(),
-                template: template.key,
-                topics: nodes.map((node) => node.label),
-                root_position: normalizeMindmapPoint(mindmap.root_position),
-                nodes,
-                settings,
-              };
-            })
-          : [];
-        const migratedMindmaps = legacyDraft.trim() && loadedMindmaps.length === 0
-          ? (() => {
-              const template = mindmapTemplateFor('balanced');
-              const fields = mindmapFieldsFromBody(legacyDraft, template);
-              const nodes = mindmapNodesFromTopics(fields.topics, template.key);
-              return [
-                {
-                  id: `legacy-draft-${Date.now()}`,
-                  title: fields.title,
-                  body: mindmapBody(fields.title, nodes),
-                  created_at: new Date().toISOString(),
-                  template: template.key,
-                  topics: nodes.map((node) => node.label),
-                  nodes,
-                  settings: defaultMindmapSettings(template.key),
-                },
-              ];
-            })()
-          : loadedMindmaps;
-        setWorkspaceIdeas(notes.ideas ?? '');
-        setWorkspaceMindmaps(migratedMindmaps);
+    Promise.all([
+      supabase
+        .from('workspace_mindmaps')
+        .select('id, title, body, created_at, template, topics, root_position, nodes, settings')
+        .eq('owner_id', uid)
+        .order('created_at', { ascending: false }),
+      readLocalWorkspaceNotes(uid),
+    ])
+      .then(([syncedResult, localNotes]) => {
+        if (cancelled) return;
+
+        if (syncedResult.error) {
+          setWorkspaceIdeas(localNotes.ideas);
+          setWorkspaceMindmaps(localNotes.mindmaps);
+          setActiveMindmapId((currentId) => (
+            currentId && localNotes.mindmaps.some((mindmap) => mindmap.id === currentId)
+              ? currentId
+              : localNotes.mindmaps[0]?.id ?? null
+          ));
+          setError(syncedResult.error.message);
+          return;
+        }
+
+        const syncedMindmaps = ((syncedResult.data ?? []) as WorkspaceMindmapRow[])
+          .map((row) => workspaceMindmapFromRow(row));
+        const nextMindmaps = syncedMindmaps.length > 0 ? syncedMindmaps : localNotes.mindmaps;
+        setWorkspaceIdeas(localNotes.ideas);
+        setWorkspaceMindmaps(nextMindmaps);
         setActiveMindmapId((currentId) => (
-          currentId && migratedMindmaps.some((mindmap) => mindmap.id === currentId)
+          currentId && nextMindmaps.some((mindmap) => mindmap.id === currentId)
             ? currentId
-            : migratedMindmaps[0]?.id ?? null
+            : nextMindmaps[0]?.id ?? null
         ));
+
+        if (syncedMindmaps.length === 0 && localNotes.mindmaps.length > 0) {
+          supabase
+            .from('workspace_mindmaps')
+            .upsert(localNotes.mindmaps.map((mindmap) => workspaceMindmapDbPayload(uid, mindmap)))
+            .then(({ error: migrationError }) => {
+              if (migrationError && !cancelled) setError(migrationError.message);
+            });
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -2346,13 +2448,25 @@ export default function HomeScreen() {
     nextIdeas: string,
     nextMindmaps: WorkspaceMindmap[]
   ) {
-    if (!session) return;
+    const uid = session?.user.id;
+    if (!uid) return;
     AsyncStorage.setItem(
-      `todo:workspace-notes:${session.user.id}`,
+      workspaceNotesStorageKey(uid),
       JSON.stringify({ ideas: nextIdeas, mindmaps: nextMindmaps })
     ).catch(() => {
       setError('Could not save notes.');
     });
+  }
+
+  function saveWorkspaceMindmap(mindmap: WorkspaceMindmap) {
+    const uid = session?.user.id;
+    if (!uid) return;
+    supabase
+      .from('workspace_mindmaps')
+      .upsert(workspaceMindmapDbPayload(uid, mindmap))
+      .then(({ error: saveError }) => {
+        if (saveError) setError(saveError.message);
+      });
   }
 
   function createWorkspaceMindmap(templateKey: MindmapTemplateKey) {
@@ -2360,23 +2474,25 @@ export default function HomeScreen() {
     const nodes = mindmapNodesFromTopics(template.topics, template.key);
     const settings = defaultMindmapSettings(template.key);
     const id = `${Date.now()}`;
+    const mindmap = {
+      id,
+      title: template.title,
+      body: mindmapBody(template.title, nodes),
+      created_at: new Date().toISOString(),
+      template: template.key,
+      topics: nodes.map((node) => node.label),
+      nodes,
+      settings,
+    };
     const nextMindmaps = [
-      {
-        id,
-        title: template.title,
-        body: mindmapBody(template.title, nodes),
-        created_at: new Date().toISOString(),
-        template: template.key,
-        topics: nodes.map((node) => node.label),
-        nodes,
-        settings,
-      },
+      mindmap,
       ...workspaceMindmaps,
     ];
     setWorkspaceMindmaps(nextMindmaps);
     setActiveMindmapId(id);
     setMindmapTemplatePickerOpen(false);
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
+    saveWorkspaceMindmap(mindmap);
   }
 
   function deleteWorkspaceMindmap(id: string) {
@@ -2386,14 +2502,23 @@ export default function HomeScreen() {
       currentId === id ? nextMindmaps[0]?.id ?? null : currentId
     ));
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
+    supabase
+      .from('workspace_mindmaps')
+      .delete()
+      .eq('id', id)
+      .eq('owner_id', session?.user.id ?? '')
+      .then(({ error: deleteError }) => {
+        if (deleteError) setError(deleteError.message);
+      });
   }
 
   function updateWorkspaceMindmap(id: string, updates: Partial<Pick<WorkspaceMindmap, 'title' | 'nodes' | 'root_position' | 'settings'>>) {
+    let updatedMindmap: WorkspaceMindmap | null = null;
     const nextMindmaps = workspaceMindmaps.map((mindmap) => {
       if (mindmap.id !== id) return mindmap;
       const title = updates.title ?? mindmap.title;
       const nodes = updates.nodes ?? mindmap.nodes;
-      return {
+      updatedMindmap = {
         ...mindmap,
         title,
         nodes,
@@ -2402,9 +2527,11 @@ export default function HomeScreen() {
         topics: nodes.map((node) => node.label),
         body: mindmapBody(title, nodes),
       };
+      return updatedMindmap;
     });
     setWorkspaceMindmaps(nextMindmaps);
     saveWorkspaceNotes(workspaceIdeas, nextMindmaps);
+    if (updatedMindmap) saveWorkspaceMindmap(updatedMindmap);
   }
 
   function addWorkspaceMindmapNode(id: string, parentNodeId: string | null) {

@@ -108,14 +108,38 @@ Current `todos` columns can answer the latest assignment state: who created the 
 
 `note` currently stores optional per-task detail text. Product language should treat this as a future todo annotation concept, not workspace-level Maps.
 
-Workspace Maps are not in Postgres yet. The current Maps surface stores the
-map template choice for each created map, editable central topic and nested
-node labels, optional root/node percentage positions, and created map entries
-in per-user `AsyncStorage`. The previous local Ideas value remains in that
-payload for migration safety but is not currently surfaced. Top-level nodes can
-be added from the canvas, edge nodes expose child-node add controls, nodes can
-be dragged or deleted locally, and a future synced workspace table should own
-durable workspace maps.
+### `workspace_mindmaps`
+
+Personal synced planning maps for the Workspace Maps surface.
+
+- `id`
+- `owner_id`
+- `title`
+- `body`
+- `template`
+- `topics`
+- `root_position`
+- `nodes`
+- `settings`
+- `created_at`
+- `updated_at`
+
+`owner_id` is the signed-in profile that owns the map. RLS limits all reads and
+writes to the owner. The current app syncs personal maps through this table and
+keeps the old per-user `AsyncStorage` payload only as a fallback cache and
+one-time migration source for older local maps.
+
+`template` is one of:
+
+- `balanced`
+- `right-stack`
+- `workshop`
+- `business-plan`
+
+`nodes` stores the nested editable node tree, including optional percentage
+positions for manually placed pills. `root_position` stores the central topic
+position when dragged. `settings` stores the compact map controls: layout,
+colored branches, and compact spacing.
 
 #### Timestamp Modeling Notes
 

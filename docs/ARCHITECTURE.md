@@ -144,7 +144,7 @@ Current implementation:
 - The personal workspace side/inline panel is the assigned-to-me task inbox;
   there is no separate top-level Inbox tab.
 - Maps has its own Workspace tab with a map template picker and saved-map tabs
-  backed by `AsyncStorage` per signed-in user. Created maps keep their
+  backed by the `workspace_mindmaps` table per signed-in user. Created maps keep their
   template key, central topic, branch labels, and nested child nodes. The
   rendered map nodes are editable directly, top-level nodes can be added from
   the canvas, edge nodes expose child-node add controls, and dragged root/node
@@ -170,11 +170,14 @@ Current implementation:
   map rather than stretching the map itself. The prior local Ideas value remains
   in the storage payload for migration safety, but it is not currently surfaced
   in the UI.
-- These maps are local-only until the shared workspace notes/maps scope is settled.
+- Maps sync through Supabase for the signed-in owner. The app still reads the
+  older per-user `AsyncStorage` payload as a one-time migration source when the
+  synced table has no maps yet, and writes a local cache as a fallback.
 
 Likely synced architecture:
 
-- Store workspace-level notes/maps in a first-party table such as `workspace_notes`.
+- Generalize `workspace_mindmaps` beyond owner-only personal maps when team and
+  project map scope is ready.
 - Scope notes to the active workspace: personal, team, or project.
 - Let a map optionally attach to one primary project. A project map should live
   with project context, show up from that project's planning surface, and still
