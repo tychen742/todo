@@ -76,6 +76,8 @@ Decision: every column in a list view must have a fixed width that is shared exa
 
 Reason: misaligned column headers break visual scanning and make the UI feel unpolished. The rule is enforced by (a) wrapping related row elements (e.g. priority square + assigner avatar) in a fixed-width container, and (b) setting the corresponding sort column to the same width + marginLeft. When a row element is added or removed, both the container width and the sort column width must be updated together.
 
+Implementation note: shared todo list column widths live in `components/todoColumns.ts` and must be imported by both the sort/header bar and `TodoItem`. The Workspace project filter and row project avatar use the same explicit project slot width, and the Kanban/status icon uses a separate explicit status slot inside the same fixed status column.
+
 UI symbols that represent the same entity or state must be consistent across views. If a project is represented by a colored initials avatar in task rows, the Projects view must use the same avatar derivation for that project. If a state uses a specific icon in one row or card surface, other surfaces showing that state should use the same icon unless there is a documented reason not to.
 
 Missing optional entity slots must not collapse when neighboring columns depend on their position. If a task row has no project assignment, the project-avatar slot renders a compact `+` placeholder rather than shifting the Kanban/start icon into the project column. In Workspace rows, that `+` is an action that opens project assignment. Workspace and Projects views must preserve the same row-column visual grammar.

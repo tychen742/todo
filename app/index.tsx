@@ -29,6 +29,23 @@ import * as ImagePicker from 'expo-image-picker';
 import { ArrowLeft, Filter, GripVertical, ListTodo, MoreHorizontal, Plus, Trash2, X } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
+import {
+  taskAgeColumnWidth,
+  taskArchiveColumnMarginLeft,
+  taskArchiveColumnWidth,
+  taskCheckboxColumnWidth,
+  taskDueColumnMarginLeft,
+  taskDueColumnWidth,
+  taskHandleColumnWidth,
+  taskPriorityColumnMarginLeft,
+  taskPriorityColumnWidth,
+  taskProjectSlotWidth,
+  taskRowPaddingRight,
+  taskStatusColumnMarginLeft,
+  taskStatusColumnWidth,
+  taskStatusSlotGap,
+  taskStatusSlotWidth,
+} from '../components/todoColumns';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { parseTodoQuickCapture, projectCaptureAbbreviation } from '../lib/quickCapture';
 
@@ -246,18 +263,6 @@ const mindmapTemplates: MindmapTemplate[] = [
     colors: ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#fb7185', '#2dd4bf', '#818cf8'],
   },
 ];
-const taskHandleColumnWidth = 32;
-const taskCheckboxColumnWidth = 30;
-const taskPriorityColumnWidth = 48;
-const taskPriorityColumnMarginLeft = 8;
-const taskStatusColumnWidth = 56;
-const taskStatusColumnMarginLeft = 8;
-const taskDueColumnWidth = 50;
-const taskDueColumnMarginLeft = 8;
-const taskAgeColumnWidth = 46;
-const taskArchiveColumnWidth = 20;
-const taskArchiveColumnMarginLeft = 2;
-const taskRowPaddingRight = 2;
 const appName = 'RodoFlow';
 const webAppUrl = 'https://rodoflow.com';
 const legacyWebHosts = [
@@ -10682,17 +10687,17 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: taskStatusSlotGap,
   },
   sortColProject: {
-    width: 18,
+    width: taskProjectSlotWidth,
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   sortColStatus: {
-    width: 18,
+    width: taskStatusSlotWidth,
     flexShrink: 0,
   },
   prioritySortSquare: {

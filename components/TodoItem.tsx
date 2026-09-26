@@ -1,6 +1,20 @@
 import { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, Image, type GestureResponderEvent } from 'react-native';
 import { CircleCheck, Eye, SquareKanban, SquarePlay, Trash2 } from 'lucide-react-native';
+import {
+  taskAgeColumnWidth,
+  taskArchiveColumnMarginLeft,
+  taskArchiveColumnWidth,
+  taskDueColumnMarginLeft,
+  taskDueColumnWidth,
+  taskPriorityColumnMarginLeft,
+  taskPriorityColumnWidth,
+  taskProjectSlotWidth,
+  taskStatusColumnMarginLeft,
+  taskStatusColumnWidth,
+  taskStatusSlotGap,
+  taskStatusSlotWidth,
+} from './todoColumns';
 
 type KanbanStageKey = 'backlog' | 'doing' | 'review' | 'done';
 
@@ -294,60 +308,64 @@ export default function TodoItem({
 
       <View style={styles.statusCol}>
         <View style={styles.statusIcons}>
-          {projectAvatar ? (
-            <Pressable
-              onPress={onProject}
-              disabled={!onProject}
-              onHoverIn={() => setProjectHovered(true)}
-              onHoverOut={() => setProjectHovered(false)}
-              style={[styles.projectAvatar, { backgroundColor: projectAvatar.color }]}
-              accessibilityRole={onProject ? 'button' : 'image'}
-              accessibilityLabel={`Project: ${projectAvatar.label}`}
-              hitSlop={4}
-            >
-              <Text style={styles.projectAvatarText}>{projectAvatar.initials}</Text>
-              {projectHovered && Platform.OS === 'web' && (
-                <View style={styles.projectTooltip}>
-                  <Text style={styles.tooltipText}>{projectAvatar.label}</Text>
-                </View>
-              )}
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={onProject}
-              disabled={!onProject}
-              onHoverIn={() => setProjectHovered(true)}
-              onHoverOut={() => setProjectHovered(false)}
-              style={styles.projectAvatarEmpty}
-              accessibilityRole={onProject ? 'button' : 'image'}
-              accessibilityLabel={onProject ? 'Assign project' : 'No project assigned'}
-              hitSlop={4}
-            >
-              <Text style={styles.projectAvatarEmptyText}>+</Text>
-              {projectHovered && Platform.OS === 'web' && (
-                <View style={styles.projectTooltip}>
-                  <Text style={styles.tooltipText}>No project</Text>
-                </View>
-              )}
-            </Pressable>
-          )}
-          {!done && (kanbanStage || onStartWork) ? (
-            <Pressable
-              onPress={onStartWork}
-              disabled={done || !onStartWork}
-              onHoverIn={() => setStatusHovered(true)}
-              onHoverOut={() => setStatusHovered(false)}
-              accessibilityRole="button"
-              accessibilityLabel={kanbanStage ? `Choose status. Current: ${kanbanStage.label}` : startedWorkAt ? 'Choose status. Current: Doing' : 'Choose status'}
-              hitSlop={4}
-            >
-              <StatusIcon
-                size={18}
-                strokeWidth={2.5}
-                color={kanbanStage ? kanbanStageColors[kanbanStage.key] : startedWorkAt ? '#16a34a' : '#2563eb'}
-              />
-            </Pressable>
-          ) : null}
+          <View style={styles.projectSlot}>
+            {projectAvatar ? (
+              <Pressable
+                onPress={onProject}
+                disabled={!onProject}
+                onHoverIn={() => setProjectHovered(true)}
+                onHoverOut={() => setProjectHovered(false)}
+                style={[styles.projectAvatar, { backgroundColor: projectAvatar.color }]}
+                accessibilityRole={onProject ? 'button' : 'image'}
+                accessibilityLabel={`Project: ${projectAvatar.label}`}
+                hitSlop={4}
+              >
+                <Text style={styles.projectAvatarText}>{projectAvatar.initials}</Text>
+                {projectHovered && Platform.OS === 'web' && (
+                  <View style={styles.projectTooltip}>
+                    <Text style={styles.tooltipText}>{projectAvatar.label}</Text>
+                  </View>
+                )}
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={onProject}
+                disabled={!onProject}
+                onHoverIn={() => setProjectHovered(true)}
+                onHoverOut={() => setProjectHovered(false)}
+                style={styles.projectAvatarEmpty}
+                accessibilityRole={onProject ? 'button' : 'image'}
+                accessibilityLabel={onProject ? 'Assign project' : 'No project assigned'}
+                hitSlop={4}
+              >
+                <Text style={styles.projectAvatarEmptyText}>+</Text>
+                {projectHovered && Platform.OS === 'web' && (
+                  <View style={styles.projectTooltip}>
+                    <Text style={styles.tooltipText}>No project</Text>
+                  </View>
+                )}
+              </Pressable>
+            )}
+          </View>
+          <View style={styles.statusIconSlot}>
+            {!done && (kanbanStage || onStartWork) ? (
+              <Pressable
+                onPress={onStartWork}
+                disabled={done || !onStartWork}
+                onHoverIn={() => setStatusHovered(true)}
+                onHoverOut={() => setStatusHovered(false)}
+                accessibilityRole="button"
+                accessibilityLabel={kanbanStage ? `Choose status. Current: ${kanbanStage.label}` : startedWorkAt ? 'Choose status. Current: Doing' : 'Choose status'}
+                hitSlop={4}
+              >
+                <StatusIcon
+                  size={18}
+                  strokeWidth={2.5}
+                  color={kanbanStage ? kanbanStageColors[kanbanStage.key] : startedWorkAt ? '#16a34a' : '#2563eb'}
+                />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         {statusHovered && Platform.OS === 'web' && !projectHovered && !done && (kanbanStage || onStartWork) && (
           <View style={styles.statusTooltip}>
@@ -513,27 +531,27 @@ const styles = StyleSheet.create({
     maxWidth: 96,
   },
   statusCol: {
-    marginLeft: 8,
-    width: 56,
+    marginLeft: taskStatusColumnMarginLeft,
+    width: taskStatusColumnWidth,
     height: 20,
     alignItems: 'flex-start',
     justifyContent: 'center',
     position: 'relative',
   },
   dueDateCol: {
-    marginLeft: 8,
-    width: 50,
+    marginLeft: taskDueColumnMarginLeft,
+    width: taskDueColumnWidth,
     alignItems: 'flex-start',
   },
   ageCol: {
     marginLeft: 0,
-    width: 46,
+    width: taskAgeColumnWidth,
     alignItems: 'flex-start',
   },
   archiveAction: {
-    width: 20,
+    width: taskArchiveColumnWidth,
     height: 20,
-    marginLeft: 2,
+    marginLeft: taskArchiveColumnMarginLeft,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -566,8 +584,8 @@ const styles = StyleSheet.create({
   priorityGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
-    width: 48,
+    marginLeft: taskPriorityColumnMarginLeft,
+    width: taskPriorityColumnWidth,
   },
   priorityControl: {
     width: 20,
@@ -724,7 +742,21 @@ const styles = StyleSheet.create({
   statusIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: taskStatusSlotGap,
+  },
+  projectSlot: {
+    width: taskProjectSlotWidth,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  statusIconSlot: {
+    width: taskStatusSlotWidth,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   projectAvatar: {
     width: 18,

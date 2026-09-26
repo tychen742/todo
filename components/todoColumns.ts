@@ -1,0 +1,15 @@
+export const taskHandleColumnWidth = 32;
+export const taskCheckboxColumnWidth = 30;
+export const taskPriorityColumnWidth = 48;
+export const taskPriorityColumnMarginLeft = 8;
+export const taskStatusColumnWidth = 56;
+export const taskStatusColumnMarginLeft = 8;
+export const taskProjectSlotWidth = 18;
+export const taskStatusSlotWidth = 18;
+export const taskStatusSlotGap = 5;
+export const taskDueColumnWidth = 50;
+export const taskDueColumnMarginLeft = 8;
+export const taskAgeColumnWidth = 46;
+export const taskArchiveColumnWidth = 20;
+export const taskArchiveColumnMarginLeft = 2;
+export const taskRowPaddingRight = 2;
