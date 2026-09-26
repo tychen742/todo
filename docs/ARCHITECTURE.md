@@ -28,10 +28,22 @@ The project is intentionally on Expo SDK 54 because the App Store version of Exp
 
 ## App Structure
 
-- `app/index.tsx`: primary screen and current product workflow.
+- `app/index.tsx`: primary route composition and current product workflow UI.
 - `components/TodoItem.tsx`: todo row rendering.
+- `components/KanbanCard.tsx`: project Kanban card rendering.
 - `api/keep-supabase-awake.js`: Vercel Cron endpoint for Supabase keep-alive
   writes.
+- `lib/types.ts`: shared app domain types used by the route, components, and
+  helper modules.
+- `lib/todos.ts`: todo ordering, workflow status, priority metadata, and shared
+  Supabase todo select columns.
+- `lib/calendar.ts`: date parsing, display labels, and calendar grid helpers.
+- `lib/mindmaps.ts`: Workspace mind map templates, normalization, local cache
+  migration, and node mutation helpers.
+- `lib/authSession.ts`: Supabase Auth callback parsing, OAuth redirect routing,
+  and invite URL construction.
+- `lib/avatar.ts`, `lib/display.ts`, and `lib/browserPresence.ts`: small avatar,
+  display-name, email validation, and browser presence helpers.
 - `lib/supabase.ts`: Supabase client and auth persistence.
 - `supabase/schema.sql`: database schema, RLS policies, and realtime publication.
 
@@ -133,7 +145,10 @@ Supabase Row Level Security is the main security boundary.
 
 - The app currently uses direct Supabase client writes from the frontend.
 - Adding unknown users to teams is not complete; it needs `team_invitations`.
-- The main screen is doing too much and should eventually split into domain components.
+- The main screen still owns too much UI and mutation orchestration. Shared
+  types, todo/calendar/auth/display, and mind map model helpers have been
+  extracted to `lib/`; the remaining long-term work is to split route-level UI
+  into domain components and hooks.
 
 ## Maps Architecture
 

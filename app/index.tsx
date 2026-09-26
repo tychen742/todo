@@ -18,9 +18,9 @@ import {
 } from 'react-native';
 import { DraggableList } from '../components/DraggableList';
 import { KanbanDragItem, KanbanDragProvider, KanbanDropLane } from '../components/KanbanDrag';
+import { KanbanCard } from '../components/KanbanCard';
 import { StatusBar } from 'expo-status-bar';
 import { Stack } from 'expo-router';
-import { createURL } from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
@@ -47,171 +47,103 @@ import {
   taskStatusSlotWidth,
 } from '../components/todoColumns';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { parseTodoQuickCapture, projectCaptureAbbreviation } from '../lib/quickCapture';
+import { parseTodoQuickCapture } from '../lib/quickCapture';
+import { AVATAR_ANIMALS, pickAvatarAnimal, pickAvatarColor, projectInitials } from '../lib/avatar';
+import type {
+  AppTheme,
+  AppThemeKey,
+  AuthErrorField,
+  CalendarViewMode,
+  CreateTarget,
+  Density,
+  Member,
+  MindmapLayoutMode,
+  MindmapPoint,
+  MindmapTemplate,
+  MindmapTemplateKey,
+  Organization,
+  Priority,
+  Profile,
+  ProfileSummary,
+  Project,
+  ProjectViewMode,
+  SortField,
+  Team,
+  Todo,
+  WorkflowLaneKey,
+  WorkspaceMindmap,
+  WorkspaceMindmapNode,
+  WorkspaceMindmapRow,
+  WorkspaceMindmapSettings,
+} from '../lib/types';
+import {
+  addDays,
+  buildCalendarDays,
+  buildWeekDays,
+  calendarViewTitle,
+  formatActiveDuration,
+  formatArchiveDate,
+  formatDateValue,
+  fromDateTimeInputValue,
+  isSameDate,
+  monthLabel,
+  parseDateValue,
+  toDateTimeInputValue,
+} from '../lib/calendar';
+import {
+  defaultWorkflowColumnLabels,
+  priorities,
+  priorityColors,
+  priorityRank,
+  scopedPositionUpdates,
+  sortTodos,
+  sortWorkflowTodos,
+  todoSelectColumns,
+  workflowSortRank,
+  workflowStageColors,
+  workflowStageForTodo,
+  workflowStages,
+} from '../lib/todos';
+import { emailDisplayName, isValidEmailAddress, profileDisplayName } from '../lib/display';
+import { browserDisplayActive, browserTabShown } from '../lib/browserPresence';
+import {
+  authRedirectUrl,
+  forceOAuthRedirectUrl,
+  getAuthCallbackParams,
+  markOAuthRedirectIntent,
+  oauthRedirectUrl,
+  projectInviteUrl,
+  promoteLocalSessionToProduction,
+  redirectNonCanonicalWebHost,
+  resolveInitialAuthSession,
+  sessionFromAuthCallbackParams,
+} from '../lib/authSession';
+import {
+  addMindmapNode,
+  defaultMindmapSettings,
+  deleteMindmapNode,
+  editableMindmapPositions,
+  mapMindmapNodes,
+  mindmapBody,
+  mindmapNodesFromTopics,
+  mindmapTemplateFor,
+  mindmapTemplates,
+  moveMindmapNode,
+  readLocalWorkspaceNotes,
+  relayoutMindmapNodes,
+  workspaceMindmapDbPayload,
+  workspaceMindmapFromRow,
+  workspaceNotesStorageKey,
+} from '../lib/mindmaps';
 
 if (Platform.OS === 'web') {
   WebBrowser.maybeCompleteAuthSession();
 }
 
-type Todo = {
-  id: string;
-  text: string;
-  done: boolean;
-  scheduled_start_at: string | null;
-  started_work_at: string | null;
-  assigned_to: string | null;
-  created_by: string | null;
-  priority: Priority;
-  due_date: string | null;
-  note: string | null;
-  created_at: string;
-  assigned_at: string | null;
-  accepted_at: string | null;
-  completed_at: string | null;
-  archived_at: string | null;
-  position: number | null;
-  workflow_position: number | null;
-  is_milestone: boolean;
-  project_id: string | null;
-  phase_id: string | null;
-  workflow_status: WorkflowLaneKey;
-  team_id: string | null;
-  estimate: string | null;
-};
-
-type Organization = {
-  id: string;
-  name: string;
-  member_count?: number;
-};
-
-type Team = {
-  id: string;
-  name: string;
-  org_id: string | null;
-  member_count?: number;
-};
-
-type Project = {
-  id: string;
-  name: string;
-  team_id: string | null;
-  created_by: string;
-  archived_at: string | null;
-};
-
-type Member = {
-  user_id: string;
-  email: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  role: string;
-};
-
-type Profile = {
-  id: string;
-  email: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  status: string | null;
-};
-
-type ProfileSummary = Pick<Profile, 'id' | 'email' | 'display_name'>;
-
-type MindmapPoint = {
-  x: number;
-  y: number;
-};
-
-type WorkspaceMindmapNode = {
-  id: string;
-  label: string;
-  x?: number;
-  y?: number;
-  children: WorkspaceMindmapNode[];
-};
-
-type MindmapLayoutMode = 'balanced' | 'right';
-
-type WorkspaceMindmapSettings = {
-  layout: MindmapLayoutMode;
-  coloredBranches: boolean;
-  compactSpacing: boolean;
-};
-
-type WorkspaceMindmap = {
-  id: string;
-  title: string;
-  body: string;
-  created_at: string;
-  template: MindmapTemplateKey;
-  topics: string[];
-  root_position?: MindmapPoint;
-  nodes: WorkspaceMindmapNode[];
-  settings: WorkspaceMindmapSettings;
-};
-
-type WorkspaceMindmapInput = Omit<Partial<WorkspaceMindmap>, 'root_position' | 'nodes' | 'settings'> & {
-  root_position?: Partial<MindmapPoint>;
-  nodes?: Partial<WorkspaceMindmapNode>[];
-  settings?: Partial<WorkspaceMindmapSettings>;
-};
-
-type StoredWorkspaceNotes = {
-  ideas?: string;
-  mindmap?: string;
-  mindmapDraft?: string;
-  mindmaps?: WorkspaceMindmapInput[];
-};
-
-type WorkspaceMindmapRow = {
-  id: string;
-  title: string | null;
-  body: string | null;
-  created_at: string | null;
-  template: string | null;
-  topics: string[] | null;
-  root_position: Partial<MindmapPoint> | null;
-  nodes: Partial<WorkspaceMindmapNode>[] | null;
-  settings: Partial<WorkspaceMindmapSettings> | null;
-};
-
-type MindmapTemplateKey = 'balanced' | 'right-stack' | 'workshop' | 'business-plan';
-
-type MindmapTemplate = {
-  key: MindmapTemplateKey;
-  name: string;
-  title: string;
-  topics: string[];
-  colors: string[];
-};
-
-type Priority = 'low' | 'normal' | 'high' | 'urgent';
-type SortField = 'text' | 'priority' | 'assigned_by' | 'status' | 'project' | 'due_date' | 'age' | 'created_at';
-type CreateTarget = 'team' | 'organization' | 'project';
-type ProjectViewMode = 'plan' | 'kanban';
-type WorkflowLaneKey = 'backlog' | 'doing' | 'review' | 'done';
-type CalendarViewMode = 'day' | 'week' | 'month';
-type AuthErrorField = 'displayName' | 'email' | 'password' | 'all' | null;
-type AppThemeKey = 'flow' | 'focus' | 'graphite';
-
-type AppTheme = {
-  name: string;
-  accent: string;
-  accentStrong: string;
-  accentSoft: string;
-  accentTint: string;
-  inputBackground: string;
-  inputBorder: string;
-  inputFocusBorder: string;
-};
-
-const priorities: Priority[] = ['low', 'normal', 'high', 'urgent'];
 const priorityPopoverWidth = 120;
 const priorityPopoverHeight = 108;
 const defaultVisibleTaskRows = 5;
 const todoRowHeight = 70;
-type Density = 'compact' | 'cozy' | 'roomy';
 const densityPV: Record<Density, number> = { compact: 2, cozy: 2, roomy: 2 };
 const densityRowH: Record<Density, number> = { compact: 56, cozy: 70, roomy: 88 };
 const incomingRowHeight = 106;
@@ -258,477 +190,8 @@ const appThemes: Record<AppThemeKey, AppTheme> = {
 const appThemeKeys = Object.keys(appThemes) as AppThemeKey[];
 const webInputNoOutline = { outlineStyle: 'none' } as never;
 const completedDropTargetId = 'todo-completed-drop-target';
-const mindmapTemplates: MindmapTemplate[] = [
-  {
-    key: 'balanced',
-    name: 'Balanced',
-    title: 'Central Topic',
-    topics: ['Main Topic 4', 'Main Topic 3', 'Main Topic 1', 'Main Topic 2'],
-    colors: ['#f87171', '#fb923c', '#34d399', '#22d3ee'],
-  },
-  {
-    key: 'right-stack',
-    name: 'Right Stack',
-    title: 'Central Topic',
-    topics: ['Main Topic 1', 'Main Topic 2', 'Main Topic 3', 'Main Topic 4'],
-    colors: ['#facc15', '#f97316', '#3b82f6', '#14b8a6'],
-  },
-  {
-    key: 'workshop',
-    name: 'Workshop',
-    title: 'Workshop',
-    topics: ['Goals', 'Agenda', 'Materials', 'Engage', 'Venue', 'Feedback'],
-    colors: ['#86efac', '#fdba74', '#c4b5fd', '#f9a8d4', '#93c5fd', '#5eead4'],
-  },
-  {
-    key: 'business-plan',
-    name: 'Business Plan',
-    title: 'Business Plan',
-    topics: ['Market', 'Strategy', 'Team', 'Summary', 'Company', 'Financial', 'Product'],
-    colors: ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#fb7185', '#2dd4bf', '#818cf8'],
-  },
-];
 const appName = 'RodoFlow';
-const webAppUrl = 'https://rodoflow.com';
-const legacyWebHosts = [
-  'todo-eight-gamma.vercel.app',
-  'todo-tsangyao-chen-s-projects.vercel.app',
-];
-const localOAuthRedirectParam = 'rodoflow_local_redirect';
-const oauthReturnStorageKey = 'rodoflow:oauth-return-to-production';
 const themeStorageKey = 'rodoflow:theme';
-
-const priorityRank: Record<Priority, number> = {
-  urgent: 0,
-  high: 1,
-  normal: 2,
-  low: 3,
-};
-
-const workflowSortRank: Record<WorkflowLaneKey, number> = {
-  doing: 0,
-  review: 1,
-  backlog: 2,
-  done: 3,
-};
-
-const workflowStages: WorkflowLaneKey[] = ['backlog', 'doing', 'review', 'done'];
-
-const workflowStageColors: Record<WorkflowLaneKey, string> = {
-  backlog: '#9ca3af',
-  doing: '#6366f1',
-  review: '#f59e0b',
-  done: '#16a34a',
-};
-
-const priorityColors: Record<Priority, string> = {
-  low: '#9ca3af',
-  normal: '#60a5fa',
-  high: '#f59e0b',
-  urgent: '#ef4444',
-};
-
-const defaultWorkflowColumnLabels: Record<WorkflowLaneKey, string> = {
-  backlog: 'Backlog',
-  doing: 'Doing',
-  review: 'Review',
-  done: 'Done',
-};
-
-const todoSelectColumns = 'id, text, done, scheduled_start_at, started_work_at, assigned_to, created_by, priority, due_date, note, created_at, assigned_at, accepted_at, completed_at, archived_at, position, workflow_position, is_milestone, project_id, phase_id, workflow_status, team_id, estimate';
-
-function workflowStageForTodo(todo: Pick<Todo, 'done' | 'workflow_status'>): WorkflowLaneKey {
-  if (todo.done) return 'done';
-  return todo.workflow_status;
-}
-
-function sortTodos(items: Todo[]) {
-  return [...items].sort((a, b) => {
-    // Urgent always floats above everything else.
-    if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
-    if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
-    // Within same urgency tier, respect manual drag position.
-    if (a.position !== null && b.position !== null) return a.position - b.position;
-    if (a.position !== null) return -1;
-    if (b.position !== null) return 1;
-    // No positions yet: fall back to priority rank then recency.
-    const priorityDelta = priorityRank[a.priority] - priorityRank[b.priority];
-    if (priorityDelta !== 0) return priorityDelta;
-    return Date.parse(b.created_at) - Date.parse(a.created_at);
-  });
-}
-
-function sortWorkflowTodos(items: Todo[]) {
-  return [...items].sort((a, b) => {
-    if (a.workflow_position !== null && b.workflow_position !== null) return a.workflow_position - b.workflow_position;
-    if (a.workflow_position !== null) return -1;
-    if (b.workflow_position !== null) return 1;
-    return sortTodos([a, b])[0].id === a.id ? -1 : 1;
-  });
-}
-
-function positionScopeKey(todo: Todo) {
-  if (todo.project_id) return `project:${todo.project_id}:phase:${todo.phase_id ?? 'backlog'}`;
-  if (todo.team_id) return `team:${todo.team_id}`;
-  return `personal:${todo.created_by ?? 'unknown'}`;
-}
-
-function scopedPositionUpdates(orderedTodos: Todo[]) {
-  const nextPositionById = new Map<string, number>();
-  const nextIndexByScope = new Map<string, number>();
-
-  for (const todo of orderedTodos) {
-    const scopeKey = positionScopeKey(todo);
-    const nextPosition = nextIndexByScope.get(scopeKey) ?? 0;
-    nextPositionById.set(todo.id, nextPosition);
-    nextIndexByScope.set(scopeKey, nextPosition + 1);
-  }
-
-  return nextPositionById;
-}
-
-function formatDateValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function parseDateValue(value: string | null) {
-  if (!value) return null;
-
-  const [yearText, monthText, dayText] = value.split('-');
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const date = new Date(year, month - 1, day);
-
-  if (Number.isNaN(date.getTime())) return null;
-  return date;
-}
-
-function formatArchiveDate(value: string | null) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function formatActiveDuration(seconds: number) {
-  const totalMinutes = Math.floor(seconds / 60);
-  if (totalMinutes < 1) return `${seconds}s`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours < 1) return `${totalMinutes}m`;
-  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-}
-
-function browserDisplayActive() {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return true;
-  const visible = document.visibilityState === 'visible';
-  const focused = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
-  return visible && focused;
-}
-
-function browserTabShown() {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return true;
-  return document.visibilityState === 'visible';
-}
-
-function toDateTimeInputValue(value: string | null) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hour = String(date.getHours()).padStart(2, '0');
-  const minute = String(date.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day}T${hour}:${minute}`;
-}
-
-function fromDateTimeInputValue(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const date = new Date(trimmed);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date.toISOString();
-}
-
-function monthLabel(date: Date) {
-  return date.toLocaleDateString(undefined, {
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-function buildCalendarDays(monthDate: Date) {
-  const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
-  const cells: (Date | null)[] = Array.from({ length: firstDay.getDay() }, () => null);
-
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push(null);
-  }
-
-  return cells;
-}
-
-function addDays(date: Date, days: number) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
-
-function startOfWeek(date: Date) {
-  return addDays(date, -date.getDay());
-}
-
-function buildWeekDays(date: Date) {
-  const start = startOfWeek(date);
-  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
-}
-
-function calendarViewTitle(mode: CalendarViewMode, date: Date) {
-  if (mode === 'day') {
-    return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  }
-  if (mode === 'week') {
-    const start = startOfWeek(date);
-    const end = addDays(start, 6);
-    const sameMonth = start.getMonth() === end.getMonth();
-    const startLabel = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    const endLabel = end.toLocaleDateString(undefined, {
-      month: sameMonth ? undefined : 'short',
-      day: 'numeric',
-      year: start.getFullYear() === end.getFullYear() ? undefined : 'numeric',
-    });
-    return `${startLabel} - ${endLabel}`;
-  }
-  return monthLabel(date);
-}
-
-function isSameDate(left: Date, right: Date) {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
-
-function emailDisplayName(email: string | null | undefined) {
-  if (!email) return 'User';
-  return email.split('@')[0] || email;
-}
-
-function profileDisplayName(profile: Pick<Profile, 'email' | 'display_name'>) {
-  return profile.display_name?.trim() || emailDisplayName(profile.email);
-}
-
-function isValidEmailAddress(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
-function authRedirectUrl() {
-  if (Platform.OS === 'web') {
-    return typeof window === 'undefined' ? undefined : window.location.origin;
-  }
-
-  return createURL('');
-}
-
-function isAllowedLocalWebOrigin(origin: string | null | undefined) {
-  if (!origin) return false;
-  try {
-    const url = new URL(origin);
-    return (
-      ['http:', 'https:'].includes(url.protocol) &&
-      ['localhost', '127.0.0.1', '::1'].includes(url.hostname)
-    );
-  } catch {
-    return false;
-  }
-}
-
-function oauthRedirectUrl() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return authRedirectUrl();
-  if (!isAllowedLocalWebOrigin(window.location.origin)) return authRedirectUrl();
-
-  const destination = new URL(webAppUrl);
-  destination.searchParams.set(localOAuthRedirectParam, window.location.origin);
-  return destination.toString();
-}
-
-function forceOAuthRedirectUrl(url: string, redirectTo = authRedirectUrl()) {
-  if (!redirectTo) return url;
-
-  try {
-    const oauthUrl = new URL(url);
-    oauthUrl.searchParams.set('redirect_to', redirectTo);
-    return oauthUrl.toString();
-  } catch {
-    return url;
-  }
-}
-
-function redirectLegacyWebHostToProduction() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
-  if (!legacyWebHosts.includes(window.location.hostname)) return false;
-
-  const destination = new URL(webAppUrl);
-  destination.pathname = window.location.pathname;
-  destination.search = window.location.search;
-  destination.hash = window.location.hash;
-  window.location.replace(destination.toString());
-  return true;
-}
-
-function markOAuthRedirectIntent() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-  window.sessionStorage?.setItem(oauthReturnStorageKey, '1');
-}
-
-function promoteLocalSessionToProduction(currentSession: Session | null) {
-  if (!currentSession) return false;
-  window.sessionStorage?.removeItem(oauthReturnStorageKey);
-  return false;
-}
-
-function redirectNonCanonicalWebHost() {
-  return redirectLegacyWebHostToProduction();
-}
-
-function forwardOAuthCallbackToLocalDev() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
-  if (window.location.origin !== new URL(webAppUrl).origin) return false;
-
-  const currentUrl = new URL(window.location.href);
-  const localOrigin = currentUrl.searchParams.get(localOAuthRedirectParam);
-  if (!localOrigin) return false;
-  if (!isAllowedLocalWebOrigin(localOrigin)) return false;
-
-  currentUrl.searchParams.delete(localOAuthRedirectParam);
-  const destination = new URL(localOrigin);
-  destination.pathname = currentUrl.pathname;
-  destination.search = currentUrl.search;
-  destination.hash = currentUrl.hash;
-  window.location.replace(destination.toString());
-  return true;
-}
-
-function getAuthCallbackParams(callbackUrl: string) {
-  const url = new URL(callbackUrl);
-  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
-  const readParam = (name: string) => url.searchParams.get(name) ?? hashParams.get(name);
-  const params = {
-    code: readParam('code'),
-    accessToken: readParam('access_token'),
-    refreshToken: readParam('refresh_token'),
-    errorDescription: readParam('error_description') ?? readParam('error'),
-  };
-
-  if (!params.code && !params.accessToken && !params.refreshToken && !params.errorDescription) {
-    return null;
-  }
-
-  return params;
-}
-
-function getWebAuthCallbackParams() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return null;
-  }
-
-  return getAuthCallbackParams(window.location.href);
-}
-
-function clearWebAuthCallbackParams() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') {
-    return;
-  }
-
-  const url = new URL(window.location.href);
-  [
-    'access_token',
-    'expires_at',
-    'expires_in',
-    'provider_refresh_token',
-    'provider_token',
-    'refresh_token',
-    'token_type',
-    'type',
-    'code',
-    'state',
-    'error',
-    'error_code',
-    'error_description',
-  ].forEach((name) => url.searchParams.delete(name));
-
-  url.hash = '';
-  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}`);
-}
-
-async function sessionFromAuthCallbackParams(callbackParams: NonNullable<ReturnType<typeof getAuthCallbackParams>>) {
-  if (callbackParams.errorDescription) {
-    throw new Error(callbackParams.errorDescription);
-  }
-
-  if (callbackParams.accessToken && callbackParams.refreshToken) {
-    const { data, error } = await supabase.auth.setSession({
-      access_token: callbackParams.accessToken,
-      refresh_token: callbackParams.refreshToken,
-    });
-    if (error) throw error;
-    return data.session;
-  }
-
-  if (callbackParams.code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(callbackParams.code);
-    if (error) throw error;
-    return data.session;
-  }
-
-  return null;
-}
-
-async function resolveInitialAuthSession() {
-  const callbackParams = getWebAuthCallbackParams();
-
-  if (callbackParams) {
-    if (forwardOAuthCallbackToLocalDev()) return null;
-    const session = await sessionFromAuthCallbackParams(callbackParams);
-    clearWebAuthCallbackParams();
-    return session;
-  }
-
-  const {
-    data: { session: currentSession },
-  } = await supabase.auth.getSession();
-  return currentSession;
-}
-
-function projectInviteUrl(token: string) {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    return `${webAppUrl}/invite/${token}`;
-  }
-  return createURL(`invite/${token}`);
-}
-
-function kanbanDueLabel(value: string): string {
-  const [y, m, d] = value.split('-').map(Number);
-  const due = new Date(y, m - 1, d);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const delta = Math.round((due.getTime() - today.getTime()) / 86400000);
-  if (delta === 0) return 'Today';
-  if (delta === 1) return 'Tomorrow';
-  if (delta === -1) return 'Yesterday';
-  if (delta < 0) return `${-delta}d overdue`;
-  if (delta <= 7) return `${delta}d`;
-  return due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 function formatPhaseDateRange(start: string | null, end: string | null): string {
   function fmt(d: string) {
@@ -739,113 +202,6 @@ function formatPhaseDateRange(start: string | null, end: string | null): string 
   if (start) return `From ${fmt(start)}`;
   if (end) return `Until ${fmt(end)}`;
   return '';
-}
-
-type KanbanCardTodo = {
-  id: string; text: string; done: boolean; priority: Priority;
-  due_date: string | null; note: string | null; is_milestone: boolean;
-  assigned_to: string | null;
-};
-function KanbanCard({ todo, assigneeEmail, onToggle, onDelete, onEdit, onCycleAssignee }: {
-  todo: KanbanCardTodo;
-  assigneeEmail: string | null;
-  onToggle: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
-  onCycleAssignee: () => void;
-}) {
-  const priorityStyle =
-    todo.priority === 'urgent' ? kcs.priority_urgent :
-    todo.priority === 'high'   ? kcs.priority_high :
-    todo.priority === 'low'    ? kcs.priority_low : undefined;
-  const dueLabel = todo.due_date ? kanbanDueLabel(todo.due_date) : null;
-  const overdue = dueLabel?.includes('overdue') ?? false;
-  const hasAssignee = !!todo.assigned_to;
-  const avatarColor = assigneeEmail ? pickAvatarColor(assigneeEmail) : undefined;
-  const initials = assigneeEmail
-    ? assigneeEmail.split('@')[0].split(/[._-]/).filter(p => p).map(p => p[0]).join('').toUpperCase().slice(0, 2) || '?'
-    : '?';
-  return (
-    <View style={[kcs.card, todo.is_milestone && kcs.cardMilestone]}>
-      <Pressable onPress={onToggle} hitSlop={8} style={kcs.checkbox}>
-        <View style={[kcs.box, todo.done && kcs.boxDone]}>
-          {todo.done && <Text style={kcs.checkmark}>✓</Text>}
-        </View>
-      </Pressable>
-      <Pressable onPress={onEdit} style={kcs.body}>
-        <View style={kcs.titleRow}>
-          {todo.is_milestone && <Text style={kcs.milestoneIcon}>◆</Text>}
-          <Text style={[kcs.text, todo.done && kcs.textDone]} numberOfLines={2}>{todo.text}</Text>
-          <Pressable
-            onPress={(e) => { e.stopPropagation?.(); onCycleAssignee(); }}
-            hitSlop={6}
-            style={kcs.assigneeInline}
-          >
-            {hasAssignee && avatarColor ? (
-              <View style={[kcs.assigneeAvatar, { backgroundColor: avatarColor }]}>
-                <Text style={kcs.assigneeAvatarText}>{initials}</Text>
-              </View>
-            ) : (
-              <Text style={kcs.assigneePlaceholder}>+</Text>
-            )}
-          </Pressable>
-        </View>
-        {(priorityStyle || dueLabel) && (
-          <View style={kcs.meta}>
-            {priorityStyle && <Text style={[kcs.badge, priorityStyle]}>{todo.priority}</Text>}
-            {dueLabel && <Text style={[kcs.due, overdue && kcs.dueOverdue]}>{dueLabel}</Text>}
-          </View>
-        )}
-      </Pressable>
-      <Pressable onPress={onDelete} hitSlop={8}><Text style={kcs.del}>✕</Text></Pressable>
-    </View>
-  );
-}
-const kcs = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', padding: 10, marginHorizontal: 8, marginBottom: 6, gap: 8 },
-  cardMilestone: { backgroundColor: '#fefce8', borderColor: '#fde68a' },
-  checkbox: { paddingTop: 1 },
-  box: { width: 18, height: 18, borderRadius: 4, borderWidth: 2, borderColor: '#d1d5db', backgroundColor: '#f9fafb', alignItems: 'center', justifyContent: 'center' },
-  boxDone: { backgroundColor: '#9ca3af', borderColor: '#9ca3af' },
-  checkmark: { color: '#fff', fontSize: 11, fontWeight: '700' },
-  body: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  milestoneIcon: { fontSize: 9, color: '#d97706', flexShrink: 0 },
-  text: { flex: 1, fontSize: 13, color: '#111827', lineHeight: 18 },
-  assigneeInline: { flexShrink: 0 },
-  textDone: { textDecorationLine: 'line-through', color: '#9ca3af' },
-  meta: { flexDirection: 'row', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' },
-  badge: { fontSize: 11, borderRadius: 4, overflow: 'hidden', paddingHorizontal: 5, paddingVertical: 2, fontWeight: '600' },
-  priority_low: { color: '#4b5563', backgroundColor: '#f3f4f6' },
-  priority_high: { color: '#92400e', backgroundColor: '#fef3c7' },
-  priority_urgent: { color: '#b91c1c', backgroundColor: '#fee2e2' },
-  due: { fontSize: 11, color: '#4338ca', fontWeight: '600' },
-  dueOverdue: { color: '#b91c1c' },
-  del: { fontSize: 11, color: '#d1d5db', paddingLeft: 4 },
-  assigneeAvatar: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  assigneeAvatarText: { fontSize: 9, fontWeight: '700', color: '#fff' },
-  assigneePlaceholder: { fontSize: 16, color: '#d1d5db', fontWeight: '600' },
-});
-
-const AVATAR_COLORS = ['#e74c3c', '#e67e22', '#16a34a', '#2563eb', '#7c3aed', '#db2777', '#0891b2', '#d97706'];
-const AVATAR_ANIMALS = [
-  '🐶','🐱','🦊','🐻','🐼','🐨','🐯','🦁',
-  '🐸','🐵','🐧','🦆','🦉','🦋','🐢','🐬',
-  '🐙','🦈','🦝','🐺','🦦','🦥','🦔','🐿',
-  '🦄','🦜','🦩','🐉','🦋','🐡',
-];
-function pickAvatarColor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) - h);
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
-function pickAvatarAnimal(seed: string): string {
-  let h = 5381;
-  for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) + h);
-  return AVATAR_ANIMALS[Math.abs(h) % AVATAR_ANIMALS.length];
-}
-function projectInitials(name: string): string {
-  return projectCaptureAbbreviation(name);
 }
 
 function InboxAssignerAvatar({
@@ -893,357 +249,6 @@ const ias = StyleSheet.create({
   },
   tooltipText: { color: '#fff', fontSize: 11 },
 });
-
-function mindmapTemplateFor(key: MindmapTemplateKey) {
-  return mindmapTemplates.find((template) => template.key === key) ?? mindmapTemplates[0];
-}
-
-function createMindmapNode(label: string, point?: MindmapPoint): WorkspaceMindmapNode {
-  return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    label,
-    ...(point ? point : {}),
-    children: [],
-  };
-}
-
-function mindmapNodesFromTopics(topics: string[], templateKey: MindmapTemplateKey = 'balanced') {
-  const positions = editableMindmapPositions(templateKey, topics.length);
-  return topics.map((topic, index) => createMindmapNode(topic || `Topic ${index + 1}`, positions[index]));
-}
-
-function normalizeMindmapPoint(point: Partial<MindmapPoint> | undefined): MindmapPoint | undefined {
-  if (typeof point?.x !== 'number' || typeof point.y !== 'number') return undefined;
-  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return undefined;
-  return {
-    x: Math.max(0, Math.min(100, point.x)),
-    y: Math.max(0, Math.min(100, point.y)),
-  };
-}
-
-function defaultMindmapSettings(templateKey: MindmapTemplateKey): WorkspaceMindmapSettings {
-  return {
-    layout: templateKey === 'right-stack' ? 'right' : 'balanced',
-    coloredBranches: true,
-    compactSpacing: false,
-  };
-}
-
-function normalizeMindmapSettings(
-  settings: Partial<WorkspaceMindmapSettings> | undefined,
-  templateKey: MindmapTemplateKey
-): WorkspaceMindmapSettings {
-  const fallback = defaultMindmapSettings(templateKey);
-  return {
-    layout: settings?.layout === 'right' || settings?.layout === 'balanced'
-      ? settings.layout
-      : fallback.layout,
-    coloredBranches: typeof settings?.coloredBranches === 'boolean'
-      ? settings.coloredBranches
-      : fallback.coloredBranches,
-    compactSpacing: typeof settings?.compactSpacing === 'boolean'
-      ? settings.compactSpacing
-      : fallback.compactSpacing,
-  };
-}
-
-function normalizeMindmapNodes(
-  nodes: Partial<WorkspaceMindmapNode>[] | undefined,
-  fallbackTopics: string[],
-  templateKey: MindmapTemplateKey = 'balanced'
-): WorkspaceMindmapNode[] {
-  if (!Array.isArray(nodes) || nodes.length === 0) return mindmapNodesFromTopics(fallbackTopics, templateKey);
-  return nodes.map((node, index) => {
-    const point = normalizeMindmapPoint(node);
-    return {
-      id: node.id ?? `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-      label: node.label ?? fallbackTopics[index] ?? `Topic ${index + 1}`,
-      ...(point ? point : {}),
-      children: normalizeMindmapNodes(node.children, [], templateKey),
-    };
-  });
-}
-
-function mindmapBody(title: string, nodes: WorkspaceMindmapNode[]) {
-  const lines = [title.trim() || 'Mindmap'];
-  function addNodeLines(items: WorkspaceMindmapNode[], depth: number) {
-    items.forEach((node) => {
-      lines.push(`${'  '.repeat(depth)}- ${node.label.trim() || 'Topic'}`);
-      addNodeLines(node.children, depth + 1);
-    });
-  }
-  addNodeLines(nodes, 0);
-  return lines.join('\n');
-}
-
-function mindmapFieldsFromBody(body: string, fallback: MindmapTemplate) {
-  const lines = body.split(/\n/).map((line) => line.trim()).filter(Boolean);
-  const title = lines[0] ?? fallback.title;
-  const bodyTopics = lines.slice(1).map((line) => line.replace(/^[-*]\s*/, '')).filter(Boolean);
-  const topicCount = Math.max(fallback.topics.length, bodyTopics.length);
-  return {
-    title,
-    topics: Array.from({ length: topicCount }, (_, index) => bodyTopics[index] ?? fallback.topics[index] ?? `Topic ${index + 1}`),
-  };
-}
-
-function normalizeWorkspaceMindmap(
-  mindmap: WorkspaceMindmapInput,
-  index = 0
-): WorkspaceMindmap {
-  const template = mindmapTemplateFor(mindmap.template ?? 'balanced');
-  const fields = mindmapFieldsFromBody(mindmap.body ?? '', template);
-  const title = mindmap.title ?? fields.title;
-  const savedTopics = Array.isArray(mindmap.topics) ? mindmap.topics : [];
-  const topicCount = Math.max(template.topics.length, savedTopics.length, fields.topics.length);
-  const topics = savedTopics.length > 0
-    ? Array.from({ length: topicCount }, (_, topicIndex) =>
-        savedTopics[topicIndex] ?? fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
-      )
-    : Array.from({ length: topicCount }, (_, topicIndex) =>
-        fields.topics[topicIndex] ?? template.topics[topicIndex] ?? `Topic ${topicIndex + 1}`
-      );
-  const nodes = normalizeMindmapNodes(mindmap.nodes, topics, template.key);
-
-  return {
-    id: mindmap.id ?? `legacy-${index}-${Date.now()}`,
-    title,
-    body: mindmap.body ?? mindmapBody(title, nodes),
-    created_at: mindmap.created_at ?? new Date().toISOString(),
-    template: template.key,
-    topics: nodes.map((node) => node.label),
-    root_position: normalizeMindmapPoint(mindmap.root_position),
-    nodes,
-    settings: normalizeMindmapSettings(mindmap.settings, template.key),
-  };
-}
-
-function workspaceNotesStorageKey(userId: string) {
-  return `todo:workspace-notes:${userId}`;
-}
-
-function workspaceMindmapFromRow(row: WorkspaceMindmapRow): WorkspaceMindmap {
-  return normalizeWorkspaceMindmap({
-    id: row.id,
-    title: row.title ?? undefined,
-    body: row.body ?? undefined,
-    created_at: row.created_at ?? undefined,
-    template: (row.template ?? undefined) as MindmapTemplateKey | undefined,
-    topics: row.topics ?? undefined,
-    root_position: row.root_position ?? undefined,
-    nodes: Array.isArray(row.nodes) ? row.nodes : undefined,
-    settings: row.settings ?? undefined,
-  });
-}
-
-function workspaceMindmapDbPayload(ownerId: string, mindmap: WorkspaceMindmap) {
-  return {
-    id: mindmap.id,
-    owner_id: ownerId,
-    title: mindmap.title,
-    body: mindmap.body,
-    template: mindmap.template,
-    topics: mindmap.topics,
-    root_position: mindmap.root_position ?? null,
-    nodes: mindmap.nodes,
-    settings: mindmap.settings,
-    created_at: mindmap.created_at,
-    updated_at: new Date().toISOString(),
-  };
-}
-
-async function readLocalWorkspaceNotes(userId: string) {
-  const value = await AsyncStorage.getItem(workspaceNotesStorageKey(userId));
-  if (!value) return { ideas: '', mindmaps: [] as WorkspaceMindmap[] };
-
-  const notes = JSON.parse(value) as StoredWorkspaceNotes;
-  const loadedMindmaps = Array.isArray(notes.mindmaps)
-    ? notes.mindmaps.map((mindmap, index) => normalizeWorkspaceMindmap(mindmap, index))
-    : [];
-  const legacyDraft = notes.mindmapDraft ?? notes.mindmap ?? '';
-  const migratedMindmaps = legacyDraft.trim() && loadedMindmaps.length === 0
-    ? (() => {
-        const template = mindmapTemplateFor('balanced');
-        const fields = mindmapFieldsFromBody(legacyDraft, template);
-        const nodes = mindmapNodesFromTopics(fields.topics, template.key);
-        return [
-          normalizeWorkspaceMindmap({
-            id: `legacy-draft-${Date.now()}`,
-            title: fields.title,
-            body: mindmapBody(fields.title, nodes),
-            created_at: new Date().toISOString(),
-            template: template.key,
-            topics: nodes.map((node) => node.label),
-            nodes,
-            settings: defaultMindmapSettings(template.key),
-          }),
-        ];
-      })()
-    : loadedMindmaps;
-
-  return {
-    ideas: notes.ideas ?? '',
-    mindmaps: migratedMindmaps,
-  };
-}
-
-function mapMindmapNodes(
-  nodes: WorkspaceMindmapNode[],
-  nodeId: string,
-  updater: (node: WorkspaceMindmapNode) => WorkspaceMindmapNode
-): WorkspaceMindmapNode[] {
-  return nodes.map((node) => {
-    if (node.id === nodeId) return updater(node);
-    return { ...node, children: mapMindmapNodes(node.children, nodeId, updater) };
-  });
-}
-
-function clampMindmapPercentPoint(point: MindmapPoint): MindmapPoint {
-  return {
-    x: Math.max(4, Math.min(96, point.x)),
-    y: Math.max(5, Math.min(95, point.y)),
-  };
-}
-
-function childMindmapGrowthPoint(parentPoint: MindmapPoint, index: number, count: number, depth: number): MindmapPoint {
-  const side = parentPoint.x < 48 ? -1 : parentPoint.x > 52 ? 1 : index % 2 === 0 ? 1 : -1;
-  const horizontalOffset = 18 + Math.min(depth, 3) * 6;
-  const verticalSpread = Math.max(10, 16 - Math.min(depth, 4) * 2);
-  return clampMindmapPercentPoint({
-    x: parentPoint.x + side * horizontalOffset,
-    y: parentPoint.y + (index - (count - 1) / 2) * verticalSpread,
-  });
-}
-
-function materializeMindmapNodePositions(
-  nodes: WorkspaceMindmapNode[],
-  templateKey: MindmapTemplateKey,
-  parentPoint?: MindmapPoint,
-  depth = 0
-): WorkspaceMindmapNode[] {
-  const topLevelPositions = depth === 0 ? editableMindmapPositions(templateKey, nodes.length) : [];
-  return nodes.map((node, index) => {
-    const savedPoint = normalizeMindmapPoint(node);
-    const point = savedPoint
-      ?? (depth === 0
-        ? topLevelPositions[index]
-        : childMindmapGrowthPoint(parentPoint ?? { x: 50, y: 50 }, index, nodes.length, depth));
-    const normalizedPoint = clampMindmapPercentPoint(point ?? { x: 50, y: 50 });
-    return {
-      ...node,
-      ...normalizedPoint,
-      children: materializeMindmapNodePositions(node.children, templateKey, normalizedPoint, depth + 1),
-    };
-  });
-}
-
-function appendMindmapNodeToParent(
-  nodes: WorkspaceMindmapNode[],
-  parentNodeId: string,
-  label: string,
-  depth = 0
-): WorkspaceMindmapNode[] {
-  return nodes.map((node) => {
-    if (node.id === parentNodeId) {
-      const parentPoint = normalizeMindmapPoint(node) ?? { x: 50, y: 50 };
-      const nextPoint = childMindmapGrowthPoint(parentPoint, node.children.length, node.children.length + 1, depth + 1);
-      return {
-        ...node,
-        children: [...node.children, createMindmapNode(label, nextPoint)],
-      };
-    }
-    return {
-      ...node,
-      children: appendMindmapNodeToParent(node.children, parentNodeId, label, depth + 1),
-    };
-  });
-}
-
-function addMindmapNode(nodes: WorkspaceMindmapNode[], parentNodeId: string | null, label: string, templateKey: MindmapTemplateKey): WorkspaceMindmapNode[] {
-  const materializedNodes = materializeMindmapNodePositions(nodes, templateKey);
-  if (!parentNodeId) {
-    const nextPosition = editableMindmapPositions(templateKey, materializedNodes.length + 1)[materializedNodes.length];
-    return [...materializedNodes, createMindmapNode(label, nextPosition)];
-  }
-  return appendMindmapNodeToParent(materializedNodes, parentNodeId, label);
-}
-
-function clearNestedMindmapPositions(nodes: WorkspaceMindmapNode[]): WorkspaceMindmapNode[] {
-  return nodes.map((node) => {
-    const { x: _x, y: _y, ...nodeWithoutPosition } = node;
-    return {
-      ...nodeWithoutPosition,
-      children: clearNestedMindmapPositions(node.children),
-    };
-  });
-}
-
-function relayoutMindmapNodes(
-  nodes: WorkspaceMindmapNode[],
-  templateKey: MindmapTemplateKey,
-  layout: MindmapLayoutMode
-): WorkspaceMindmapNode[] {
-  const layoutTemplateKey = layout === 'right' ? 'right-stack' : templateKey;
-  const positions = editableMindmapPositions(layoutTemplateKey, nodes.length);
-  return nodes.map((node, index) => ({
-    ...node,
-    ...(positions[index] ?? {}),
-    children: clearNestedMindmapPositions(node.children),
-  }));
-}
-
-function deleteMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string): WorkspaceMindmapNode[] {
-  return nodes
-    .filter((node) => node.id !== nodeId)
-    .map((node) => ({ ...node, children: deleteMindmapNode(node.children, nodeId) }));
-}
-
-function moveMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string, point: MindmapPoint): WorkspaceMindmapNode[] {
-  return mapMindmapNodes(nodes, nodeId, (node) => ({ ...node, ...point }));
-}
-
-function editableMindmapPositions(templateKey: MindmapTemplateKey, count: number) {
-  const presets: Partial<Record<MindmapTemplateKey, { x: number; y: number }[]>> = {
-    balanced: [
-      { x: 24, y: 26 },
-      { x: 24, y: 74 },
-      { x: 76, y: 26 },
-      { x: 76, y: 74 },
-    ],
-    'right-stack': [
-      { x: 78, y: 18 },
-      { x: 78, y: 39 },
-      { x: 78, y: 61 },
-      { x: 78, y: 82 },
-    ],
-    workshop: [
-      { x: 27, y: 24 },
-      { x: 20, y: 50 },
-      { x: 27, y: 76 },
-      { x: 73, y: 24 },
-      { x: 80, y: 50 },
-      { x: 73, y: 76 },
-    ],
-    'business-plan': [
-      { x: 22, y: 21 },
-      { x: 20, y: 50 },
-      { x: 22, y: 79 },
-      { x: 78, y: 16 },
-      { x: 80, y: 39 },
-      { x: 80, y: 61 },
-      { x: 78, y: 84 },
-    ],
-  };
-  const base = presets[templateKey] ?? presets.balanced!;
-  return Array.from({ length: count }, (_, index) => {
-    if (base[index]) return base[index];
-    const angle = -Math.PI / 2 + ((Math.PI * 2) * index) / Math.max(count, 1);
-    return {
-      x: 50 + Math.cos(angle) * 32,
-      y: 50 + Math.sin(angle) * 34,
-    };
-  });
-}
 
 function WorkspaceMindmapPreview({
   template,
