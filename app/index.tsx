@@ -780,7 +780,12 @@ function EditableWorkspaceMindmap({
               accessibilityLabel={`Mindmap node ${index + 1}`}
             />
             {isSelected && (canAddChild || canDeleteNode) ? (
-              <View style={styles.notesMindmapNodeActionGroup}>
+              <View
+                style={[
+                  styles.notesMindmapNodeActionGroup,
+                  nodePoint.y - renderNode.height / 2 < 32 && styles.notesMindmapNodeActionGroupBelow,
+                ]}
+              >
                 {canAddChild ? (
                   <Pressable
                     onPress={(event) => {
@@ -8156,8 +8161,10 @@ const styles = StyleSheet.create({
   },
   notesMindmapNodeActionGroup: {
     position: 'absolute',
-    right: 2,
-    top: -9,
+    right: 8,
+    bottom: '100%',
+    marginBottom: 4,
+    zIndex: 5,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
@@ -8170,6 +8177,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
+  },
+  notesMindmapNodeActionGroupBelow: {
+    bottom: undefined,
+    marginBottom: 0,
+    top: '100%',
+    marginTop: 4,
   },
   notesMindmapNodeAction: {
     width: 18,

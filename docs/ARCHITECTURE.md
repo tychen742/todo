@@ -167,6 +167,9 @@ Current implementation:
   use explicit drag handles so dragging and text editing remain distinct, and
   the selected pill emphasizes its connector path while unrelated connectors
   fade back.
+  The selected pill's action toolbar floats just above the pill (or just below
+  it when the pill is near the top edge of the canvas) so it never covers the
+  label.
   New maps materialize template starting positions in the saved node payload,
   and adding a child materializes existing branch positions before inserting the
   new child so growth does not reshuffle the current map.
