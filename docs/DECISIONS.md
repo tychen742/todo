@@ -420,3 +420,21 @@ Implementation rules:
 Decision: Claude (or any AI assistant) must ask before adding co-authorship via `Co-Authored-By:` git trailers.
 
 Reason: this is your project and you are the primary maintainer. An AI tool is a contributor, not a co-maintainer. Authorship should always reflect your judgment and approval, not be assumed automatically. Asking first respects the boundary between you and any tool.
+
+## 2026-09-28: Map Nodes Drag From the Whole Pill, New Nodes Start Empty
+
+Decision: Map nodes (root, topics, children) have no separate grip handle; the whole pill is the drag target (a move of more than 3px starts a drag, so a plain click still focuses the text). New topic and child nodes are created with an empty label and show a greyed placeholder (`Topic N` / `Child`) until the user types.
+
+Reason: The grip handle took horizontal space from short pill labels, and pre-filled labels like `Topic 1` looked like real content the user had to delete.
+
+## 2026-09-28: Map Node to Todo Opens the Todo Modal
+
+Decision: The map node "create todo" action opens the Todo modal in a `New Todo` mode, prefilled with the node label and the current project/team/assignee defaults. Nothing is written until Save; Cancel discards the draft. Delete and the milestone toggle are hidden in this mode.
+
+Reason: Converting an idea into a task is the moment to set priority, due date, project, and assignee; silently inserting a bare todo skipped that and gave no chance to back out.
+
+## 2026-09-28: Map Node Deletion Is Undoable
+
+Decision: Deleting a map node shows a toast (`Deleted "<label>".`) with an `Undo` action for about 6 seconds. Undo reinserts the node and its whole subtree at its original parent and position (`findMindmapNodeLocation` / `restoreMindmapNode` in `lib/mindmaps.ts`), so edits made elsewhere in the map after the delete are kept. If the original parent no longer exists, the node returns at the top level. Only the most recent deletion can be undone; showing any other toast drops the pending undo.
+
+Reason: Delete sits one tap away from Add and Create todo in the node action group, and a deleted topic can take a whole subtree with it.

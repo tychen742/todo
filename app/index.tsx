@@ -26,7 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Circle, Ellipse, G, Path, Rect, Text as SvgText } from 'react-native-svg';
 import type { Session } from '@supabase/supabase-js';
 import * as ImagePicker from 'expo-image-picker';
-import { ArrowLeft, Filter, GripVertical, ListTodo, MoreHorizontal, Plus, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, Filter, ListTodo, MoreHorizontal, Plus, Trash2, X } from 'lucide-react-native';
 import TodoItem from '../components/TodoItem';
 import { type Phase } from '../components/PhaseStrip';
 import {
@@ -123,6 +123,7 @@ import {
   defaultMindmapSettings,
   deleteMindmapNode,
   editableMindmapPositions,
+  findMindmapNodeLocation,
   mapMindmapNodes,
   mindmapBody,
   mindmapNodesFromTopics,
@@ -131,6 +132,8 @@ import {
   moveMindmapNode,
   readLocalWorkspaceNotes,
   relayoutMindmapNodes,
+  restoreMindmapNode,
+  type MindmapNodeLocation,
   workspaceMindmapDbPayload,
   workspaceMindmapFromRow,
   workspaceNotesStorageKey,
@@ -688,6 +691,7 @@ function EditableWorkspaceMindmap({
         })}
       </Svg>
       <View
+        {...createDragHandlers('root', root, rootWidth, rootHeight, onRootPositionChange)}
         onTouchStart={() => setSelectedMindmapNodeId('root')}
         style={[
           styles.notesMindmapNode,
@@ -705,12 +709,6 @@ function EditableWorkspaceMindmap({
           selectedMindmapNodeId === 'root' && styles.notesMindmapNodeSelected,
         ]}
       >
-        <View
-          {...createDragHandlers('root', root, rootWidth, rootHeight, onRootPositionChange)}
-          style={styles.notesMindmapDragHandle}
-        >
-          <GripVertical size={13} color="#94a3b8" strokeWidth={2.4} />
-        </View>
         <TextInput
           value={mindmap.title}
           onChangeText={onTitleChange}
@@ -734,6 +732,13 @@ function EditableWorkspaceMindmap({
         const borderColor = renderNode.depth === 0 ? color : '#cbd5e1';
         return (
           <View
+            {...createDragHandlers(
+              renderNode.node.id,
+              nodePosition,
+              width,
+              renderNode.height,
+              (point) => onNodeMove(renderNode.node.id, point)
+            )}
             onTouchStart={() => setSelectedMindmapNodeId(renderNode.node.id)}
             key={`${mindmap.id}-node-${renderNode.node.id}`}
             style={[
@@ -754,18 +759,6 @@ function EditableWorkspaceMindmap({
               isSelected && styles.notesMindmapNodeSelected,
             ]}
           >
-            <View
-              {...createDragHandlers(
-                renderNode.node.id,
-                nodePosition,
-                width,
-                renderNode.height,
-                (point) => onNodeMove(renderNode.node.id, point)
-              )}
-              style={styles.notesMindmapDragHandle}
-            >
-              <GripVertical size={13} color={renderNode.depth === 0 ? '#e0f2fe' : '#94a3b8'} strokeWidth={2.4} />
-            </View>
             <TextInput
               value={renderNode.node.label}
               onChangeText={(value) => onNodeChange(renderNode.node.id, value)}
@@ -776,7 +769,7 @@ function EditableWorkspaceMindmap({
                 renderNode.depth === 0 && styles.notesMindmapTopicInput,
               ]}
               placeholder={renderNode.depth === 0 ? `Topic ${index + 1}` : 'Child'}
-              placeholderTextColor={renderNode.depth === 0 ? '#0f172a' : '#94a3b8'}
+              placeholderTextColor={renderNode.depth === 0 ? '#64748b' : '#94a3b8'}
               accessibilityLabel={`Mindmap node ${index + 1}`}
             />
             {isSelected && (canAddChild || canDeleteNode) ? (
@@ -934,6 +927,8 @@ export default function HomeScreen() {
   const [priorityPicker, setPriorityPicker] = useState<{ todo: Todo; x: number; y: number } | null>(null);
   const [statusPicker, setStatusPicker] = useState<{ todo: Todo; x: number; y: number } | null>(null);
   const [editTodo, setEditTodo] = useState<Todo | null>(null);
+  // True when the edit modal holds an unsaved draft (e.g. from a map node); Save inserts instead of updating.
+  const [isCreatingTodo, setIsCreatingTodo] = useState(false);
   const [editDraftText, setEditDraftText] = useState('');
   const [editDraftNote, setEditDraftNote] = useState('');
   const [editDraftDueDate, setEditDraftDueDate] = useState<string | null>(null);
@@ -954,6 +949,7 @@ export default function HomeScreen() {
   const [authErrorField, setAuthErrorField] = useState<AuthErrorField>(null);
   const [message, setMessage] = useState('');
   const [toast, setToast] = useState('');
+  const [mindmapNodeUndo, setMindmapNodeUndo] = useState<{ mindmapId: string; location: MindmapNodeLocation } | null>(null);
   const [hoveredInboxTodoId, setHoveredInboxTodoId] = useState<string | null>(null);
   const [hoveredInboxActionId, setHoveredInboxActionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1439,6 +1435,7 @@ export default function HomeScreen() {
   }, [linkingProjectTeam, projectAccessQuery]);
 
   function showToast(text: string) {
+    setMindmapNodeUndo(null);
     setToast(text);
   }
 
@@ -1547,7 +1544,8 @@ export default function HomeScreen() {
   function addWorkspaceMindmapNode(id: string, parentNodeId: string | null) {
     const mindmap = workspaceMindmaps.find((item) => item.id === id);
     if (!mindmap) return;
-    const label = parentNodeId ? 'Child node' : `Topic ${mindmap.nodes.length + 1}`;
+    // New nodes start empty so the input's greyed placeholder (Topic N / Child) shows until the user types.
+    const label = '';
     const layoutTemplateKey = mindmap.settings.layout === 'right' ? 'right-stack' : mindmap.template;
     updateWorkspaceMindmap(id, { nodes: addMindmapNode(mindmap.nodes, parentNodeId, label, layoutTemplateKey) });
   }
@@ -1577,9 +1575,23 @@ export default function HomeScreen() {
     const mindmap = workspaceMindmaps.find((item) => item.id === id);
     if (!mindmap) return;
     if (mindmap.nodes.length <= 1 && mindmap.nodes.some((node) => node.id === nodeId)) return;
+    const location = findMindmapNodeLocation(mindmap.nodes, nodeId);
     updateWorkspaceMindmap(id, {
       nodes: deleteMindmapNode(mindmap.nodes, nodeId),
     });
+    if (!location) return;
+    const label = location.node.label.trim();
+    showToast(label ? `Deleted "${label}".` : 'Node deleted.');
+    setMindmapNodeUndo({ mindmapId: id, location });
+  }
+
+  function undoMindmapNodeDelete() {
+    if (!mindmapNodeUndo) return;
+    const mindmap = workspaceMindmaps.find((item) => item.id === mindmapNodeUndo.mindmapId);
+    setMindmapNodeUndo(null);
+    setToast('');
+    if (!mindmap) return;
+    updateWorkspaceMindmap(mindmap.id, { nodes: restoreMindmapNode(mindmap.nodes, mindmapNodeUndo.location) });
   }
 
   function updateWorkspaceMindmapRootPosition(id: string, point: MindmapPoint) {
@@ -1617,10 +1629,13 @@ export default function HomeScreen() {
   }
 
   useEffect(() => {
-    if (!toast) return;
-    const timeout = setTimeout(() => setToast(''), 3000);
+    if (!toast) {
+      setMindmapNodeUndo(null);
+      return;
+    }
+    const timeout = setTimeout(() => setToast(''), mindmapNodeUndo ? 6000 : 3000);
     return () => clearTimeout(timeout);
-  }, [toast]);
+  }, [toast, mindmapNodeUndo]);
   const nextMilestone = useMemo(() => {
     if (!isProject) return null;
     const todayMidnight = new Date();
@@ -2925,10 +2940,37 @@ export default function HomeScreen() {
     setInput('');
   }
 
-  async function createTodoFromMindmapNode(label: string) {
-    const createdTodo = await createTodoFromText(label);
-    if (!createdTodo) return;
-    showToast('Todo created from map node.');
+  function createTodoFromMindmapNode(label: string) {
+    if (!session) return;
+    const projectId = isProject ? selectedProjectId : newTodoProjectId;
+    const assignedTo = selectedTeamId && !isProject ? newTodoAssignee : null;
+    const draft: Todo = {
+      id: '',
+      text: label.trim(),
+      done: false,
+      scheduled_start_at: null,
+      started_work_at: null,
+      assigned_to: assignedTo,
+      created_by: session.user.id,
+      priority: 'normal',
+      due_date: null,
+      note: null,
+      created_at: new Date().toISOString(),
+      assigned_at: null,
+      accepted_at: null,
+      completed_at: null,
+      archived_at: null,
+      position: null,
+      workflow_position: null,
+      is_milestone: false,
+      project_id: projectId ?? null,
+      phase_id: null,
+      workflow_status: 'backlog',
+      team_id: projectId ? null : isProject ? null : selectedTeamId,
+      estimate: null,
+    };
+    setIsCreatingTodo(true);
+    openEditModal(draft);
   }
 
   async function addTodoToPhase(phaseId: string | null) {
@@ -3307,6 +3349,7 @@ export default function HomeScreen() {
 
   function closeEditModal() {
     setEditTodo(null);
+    setIsCreatingTodo(false);
   }
 
   async function saveEditModal() {
@@ -3341,6 +3384,42 @@ export default function HomeScreen() {
       ? (assigned_to === session?.user.id ? assigned_at : null)
       : editTodo.accepted_at;
     const priority = parsedText.priority ?? editDraftPriority;
+
+    if (isCreatingTodo) {
+      if (!session) return;
+      const createdAssignedAt = assigned_to ? new Date().toISOString() : null;
+      const { data, error: insertError } = await supabase
+        .from('todos')
+        .insert({
+          text,
+          note,
+          phase_id,
+          project_id,
+          team_id: project_id ? null : editTodo.team_id,
+          created_by: session.user.id,
+          due_date: editDraftDueDate,
+          priority,
+          estimate,
+          scheduled_start_at: scheduledStartAt,
+          assigned_to,
+          assigned_at: createdAssignedAt,
+          accepted_at: assigned_to === session.user.id ? createdAssignedAt : null,
+          workflow_status: 'backlog',
+        })
+        .select(todoSelectColumns)
+        .single();
+      if (insertError) {
+        setError(insertError.message);
+        return;
+      }
+      if (data) setTodos((prev) => sortTodos([data as Todo, ...prev]));
+      loadAssignedToMe();
+      loadAssignedFromMe();
+      closeEditModal();
+      setError('');
+      showToast('Todo created from map node.');
+      return;
+    }
 
     const { error: updateError } = await supabase
       .from('todos')
@@ -6079,8 +6158,13 @@ export default function HomeScreen() {
       ))}
 
       {!!toast && (
-        <View pointerEvents="none" style={styles.toast}>
+        <View pointerEvents={mindmapNodeUndo ? 'box-none' : 'none'} style={[styles.toast, styles.toastRow]}>
           <Text style={styles.toastText}>{toast}</Text>
+          {mindmapNodeUndo ? (
+            <Pressable onPress={undoMindmapNodeDelete} hitSlop={8} accessibilityRole="button" accessibilityLabel="Undo node deletion">
+              <Text style={styles.toastActionText}>Undo</Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
 
@@ -6968,7 +7052,7 @@ export default function HomeScreen() {
         <Pressable style={styles.modalBackdrop} onPress={closeEditModal}>
           <Pressable style={[styles.calendarCard, styles.editTodoCard]}>
             <View style={styles.editTodoHeader}>
-              <Text style={styles.editModalTitle}>Edit Todo</Text>
+              <Text style={styles.editModalTitle}>{isCreatingTodo ? 'New Todo' : 'Edit Todo'}</Text>
             </View>
             <ScrollView
               style={[styles.editTodoScroll, { maxHeight: Math.max(320, Math.min(560, height - 240)) }]}
@@ -7136,7 +7220,7 @@ export default function HomeScreen() {
                   </ScrollView>
                 </View>
               )}
-              {isProject && (
+              {isProject && !isCreatingTodo && (
                 <Pressable
                   onPress={() => editTodo && toggleMilestone(editTodo).then(closeEditModal)}
                   style={[styles.milestoneToggle, editTodo?.is_milestone && styles.milestoneToggleActive]}
@@ -7149,9 +7233,11 @@ export default function HomeScreen() {
             </ScrollView>
 
             <View style={[styles.editModalActions, styles.editTodoFooter]}>
-              <Pressable onPress={() => editTodo && archiveTodo(editTodo.id)}>
-                <Text style={styles.archiveBtnText}>Delete</Text>
-              </Pressable>
+              {isCreatingTodo ? <View /> : (
+                <Pressable onPress={() => editTodo && archiveTodo(editTodo.id)}>
+                  <Text style={styles.archiveBtnText}>Delete</Text>
+                </Pressable>
+              )}
               <View style={styles.editModalActionsRight}>
                 <Pressable onPress={closeEditModal}>
                   <Text style={styles.calendarCancelText}>Cancel</Text>
@@ -8126,16 +8212,6 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 10,
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
-  },
-  notesMindmapDragHandle: {
-    width: 18,
-    height: '100%',
-    minHeight: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -4,
-    marginRight: 3,
-    cursor: 'grab' as never,
   },
   notesMindmapNodeInput: {
     flex: 1,
@@ -9466,6 +9542,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '700',
+  },
+  toastRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  toastActionText: {
+    color: '#a5b4fc',
+    fontSize: 13,
+    fontWeight: '800',
   },
   sectionDivider: {
     flexDirection: 'row',

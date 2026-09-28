@@ -347,6 +347,39 @@ export function deleteMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string)
     .map((node) => ({ ...node, children: deleteMindmapNode(node.children, nodeId) }));
 }
 
+export type MindmapNodeLocation = {
+  node: WorkspaceMindmapNode;
+  parentId: string | null;
+  index: number;
+};
+
+export function findMindmapNodeLocation(
+  nodes: WorkspaceMindmapNode[],
+  nodeId: string,
+  parentId: string | null = null
+): MindmapNodeLocation | null {
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node.id === nodeId) return { node, parentId, index };
+    const nested = findMindmapNodeLocation(node.children, nodeId, node.id);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+// Reinserts a deleted node (with its subtree) at its old slot; falls back to the top level if its parent is gone.
+export function restoreMindmapNode(nodes: WorkspaceMindmapNode[], location: MindmapNodeLocation): WorkspaceMindmapNode[] {
+  const insertAt = (list: WorkspaceMindmapNode[]) => {
+    const next = [...list];
+    next.splice(Math.min(location.index, next.length), 0, location.node);
+    return next;
+  };
+  if (location.parentId && findMindmapNodeLocation(nodes, location.parentId)) {
+    return mapMindmapNodes(nodes, location.parentId, (parent) => ({ ...parent, children: insertAt(parent.children) }));
+  }
+  return insertAt(nodes);
+}
+
 export function moveMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string, point: MindmapPoint): WorkspaceMindmapNode[] {
   return mapMindmapNodes(nodes, nodeId, (node) => ({ ...node, ...point }));
 }
