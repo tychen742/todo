@@ -423,7 +423,7 @@ Reason: this is your project and you are the primary maintainer. An AI tool is a
 
 ## 2026-09-28: Map Nodes Drag From the Whole Pill, New Nodes Start Empty
 
-Decision: Map nodes (root, topics, children) have no separate grip handle; the whole pill is the drag target (a move of more than 3px starts a drag, so a plain click still focuses the text). New topic and child nodes are created with an empty label and show a greyed placeholder (`Topic N` / `Child`) until the user types.
+Decision: Map nodes (root, topics, children) have no separate grip handle; the whole pill is the drag target (a move of more than 3px starts a drag, so a plain click still focuses the text). New topic and child nodes are created with an empty label and show a greyed placeholder (`Topic N` / `Child`; `Central topic` on the root) until the user types. The placeholder hides while the node's input has the cursor, so an empty focused node shows only the caret.
 
 Reason: The grip handle took horizontal space from short pill labels, and pre-filled labels like `Topic 1` looked like real content the user had to delete.
 

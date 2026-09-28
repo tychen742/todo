@@ -405,6 +405,8 @@ function EditableWorkspaceMindmap({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [dragPreview, setDragPreview] = useState<{ id: string; point: MindmapPoint } | null>(null);
   const [selectedMindmapNodeId, setSelectedMindmapNodeId] = useState<string | null>(null);
+  // Placeholders hide while their input has the cursor.
+  const [focusedMindmapNodeId, setFocusedMindmapNodeId] = useState<string | null>(null);
   const effectiveCompact = compact || mindmap.settings.compactSpacing;
   const root = dragPreview?.id === 'root'
     ? dragPreview.point
@@ -712,9 +714,13 @@ function EditableWorkspaceMindmap({
         <TextInput
           value={mindmap.title}
           onChangeText={onTitleChange}
-          onFocus={() => setSelectedMindmapNodeId('root')}
+          onFocus={() => {
+            setSelectedMindmapNodeId('root');
+            setFocusedMindmapNodeId('root');
+          }}
+          onBlur={() => setFocusedMindmapNodeId((current) => (current === 'root' ? null : current))}
           style={[styles.notesMindmapNodeInput, styles.notesMindmapRootInput]}
-          placeholder="Central topic"
+          placeholder={focusedMindmapNodeId === 'root' ? '' : 'Central topic'}
           placeholderTextColor="#9ca3af"
           accessibilityLabel="Central topic"
         />
@@ -762,13 +768,17 @@ function EditableWorkspaceMindmap({
             <TextInput
               value={renderNode.node.label}
               onChangeText={(value) => onNodeChange(renderNode.node.id, value)}
-              onFocus={() => setSelectedMindmapNodeId(renderNode.node.id)}
+              onFocus={() => {
+                setSelectedMindmapNodeId(renderNode.node.id);
+                setFocusedMindmapNodeId(renderNode.node.id);
+              }}
+              onBlur={() => setFocusedMindmapNodeId((current) => (current === renderNode.node.id ? null : current))}
               style={[
                 styles.notesMindmapNodeInput,
                 renderNode.depth > 0 && styles.notesMindmapChildNodeInput,
                 renderNode.depth === 0 && styles.notesMindmapTopicInput,
               ]}
-              placeholder={renderNode.depth === 0 ? `Topic ${index + 1}` : 'Child'}
+              placeholder={focusedMindmapNodeId === renderNode.node.id ? '' : renderNode.depth === 0 ? `Topic ${index + 1}` : 'Child'}
               placeholderTextColor={renderNode.depth === 0 ? '#64748b' : '#94a3b8'}
               accessibilityLabel={`Mindmap node ${index + 1}`}
             />
