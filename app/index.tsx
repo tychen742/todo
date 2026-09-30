@@ -730,8 +730,6 @@ function EditableWorkspaceMindmap({
         const width = renderNode.depth === 0 ? topicWidth : childWidth;
         const nodePoint = toCanvasPoint({ x: renderNode.x, y: renderNode.y });
         const nodePosition = { x: renderNode.x, y: renderNode.y };
-        const isEdgeNode = renderNode.node.children.length === 0;
-        const canAddChild = renderNode.depth === 0 || isEdgeNode;
         const canDeleteNode = topLevelNodes.length > 1 || renderNode.depth > 0;
         const isSelected = selectedMindmapNodeId === renderNode.node.id;
         const nodeColor = renderNode.depth === 0 ? color : '#ffffff';
@@ -782,27 +780,25 @@ function EditableWorkspaceMindmap({
               placeholderTextColor={renderNode.depth === 0 ? '#64748b' : '#94a3b8'}
               accessibilityLabel={`Mindmap node ${index + 1}`}
             />
-            {isSelected && (canAddChild || canDeleteNode) ? (
+            {isSelected ? (
               <View
                 style={[
                   styles.notesMindmapNodeActionGroup,
                   nodePoint.y - renderNode.height / 2 < 32 && styles.notesMindmapNodeActionGroupBelow,
                 ]}
               >
-                {canAddChild ? (
-                  <Pressable
-                    onPress={(event) => {
-                      event.stopPropagation?.();
-                      onNodeAdd(renderNode.node.id);
-                    }}
-                    style={styles.notesMindmapNodeAction}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Add child node to ${renderNode.node.label}`}
-                  >
-                    <Text style={styles.notesMindmapNodeActionText}>+</Text>
-                  </Pressable>
-                ) : null}
+                <Pressable
+                  onPress={(event) => {
+                    event.stopPropagation?.();
+                    onNodeAdd(renderNode.node.id);
+                  }}
+                  style={styles.notesMindmapNodeAction}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add child node to ${renderNode.node.label}`}
+                >
+                  <Text style={styles.notesMindmapNodeActionText}>+</Text>
+                </Pressable>
                 <Pressable
                   onPress={(event) => {
                     event.stopPropagation?.();
