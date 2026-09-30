@@ -163,7 +163,11 @@ Current implementation:
   template key, central topic, branch labels, and nested child nodes. The
   rendered map nodes are editable directly, top-level nodes can be added from
   the map inspector, the selected central topic, or the canvas; every selected map node exposes a child-node add control, and
-  dragged root/node pill positions are saved as percentage coordinates in the
+  dragging root/node pills changes saved percentage coordinates, and dropping a
+  node onto another valid pill reparents it while preserving its subtree and
+  translating its positions. Self/descendant targets are rejected and valid drop
+  targets are highlighted. Automatic pill arrangement and moving the whole map by
+  dragging its central topic are not implemented. Root/node pill positions are saved as percentage coordinates in the
   map payload. Pills
   are dragged from the pill itself, with a small movement threshold so a tap
   still focuses its text input, and
@@ -179,6 +183,8 @@ Current implementation:
   layout (`balanced` or `right`), colored branches, and compact spacing. These
   controls are intentionally small and inline with the active map rather than a
   full diagram-editor inspector.
+  First-level pills use their branch color; second-level child pills use a pale
+  tint of that branch color, while deeper descendants stay neutral for hierarchy clarity.
   Map node actions can create a regular todo from the node label through the
   same quick-capture insert path as the main Workspace add box. This keeps Maps
   connected to project management without introducing a separate map-task model

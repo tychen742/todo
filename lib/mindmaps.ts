@@ -347,6 +347,83 @@ export function deleteMindmapNode(nodes: WorkspaceMindmapNode[], nodeId: string)
     .map((node) => ({ ...node, children: deleteMindmapNode(node.children, nodeId) }));
 }
 
+export function canReparentMindmapNode(
+  nodes: WorkspaceMindmapNode[],
+  nodeId: string,
+  parentNodeId: string | null
+): boolean {
+  const source = findMindmapNodeLocation(nodes, nodeId);
+  if (!source || source.parentId === parentNodeId || parentNodeId === nodeId) return false;
+  if (!parentNodeId) return true;
+  const parent = findMindmapNodeLocation(nodes, parentNodeId);
+  return Boolean(parent && !findMindmapNodeLocation(source.node.children, parentNodeId));
+}
+
+function mindmapNodeDepth(nodes: WorkspaceMindmapNode[], nodeId: string, depth = 0): number | null {
+  for (const node of nodes) {
+    if (node.id === nodeId) return depth;
+    const childDepth = mindmapNodeDepth(node.children, nodeId, depth + 1);
+    if (childDepth !== null) return childDepth;
+  }
+  return null;
+}
+
+function translateMindmapSubtree(
+  node: WorkspaceMindmapNode,
+  offset: MindmapPoint
+): WorkspaceMindmapNode {
+  const point = normalizeMindmapPoint(node) ?? { x: 50, y: 50 };
+  return {
+    ...node,
+    ...clampMindmapPercentPoint({ x: point.x + offset.x, y: point.y + offset.y }),
+    children: node.children.map((child) => translateMindmapSubtree(child, offset)),
+  };
+}
+
+export function reparentMindmapNode(
+  nodes: WorkspaceMindmapNode[],
+  nodeId: string,
+  parentNodeId: string | null,
+  templateKey: MindmapTemplateKey
+): WorkspaceMindmapNode[] {
+  if (!canReparentMindmapNode(nodes, nodeId, parentNodeId)) return nodes;
+
+  const materializedNodes = materializeMindmapNodePositions(nodes, templateKey);
+  const source = findMindmapNodeLocation(materializedNodes, nodeId);
+  if (!source) return nodes;
+  const remainingNodes = deleteMindmapNode(materializedNodes, nodeId);
+  let nextPoint: MindmapPoint | undefined;
+
+  if (parentNodeId) {
+    const parent = findMindmapNodeLocation(remainingNodes, parentNodeId);
+    const depth = mindmapNodeDepth(remainingNodes, parentNodeId);
+    const parentPoint = parent ? normalizeMindmapPoint(parent.node) : undefined;
+    if (!parent || depth === null || !parentPoint) return nodes;
+    nextPoint = childMindmapGrowthPoint(
+      parentPoint,
+      parent.node.children.length,
+      parent.node.children.length + 1,
+      depth + 1
+    );
+  } else {
+    const rootIndex = remainingNodes.length;
+    nextPoint = editableMindmapPositions(templateKey, rootIndex + 1)[rootIndex];
+  }
+
+  if (!nextPoint) return nodes;
+  const sourcePoint = normalizeMindmapPoint(source.node) ?? { x: 50, y: 50 };
+  const movedNode = translateMindmapSubtree(source.node, {
+    x: nextPoint.x - sourcePoint.x,
+    y: nextPoint.y - sourcePoint.y,
+  });
+  if (!parentNodeId) return [...remainingNodes, movedNode];
+
+  return mapMindmapNodes(remainingNodes, parentNodeId, (parent) => ({
+    ...parent,
+    children: [...parent.children, movedNode],
+  }));
+}
+
 export type MindmapNodeLocation = {
   node: WorkspaceMindmapNode;
   parentId: string | null;

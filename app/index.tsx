@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import {
   PanResponder,
   type GestureResponderEvent,
   type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import { DraggableList } from '../components/DraggableList';
 import { KanbanDragItem, KanbanDragProvider, KanbanDropLane } from '../components/KanbanDrag';
@@ -120,6 +122,7 @@ import {
 } from '../lib/authSession';
 import {
   addMindmapNode,
+  canReparentMindmapNode,
   defaultMindmapSettings,
   deleteMindmapNode,
   editableMindmapPositions,
@@ -130,6 +133,7 @@ import {
   mindmapTemplateFor,
   mindmapTemplates,
   moveMindmapNode,
+  reparentMindmapNode,
   readLocalWorkspaceNotes,
   relayoutMindmapNodes,
   restoreMindmapNode,
@@ -379,6 +383,104 @@ function WorkspaceMindmapPreview({
   );
 }
 
+function MindmapDraggableNode({
+  id,
+  point,
+  width,
+  height,
+  mapFieldWidth,
+  mapFieldHeight,
+  style,
+  onTouchStart,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onDragCancel,
+  children,
+}: {
+  id: string;
+  point: MindmapPoint;
+  width: number;
+  height: number;
+  mapFieldWidth: number;
+  mapFieldHeight: number;
+  style: StyleProp<ViewStyle>;
+  onTouchStart: () => void;
+  onDragStart: (nodeId: string, point: MindmapPoint) => void;
+  onDragMove: (nodeId: string, point: MindmapPoint) => string | null;
+  onDragEnd: (nodeId: string, point: MindmapPoint, targetId: string | null) => void;
+  onDragCancel: () => void;
+  children: React.ReactNode;
+}) {
+  const currentPropsRef = useRef({
+    id, point, width, height, mapFieldWidth, mapFieldHeight,
+    onDragStart, onDragMove, onDragEnd, onDragCancel,
+  });
+  const activeDragRef = useRef<{
+    originPoint: MindmapPoint;
+    point: MindmapPoint;
+    targetId: string | null;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    currentPropsRef.current = {
+      id, point, width, height, mapFieldWidth, mapFieldHeight,
+      onDragStart, onDragMove, onDragEnd, onDragCancel,
+    };
+  }, [id, point, width, height, mapFieldWidth, mapFieldHeight, onDragStart, onDragMove, onDragEnd, onDragCancel]);
+
+  // PanResponder callbacks need the latest committed props from the ref while remaining stable across renders.
+  // eslint-disable-next-line react-hooks/refs
+  const panHandlers = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gestureState) =>
+      Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3,
+    onPanResponderGrant: () => {
+      const current = currentPropsRef.current;
+      activeDragRef.current = { originPoint: current.point, point: current.point, targetId: null };
+      current.onDragStart(current.id, current.point);
+    },
+    onPanResponderMove: (_event, gestureState) => {
+      const activeDrag = activeDragRef.current;
+      const current = currentPropsRef.current;
+      if (!activeDrag || current.mapFieldWidth <= 0 || current.mapFieldHeight <= 0) return;
+      const minX = ((current.width / 2 + 10) / current.mapFieldWidth) * 100;
+      const minY = ((current.height / 2 + 10) / current.mapFieldHeight) * 100;
+      const point = {
+        x: Math.max(minX, Math.min(100 - minX, activeDrag.originPoint.x + (gestureState.dx / current.mapFieldWidth) * 100)),
+        y: Math.max(minY, Math.min(100 - minY, activeDrag.originPoint.y + (gestureState.dy / current.mapFieldHeight) * 100)),
+      };
+      const targetId = current.onDragMove(current.id, point);
+      activeDragRef.current = { ...activeDrag, point, targetId };
+    },
+    onPanResponderRelease: (_event, gestureState) => {
+      const activeDrag = activeDragRef.current;
+      const current = currentPropsRef.current;
+      activeDragRef.current = null;
+      if (!activeDrag) return;
+      const minX = ((current.width / 2 + 10) / current.mapFieldWidth) * 100;
+      const minY = ((current.height / 2 + 10) / current.mapFieldHeight) * 100;
+      const point = current.mapFieldWidth > 0 && current.mapFieldHeight > 0
+        ? {
+            x: Math.max(minX, Math.min(100 - minX, activeDrag.originPoint.x + (gestureState.dx / current.mapFieldWidth) * 100)),
+            y: Math.max(minY, Math.min(100 - minY, activeDrag.originPoint.y + (gestureState.dy / current.mapFieldHeight) * 100)),
+          }
+        : activeDrag.point;
+      const targetId = current.onDragMove(current.id, point);
+      current.onDragEnd(current.id, point, targetId);
+    },
+    onPanResponderTerminate: () => {
+      activeDragRef.current = null;
+      currentPropsRef.current.onDragCancel();
+    },
+  }).panHandlers, []);
+
+  return (
+    <View {...panHandlers} onTouchStart={onTouchStart} style={style}>
+      {children}
+    </View>
+  );
+}
+
 function EditableWorkspaceMindmap({
   mindmap,
   template,
@@ -390,6 +492,7 @@ function EditableWorkspaceMindmap({
   onNodeCreateTodo,
   onRootPositionChange,
   onNodeMove,
+  onNodeReparent,
 }: {
   mindmap: WorkspaceMindmap;
   template: MindmapTemplate;
@@ -401,9 +504,14 @@ function EditableWorkspaceMindmap({
   onNodeCreateTodo: (label: string) => void;
   onRootPositionChange: (point: MindmapPoint) => void;
   onNodeMove: (nodeId: string, point: MindmapPoint) => void;
+  onNodeReparent: (nodeId: string, parentNodeId: string | null) => boolean;
 }) {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [dragPreview, setDragPreview] = useState<{ id: string; point: MindmapPoint } | null>(null);
+  const [dragPreview, setDragPreview] = useState<{
+    id: string;
+    point: MindmapPoint;
+    targetId: string | null;
+  } | null>(null);
   const [selectedMindmapNodeId, setSelectedMindmapNodeId] = useState<string | null>(null);
   // Placeholders hide while their input has the cursor.
   const [focusedMindmapNodeId, setFocusedMindmapNodeId] = useState<string | null>(null);
@@ -489,46 +597,32 @@ function EditableWorkspaceMindmap({
     const handleY = Math.max(22, Math.min(76, Math.abs(dy) * 0.45));
     return `M ${start.x} ${start.y} C ${start.x} ${start.y + Math.sign(dy || 1) * handleY}, ${end.x} ${end.y - Math.sign(dy || 1) * handleY}, ${end.x} ${end.y}`;
   }
-  function clampMapPoint(point: MindmapPoint, width: number, height: number): MindmapPoint {
-    const minX = ((width / 2 + 10) / mapFieldWidth) * 100;
-    const maxX = 100 - minX;
-    const minY = ((height / 2 + 10) / mapFieldHeight) * 100;
-    const maxY = 100 - minY;
-    return {
-      x: clamp(point.x, minX, maxX),
-      y: clamp(point.y, minY, maxY),
+  function getDropTargetId(draggedNodeId: string, point: MindmapPoint): string | null {
+    if (draggedNodeId === 'root') return null;
+    const canvasPoint = toCanvasPoint(point);
+    const targets: { id: string; distance: number }[] = [];
+    const addTarget = (id: string, targetPoint: { x: number; y: number }, width: number, height: number) => {
+      const dx = canvasPoint.x - targetPoint.x;
+      const dy = canvasPoint.y - targetPoint.y;
+      if (Math.abs(dx) <= width / 2 && Math.abs(dy) <= height / 2) {
+        targets.push({ id, distance: dx * dx + dy * dy });
+      }
     };
-  }
-  function createDragHandlers(
-    id: string,
-    point: MindmapPoint,
-    width: number,
-    height: number,
-    onCommit: (nextPoint: MindmapPoint) => void
-  ) {
-    let lastPoint = point;
-    return PanResponder.create({
-      onMoveShouldSetPanResponder: (_event, gestureState) =>
-        Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3,
-      onPanResponderGrant: () => {
-        lastPoint = point;
-        setDragPreview({ id, point });
-      },
-      onPanResponderMove: (_event, gestureState) => {
-        lastPoint = clampMapPoint({
-          x: point.x + (gestureState.dx / mapFieldWidth) * 100,
-          y: point.y + (gestureState.dy / mapFieldHeight) * 100,
-        }, width, height);
-        setDragPreview({ id, point: lastPoint });
-      },
-      onPanResponderRelease: () => {
-        setDragPreview(null);
-        onCommit(lastPoint);
-      },
-      onPanResponderTerminate: () => {
-        setDragPreview(null);
-      },
-    }).panHandlers;
+
+    if (canReparentMindmapNode(mindmap.nodes, draggedNodeId, null)) {
+      addTarget('root', rootPoint, rootWidth, rootHeight);
+    }
+    renderNodes.forEach((renderNode) => {
+      if (!canReparentMindmapNode(mindmap.nodes, draggedNodeId, renderNode.node.id)) return;
+      addTarget(
+        renderNode.node.id,
+        toCanvasPoint({ x: renderNode.x, y: renderNode.y }),
+        renderNode.width,
+        renderNode.height
+      );
+    });
+    targets.sort((first, second) => first.distance - second.distance);
+    return targets[0]?.id ?? null;
   }
   type RenderNode = {
     node: WorkspaceMindmapNode;
@@ -543,8 +637,15 @@ function EditableWorkspaceMindmap({
     parentHeight: number;
     depth: number;
     color: string;
+    branchColor: string;
   };
   const renderNodes: RenderNode[] = [];
+  function paleBranchColor(color: string) {
+    const hex = color.replace('#', '');
+    if (!/^[\da-f]{6}$/i.test(hex)) return color;
+    const channels = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
+    return `#${channels.map((channel) => Math.round(channel + (255 - channel) * 0.78).toString(16).padStart(2, '0')).join('')}`;
+  }
   function childPosition(
     parentX: number,
     parentY: number,
@@ -581,7 +682,8 @@ function EditableWorkspaceMindmap({
     parentY: number,
     parentWidth: number,
     parentHeight: number,
-    depth: number
+    depth: number,
+    inheritedBranchColor: string | null = null
   ) {
     nodes.forEach((node, index) => {
       const width = depth === 0 ? topicWidth : childWidth;
@@ -594,8 +696,10 @@ function EditableWorkspaceMindmap({
         : undefined;
       const previewPosition = dragPreview?.id === node.id ? dragPreview.point : undefined;
       const position = previewPosition ?? savedPosition ?? autoPosition;
-      const branchColor = template.colors[index % template.colors.length] ?? '#e5e7eb';
-      const color = mindmap.settings.coloredBranches ? branchColor : '#94a3b8';
+      const templateBranchColor = template.colors[index % template.colors.length] ?? '#e5e7eb';
+      const branchColor = depth === 0
+        ? (mindmap.settings.coloredBranches ? templateBranchColor : '#94a3b8')
+        : inheritedBranchColor ?? '#94a3b8';
       renderNodes.push({
         node,
         x: position.x,
@@ -608,13 +712,43 @@ function EditableWorkspaceMindmap({
         parentWidth,
         parentHeight,
         depth,
-        color: depth === 0 ? color : '#ffffff',
+        color: depth === 0 ? branchColor : depth === 1 ? paleBranchColor(branchColor) : '#ffffff',
+        branchColor,
       });
-      collectNodes(node.children, node.id, position.x, position.y, width, height, depth + 1);
+      collectNodes(
+        node.children,
+        node.id,
+        position.x,
+        position.y,
+        width,
+        height,
+        depth + 1,
+        depth === 0 ? branchColor : inheritedBranchColor
+      );
     });
   }
   collectNodes(topLevelNodes, 'root', root.x, root.y, rootWidth, rootHeight, 0);
   const rootPoint = toCanvasPoint(root);
+  function handleMindmapDragStart(id: string, point: MindmapPoint) {
+    setDragPreview({ id, point, targetId: null });
+  }
+  function handleMindmapDragMove(id: string, point: MindmapPoint) {
+    const targetId = getDropTargetId(id, point);
+    setDragPreview({ id, point, targetId });
+    return targetId;
+  }
+  function handleMindmapDragEnd(id: string, point: MindmapPoint, targetId: string | null) {
+    setDragPreview(null);
+    if (targetId) {
+      const parentNodeId = targetId === 'root' ? null : targetId;
+      if (onNodeReparent(id, parentNodeId)) return;
+    }
+    if (id === 'root') onRootPositionChange(point);
+    else onNodeMove(id, point);
+  }
+  function handleMindmapDragCancel() {
+    setDragPreview(null);
+  }
 
   return (
     <View
@@ -692,9 +826,18 @@ function EditableWorkspaceMindmap({
           );
         })}
       </Svg>
-      <View
-        {...createDragHandlers('root', root, rootWidth, rootHeight, onRootPositionChange)}
+      <MindmapDraggableNode
+        id="root"
+        point={root}
+        width={rootWidth}
+        height={rootHeight}
+        mapFieldWidth={mapFieldWidth}
+        mapFieldHeight={mapFieldHeight}
         onTouchStart={() => setSelectedMindmapNodeId('root')}
+        onDragStart={handleMindmapDragStart}
+        onDragMove={handleMindmapDragMove}
+        onDragEnd={handleMindmapDragEnd}
+        onDragCancel={handleMindmapDragCancel}
         style={[
           styles.notesMindmapNode,
           styles.notesMindmapRootNode,
@@ -709,6 +852,7 @@ function EditableWorkspaceMindmap({
             ],
           },
           selectedMindmapNodeId === 'root' && styles.notesMindmapNodeSelected,
+          dragPreview?.targetId === 'root' && styles.notesMindmapNodeDropTarget,
         ]}
       >
         <TextInput
@@ -739,14 +883,14 @@ function EditableWorkspaceMindmap({
               }}
               style={styles.notesMindmapRootAddAction}
               accessibilityRole="button"
-              accessibilityLabel="Add first-level topic"
+              accessibilityLabel="Add first-level node"
               accessibilityHint="Adds a new topic connected to the central topic."
             >
-              <Text style={styles.notesMindmapRootAddActionText}>+ Add topic</Text>
+              <Text style={styles.notesMindmapRootAddActionText}>+</Text>
             </Pressable>
           </View>
         ) : null}
-      </View>
+      </MindmapDraggableNode>
       {renderNodes.map((renderNode, index) => {
         const color = renderNode.color;
         const width = renderNode.depth === 0 ? topicWidth : childWidth;
@@ -754,18 +898,21 @@ function EditableWorkspaceMindmap({
         const nodePosition = { x: renderNode.x, y: renderNode.y };
         const canDeleteNode = topLevelNodes.length > 1 || renderNode.depth > 0;
         const isSelected = selectedMindmapNodeId === renderNode.node.id;
-        const nodeColor = renderNode.depth === 0 ? color : '#ffffff';
-        const borderColor = renderNode.depth === 0 ? color : '#cbd5e1';
+        const nodeColor = renderNode.depth <= 1 ? color : '#ffffff';
+        const borderColor = renderNode.depth <= 1 ? renderNode.branchColor : '#cbd5e1';
         return (
-          <View
-            {...createDragHandlers(
-              renderNode.node.id,
-              nodePosition,
-              width,
-              renderNode.height,
-              (point) => onNodeMove(renderNode.node.id, point)
-            )}
+          <MindmapDraggableNode
+            id={renderNode.node.id}
+            point={nodePosition}
+            width={width}
+            height={renderNode.height}
+            mapFieldWidth={mapFieldWidth}
+            mapFieldHeight={mapFieldHeight}
             onTouchStart={() => setSelectedMindmapNodeId(renderNode.node.id)}
+            onDragStart={handleMindmapDragStart}
+            onDragMove={handleMindmapDragMove}
+            onDragEnd={handleMindmapDragEnd}
+            onDragCancel={handleMindmapDragCancel}
             key={`${mindmap.id}-node-${renderNode.node.id}`}
             style={[
               styles.notesMindmapNode,
@@ -783,6 +930,7 @@ function EditableWorkspaceMindmap({
                 borderColor,
               },
               isSelected && styles.notesMindmapNodeSelected,
+              dragPreview?.targetId === renderNode.node.id && styles.notesMindmapNodeDropTarget,
             ]}
           >
             <TextInput
@@ -849,7 +997,7 @@ function EditableWorkspaceMindmap({
                 ) : null}
               </View>
             ) : null}
-          </View>
+          </MindmapDraggableNode>
         );
       })}
       <Pressable
@@ -1632,6 +1780,16 @@ export default function HomeScreen() {
     updateWorkspaceMindmap(id, {
       nodes: moveMindmapNode(mindmap.nodes, nodeId, point),
     });
+  }
+
+  function reparentWorkspaceMindmapNode(id: string, nodeId: string, parentNodeId: string | null) {
+    const mindmap = workspaceMindmaps.find((item) => item.id === id);
+    if (!mindmap || !canReparentMindmapNode(mindmap.nodes, nodeId, parentNodeId)) return false;
+    const layoutTemplateKey = mindmap.settings.layout === 'right' ? 'right-stack' : mindmap.template;
+    const nodes = reparentMindmapNode(mindmap.nodes, nodeId, parentNodeId, layoutTemplateKey);
+    if (nodes === mindmap.nodes) return false;
+    updateWorkspaceMindmap(id, { nodes });
+    return true;
   }
 
   function moveCalendarView(offset: number) {
@@ -4338,6 +4496,7 @@ export default function HomeScreen() {
                     onNodeCreateTodo={createTodoFromMindmapNode}
                     onRootPositionChange={(point) => updateWorkspaceMindmapRootPosition(activeMindmap.id, point)}
                     onNodeMove={(nodeId, point) => updateWorkspaceMindmapNodePosition(activeMindmap.id, nodeId, point)}
+                    onNodeReparent={(nodeId, parentNodeId) => reparentWorkspaceMindmapNode(activeMindmap.id, nodeId, parentNodeId)}
                   />
                 </View>
               ) : workspaceMindmaps.length > 0 ? (
@@ -8250,6 +8409,13 @@ const styles = StyleSheet.create({
     borderColor: '#4f46e5',
     shadowOpacity: 0.22,
     shadowRadius: 12,
+  },
+  notesMindmapNodeDropTarget: {
+    borderColor: '#4f46e5',
+    borderWidth: 3,
+    backgroundColor: '#e0e7ff',
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
   },
   notesMindmapRootNode: {
     minHeight: 42,
