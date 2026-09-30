@@ -162,10 +162,11 @@ Current implementation:
   backed by the `workspace_mindmaps` table per signed-in user. Created maps keep their
   template key, central topic, branch labels, and nested child nodes. The
   rendered map nodes are editable directly, top-level nodes can be added from
-  the canvas, every selected map node exposes a child-node add control, and
+  the map inspector or canvas, every selected map node exposes a child-node add control, and
   dragged root/node pill positions are saved as percentage coordinates in the
   map payload. Pills
-  use explicit drag handles so dragging and text editing remain distinct, and
+  are dragged from the pill itself, with a small movement threshold so a tap
+  still focuses its text input, and
   the selected pill emphasizes its connector path while unrelated connectors
   fade back.
   The selected pill's action toolbar floats just above the pill (or just below

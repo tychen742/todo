@@ -4251,6 +4251,15 @@ export default function HomeScreen() {
                         })}
                       </View>
                     </View>
+                    <Pressable
+                      onPress={() => addWorkspaceMindmapNode(activeMindmap.id, null)}
+                      style={styles.notesMindmapAddTopic}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add top-level mindmap node"
+                    >
+                      <Plus size={12} color="#ffffff" strokeWidth={2.8} />
+                      <Text style={styles.notesMindmapAddTopicText}>Add topic</Text>
+                    </Pressable>
                     <View style={styles.notesMindmapInspectorToggles}>
                       <Pressable
                         onPress={() => updateWorkspaceMindmapSettings(activeMindmap.id, {
@@ -8134,6 +8143,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 6,
+  },
+  notesMindmapAddTopic: {
+    minHeight: 26,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 6,
+    backgroundColor: '#4f46e5',
+  },
+  notesMindmapAddTopicText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   notesMindmapToggle: {
     minHeight: 24,
