@@ -724,6 +724,28 @@ function EditableWorkspaceMindmap({
           placeholderTextColor="#9ca3af"
           accessibilityLabel="Central topic"
         />
+        {selectedMindmapNodeId === 'root' ? (
+          <View
+            style={[
+              styles.notesMindmapNodeActionGroup,
+              styles.notesMindmapRootActionGroup,
+              rootPoint.y - rootHeight / 2 < 32 && styles.notesMindmapNodeActionGroupBelow,
+            ]}
+          >
+            <Pressable
+              onPress={(event) => {
+                event.stopPropagation?.();
+                onNodeAdd(null);
+              }}
+              style={styles.notesMindmapRootAddAction}
+              accessibilityRole="button"
+              accessibilityLabel="Add first-level topic"
+              accessibilityHint="Adds a new topic connected to the central topic."
+            >
+              <Text style={styles.notesMindmapRootAddActionText}>+ Add topic</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
       {renderNodes.map((renderNode, index) => {
         const color = renderNode.color;
@@ -8289,6 +8311,22 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     top: '100%',
     marginTop: 4,
+  },
+  notesMindmapRootActionGroup: {
+    right: 0,
+  },
+  notesMindmapRootAddAction: {
+    minHeight: 24,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#4f46e5',
+  },
+  notesMindmapRootAddActionText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   notesMindmapNodeAction: {
     width: 18,
