@@ -10,14 +10,17 @@ This app should not try to become a full ClickUp, Asana, or Todoist replacement.
 - **Asana inspiration**: clear ownership, assignment, due dates, project status, and accountability, but avoid enterprise workflow complexity early.
 - **Todoist inspiration**: fast personal task capture, priorities, due dates, recurring tasks, and clean mobile use, while adding lightweight teams and projects where useful.
 
-The initial target markets are:
+The goal is a steady, modest revenue stream from a small, loyal customer base that grows slowly. ClickUp is the strongest reference product, Asana is good but large, and Todoist is basic but strong on marketing. RodoFlow does not need to be simpler or more powerful than any of them; it should focus on doing its own workflows well.
 
-- **Higher education**: faculty, students, research groups, labs, committees, departments, and small academic project teams that need todos, assignments, project notes, recurring responsibilities, deadlines, and calendar integration without adopting a large enterprise system.
-- **Personal users**: individuals who need a clean personal todo system that can grow into light collaboration.
-- **SMEs**: small and medium-sized organizations that need practical task, team, and project coordination without paying for or managing a complex platform.
+The primary target markets are:
+
+- **SMEs**: small and medium-sized organizations doing regular commercial, management, office, business, team, and remote work that need practical task, team, and project coordination.
 - **Consultants and freelancers**: independent professionals managing multiple client engagements simultaneously. Each client lives in its own organization. A single consultant can introduce the product to several client companies at once, making consultants a high-leverage acquisition channel. The free 3-org limit covers most freelance workloads and creates a natural, non-punitive upgrade trigger for consultants with larger client rosters. See `docs/MARKETING.md` for the full consultant growth model.
+- **Personal users**: individuals who need a clean personal todo system that can grow into light collaboration.
 
-The product should compete through simplicity and genuine usefulness — a tool that is immediately helpful on day one without training, setup cost, or configuration overhead. It should stay simple enough to adopt in minutes and useful enough to keep using as work grows. It wins by being easier to understand and more directly helpful than ClickUp, Asana, or Todoist for focused personal, team, and project workflows, not by matching their feature count.
+Higher education (faculty, labs, research groups, committees) is deferred as a primary market. Research workflows may be better served by a separate research management/data product; RodoFlow should still work for academic users without targeting them directly.
+
+The product should be immediately helpful on day one without training, setup cost, or configuration overhead, and useful enough to keep using as work grows.
 
 ## Product Areas
 

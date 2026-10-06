@@ -52,7 +52,7 @@ This is a consultant-led growth model: the consultant does the work of introduci
 
 **Small teams:** "Assign it, track it, ship it — without the kickoff meeting about your project management tool."
 
-**Academic / research groups:** "Deadlines, assignments, and project phases — built for how academic work actually flows, not how enterprise software imagines it does."
+**Academic / research groups** (deferred segment): "Deadlines, assignments, and project phases — built for how academic work actually flows, not how enterprise software imagines it does."
 
 **Small businesses:** "The project tool that does not require a project manager to set up."
 
