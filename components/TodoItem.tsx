@@ -212,7 +212,13 @@ export default function TodoItem({
       )}
       {!onDrag && reserveDragSpace && <View style={styles.dragHandle} />}
 
-      <Pressable onPress={onToggle} style={styles.checkbox}>
+      <Pressable
+        onPress={onToggle}
+        style={styles.checkbox}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: done }}
+        accessibilityLabel={done ? `Mark ${text} as not done` : `Complete ${text}`}
+      >
         <View style={[styles.box, done && styles.boxChecked]}>
           {done && <Text style={styles.checkmark}>✓</Text>}
         </View>

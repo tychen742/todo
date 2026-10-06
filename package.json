@@ -27,6 +27,7 @@
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/react": "~19.1.10",
     "eslint": "^9.39.4",
     "eslint-config-expo": "^56.0.4",
@@ -42,7 +43,8 @@
     "db:apply": "scripts/apply-schema.sh",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:smoke": "playwright test"
   },
   "private": true
 }

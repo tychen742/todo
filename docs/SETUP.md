@@ -159,6 +159,29 @@ For web, open:
 http://localhost:8081
 ```
 
+## Smoke Tests
+
+Browser smoke tests live in `e2e/` and run with Playwright on the installed Google Chrome.
+
+```bash
+npm run test:smoke
+```
+
+By default the tests start (or reuse) the Expo web dev server at `http://localhost:8081`. To test a deployed site instead, set `SMOKE_BASE_URL`:
+
+```bash
+SMOKE_BASE_URL=https://your-production-domain npm run test:smoke
+```
+
+The signed-out test always runs. The signed-in tests (add, edit, complete, and delete a todo; open the main views; export data; check the delete-account safeguard) need a dedicated test account. Create one through the app's sign-up screen, then add it to the git-ignored `.env.local`:
+
+```text
+SMOKE_TEST_EMAIL=<test account email>
+SMOKE_TEST_PASSWORD=<test account password>
+```
+
+Never use a real account: the tests create and delete todos. They never confirm account deletion. Without these values the signed-in tests are skipped. To use Playwright's bundled Chromium instead of Chrome, run `npx playwright install chromium` and set `PLAYWRIGHT_CHANNEL=` (empty).
+
 ## TypeScript Database Types
 
 Generate authoritative TypeScript types from the live database schema:

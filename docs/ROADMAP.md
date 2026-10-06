@@ -26,7 +26,8 @@ Day-by-day execution and audits for this checklist live in `LAUNCH_AUDIT.md`. La
 - [x] Split `useWorkspaceScreen` into domain hooks under `features/workspace/hooks/`.
 - [ ] Move the inbox and notes panel renderers out of `useWorkspaceScreen` into components.
 - [ ] Break up `WorkspaceBoard` (personal workspace, project plan, and Kanban modes) and `TodoModals`.
-- [ ] Build, typecheck, lint, and production web smoke checks pass as release gates.
+- [x] Browser smoke tests (`npm run test:smoke`, see `SETUP.md`). Signed-in tests need a dedicated test account in `.env.local`.
+- [ ] Build, typecheck, lint, and smoke tests pass as release gates before every production push.
 
 ### Billing
 
