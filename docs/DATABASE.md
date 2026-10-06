@@ -204,6 +204,18 @@ Internal RLS and trigger helper functions live in the non-exposed `app_private` 
 
 The schema revokes default function execution from `public`, `anon`, and `authenticated` in both function schemas, then grants back the helpers and RPC functions used by the app. New functions should follow the same rule: put internal helpers in `app_private`; expose only deliberate RPCs in `public`.
 
+## Account Export and Deletion
+
+Three RPCs back Settings > Your data. Each `public` function is a security-invoker wrapper around a security-definer `app_private` implementation that only acts on `auth.uid()`.
+
+- `export_my_data()` returns one JSON document: profile, organization and team memberships (with roles), projects the user created or belongs to (with phases), todos the user created or is assigned, the user's comments, mind maps, and project invitations they sent (without invitation tokens). The client adds notes that exist only on the device before saving the file.
+- `account_deletion_preview()` lists shared spaces that will be deleted for other members: spaces the user created with no other owner (or admin, for organizations and teams), plus projects inside a team that will be deleted.
+- `delete_my_account()` hands each created space with a successor to that member (promoting an admin to owner), hands todos the user created in surviving shared spaces to the space owner (or to the assignee for assigned personal todos), hands pending project invitations to the project owner, then deletes the `auth.users` row. Everything else is removed by the existing on-delete cascades.
+
+`app_private.account_deletion_plan(user_id)` computes the handoff and deletion plan for both. It is not granted to API roles. `organizations.created_by` does not change when org ownership is transferred, so the plan treats `created_by` as "creator" and uses member roles to find the successor.
+
+Profile photos are deleted by the client through the Storage API before calling `delete_my_account()`, because Supabase does not allow deleting `storage.objects` rows from SQL.
+
 ## Storage
 
 ### `avatars`

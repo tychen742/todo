@@ -32,6 +32,7 @@ import {
   AvatarPickerModal,
   AboutModal,
   DisplayNameModal,
+  DeleteAccountModal,
 } from '../features/workspace/modals/AccountModals';
 import {
   CreateProjectModal,
@@ -164,6 +165,7 @@ export default function HomeScreen() {
       <AvatarPickerModal {...signedIn} />
       <AboutModal {...signedIn} />
       <DisplayNameModal {...signedIn} />
+      <DeleteAccountModal {...signedIn} />
       <RenameTeamModal {...signedIn} />
       <RenameOrganizationModal {...signedIn} />
       <RenameProjectModal {...signedIn} />

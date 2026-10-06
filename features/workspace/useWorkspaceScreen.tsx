@@ -23,6 +23,7 @@ import { useWorkspaceViews } from './hooks/useWorkspaceViews';
 import { useAuth } from './hooks/useAuth';
 import { usePresence } from './hooks/usePresence';
 import { useProfile } from './hooks/useProfile';
+import { useAccountData } from './hooks/useAccountData';
 import { useOrganizations } from './hooks/useOrganizations';
 import { useProjects } from './hooks/useProjects';
 import { useWorkspaceTabs } from './hooks/useWorkspaceTabs';
@@ -147,6 +148,12 @@ export function useWorkspaceScreen() {
   } = useProfile({
     setError,
     setMessage,
+    showToast,
+    session,
+  });
+
+  const { deleteAccountVisible, setDeleteAccountVisible, exportingData, exportMyData } = useAccountData({
+    setError,
     showToast,
     session,
   });
@@ -1423,6 +1430,10 @@ export function useWorkspaceScreen() {
     signInWithOAuth,
     saveRecoveryPassword,
     signOut,
+    deleteAccountVisible,
+    setDeleteAccountVisible,
+    exportingData,
+    exportMyData,
     saveStatus,
     saveDisplayName,
     renameTeam,

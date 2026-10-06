@@ -1374,6 +1374,249 @@ create trigger on_project_created
   after insert on projects
   for each row execute procedure app_private.handle_new_project();
 
+-- Account data export and deletion -------------------------------------------
+
+-- What happens to the shared spaces a user created when their account is
+-- deleted. A space passes to another owner (or, for organizations and teams,
+-- an admin) when one exists; otherwise it is deleted with the account. Deleting
+-- a team also deletes its projects, including projects other people created.
+create or replace function app_private.account_deletion_plan(p_user_id uuid)
+returns table(kind text, id uuid, name text, successor uuid, other_members integer, will_delete boolean)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with org_plan as (
+    select
+      o.id,
+      o.name,
+      (select m.user_id from org_members m
+        where m.org_id = o.id and m.user_id <> p_user_id and m.role in ('owner', 'admin')
+        order by m.role = 'owner' desc, m.created_at
+        limit 1) as successor,
+      (select count(*)::integer from org_members m
+        where m.org_id = o.id and m.user_id <> p_user_id) as other_members
+    from organizations o
+    where o.created_by = p_user_id
+  ),
+  team_plan as (
+    select
+      t.id,
+      t.name,
+      (select m.user_id from team_members m
+        where m.team_id = t.id and m.user_id <> p_user_id and m.role in ('owner', 'admin')
+        order by m.role = 'owner' desc, m.created_at
+        limit 1) as successor,
+      (select count(*)::integer from team_members m
+        where m.team_id = t.id and m.user_id <> p_user_id) as other_members
+    from teams t
+    where t.created_by = p_user_id
+  ),
+  deleted_teams as (
+    select tp.id from team_plan tp where tp.successor is null
+  ),
+  project_plan as (
+    select
+      p.id,
+      p.name,
+      p.created_by = p_user_id as created_by_user,
+      (select m.user_id from project_members m
+        where m.project_id = p.id and m.user_id <> p_user_id and m.role = 'owner'
+        order by m.created_at
+        limit 1) as successor,
+      (select count(*)::integer from project_members m
+        where m.project_id = p.id and m.user_id <> p_user_id) as other_members,
+      coalesce(p.team_id in (select dt.id from deleted_teams dt), false) as team_deleted
+    from projects p
+    where p.created_by = p_user_id
+       or p.team_id in (select dt.id from deleted_teams dt)
+  )
+  select 'organization', op.id, op.name, op.successor, op.other_members, op.successor is null
+  from org_plan op
+  union all
+  select 'team', tp.id, tp.name, tp.successor, tp.other_members, tp.successor is null
+  from team_plan tp
+  union all
+  select
+    'project',
+    pp.id,
+    pp.name,
+    case when pp.created_by_user and not pp.team_deleted then pp.successor end,
+    pp.other_members,
+    pp.team_deleted or (pp.created_by_user and pp.successor is null)
+  from project_plan pp;
+$$;
+
+-- Shared spaces that will disappear for other members if the current user
+-- deletes their account. Shown in the confirmation dialog.
+create or replace function app_private.account_deletion_preview_impl()
+returns table(kind text, id uuid, name text, other_members integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select plan.kind, plan.id, plan.name, plan.other_members
+  from app_private.account_deletion_plan(auth.uid()) plan
+  where plan.will_delete and plan.other_members > 0
+  order by plan.kind, plan.name;
+$$;
+
+create or replace function public.account_deletion_preview()
+returns table(kind text, id uuid, name text, other_members integer)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select * from app_private.account_deletion_preview_impl();
+$$;
+
+-- Deletes the current user's account. Spaces with a successor are handed over,
+-- and todos the user created inside surviving shared spaces (or assigned to
+-- someone else) pass to that space's owner or the assignee so other people do
+-- not lose their work. Everything else the user owns is removed by the
+-- on-delete cascades from auth.users -> profiles. Profile photos live in
+-- Storage and must be removed through the Storage API before calling this.
+create or replace function app_private.delete_my_account_impl()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_space record;
+begin
+  if v_user is null then
+    raise exception 'Not signed in';
+  end if;
+
+  for v_space in
+    select plan.kind, plan.id, plan.successor
+    from app_private.account_deletion_plan(v_user) plan
+    where not plan.will_delete and plan.successor is not null
+  loop
+    if v_space.kind = 'organization' then
+      update organizations set created_by = v_space.successor where id = v_space.id;
+      update org_members set role = 'owner'
+      where org_id = v_space.id and user_id = v_space.successor;
+    elsif v_space.kind = 'team' then
+      update teams set created_by = v_space.successor where id = v_space.id;
+      update team_members set role = 'owner'
+      where team_id = v_space.id and user_id = v_space.successor;
+    else
+      update projects set created_by = v_space.successor where id = v_space.id;
+    end if;
+  end loop;
+
+  update todos t
+  set created_by = handoff.new_owner
+  from (
+    select
+      t2.id,
+      coalesce(
+        (select p.created_by from projects p
+          where p.id = t2.project_id and p.created_by <> v_user),
+        (select tm.created_by from teams tm
+          where tm.id = t2.team_id and tm.created_by <> v_user),
+        nullif(t2.assigned_to, v_user)
+      ) as new_owner
+    from todos t2
+    where t2.created_by = v_user
+  ) handoff
+  where t.id = handoff.id and handoff.new_owner is not null;
+
+  update project_invitations i
+  set invited_by = p.created_by
+  from projects p
+  where i.project_id = p.id and i.invited_by = v_user and p.created_by <> v_user;
+
+  delete from auth.users where id = v_user;
+end;
+$$;
+
+create or replace function public.delete_my_account()
+returns void
+language sql
+security invoker
+set search_path = public
+as $$
+  select app_private.delete_my_account_impl();
+$$;
+
+-- Everything the current user owns or participates in, as one JSON document.
+create or replace function app_private.export_my_data_impl()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with me as (select auth.uid() as id)
+  select jsonb_build_object(
+    'format', 'rodoflow-export',
+    'version', 1,
+    'exported_at', now(),
+    'profile', (select to_jsonb(p) from profiles p, me where p.id = me.id),
+    'organizations', coalesce((
+      select jsonb_agg(to_jsonb(o) || jsonb_build_object('role', m.role, 'joined_at', m.created_at) order by o.name)
+      from org_members m join organizations o on o.id = m.org_id, me
+      where m.user_id = me.id
+    ), '[]'::jsonb),
+    'teams', coalesce((
+      select jsonb_agg(to_jsonb(t) || jsonb_build_object('role', m.role, 'joined_at', m.created_at) order by t.name)
+      from team_members m join teams t on t.id = m.team_id, me
+      where m.user_id = me.id
+    ), '[]'::jsonb),
+    'projects', coalesce((
+      select jsonb_agg(
+        to_jsonb(p) || jsonb_build_object(
+          'phases', coalesce((
+            select jsonb_agg(to_jsonb(ph) order by ph.order_index)
+            from project_phases ph where ph.project_id = p.id
+          ), '[]'::jsonb)
+        ) order by p.created_at)
+      from projects p, me
+      where p.created_by = me.id
+         or exists (select 1 from project_members pm where pm.project_id = p.id and pm.user_id = me.id)
+    ), '[]'::jsonb),
+    'todos', coalesce((
+      select jsonb_agg(to_jsonb(t) order by t.created_at)
+      from todos t, me
+      where t.created_by = me.id or t.assigned_to = me.id
+    ), '[]'::jsonb),
+    'comments', coalesce((
+      select jsonb_agg(to_jsonb(c) order by c.created_at)
+      from task_comments c, me
+      where c.user_id = me.id
+    ), '[]'::jsonb),
+    'mindmaps', coalesce((
+      select jsonb_agg(to_jsonb(mm) order by mm.created_at)
+      from workspace_mindmaps mm, me
+      where mm.owner_id = me.id
+    ), '[]'::jsonb),
+    'project_invitations_sent', coalesce((
+      select jsonb_agg(to_jsonb(i) - 'token' order by i.created_at)
+      from project_invitations i, me
+      where i.invited_by = me.id
+    ), '[]'::jsonb)
+  )
+  from me
+  where me.id is not null;
+$$;
+
+create or replace function public.export_my_data()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select app_private.export_my_data_impl();
+$$;
+
 -- Function execution is public by default in Postgres. Keep internal helpers out
 -- of the exposed API schema, then grant only the RPC functions the app calls.
 revoke execute on all functions in schema public from public;
@@ -1398,6 +1641,9 @@ grant execute on function app_private.can_manage_project(uuid, uuid) to authenti
 grant execute on function app_private.find_profile_by_email_impl(text) to authenticated;
 grant execute on function app_private.accept_project_invitation_impl(uuid) to authenticated;
 grant execute on function app_private.get_project_invitation_by_token_impl(uuid) to anon, authenticated;
+grant execute on function app_private.account_deletion_preview_impl() to authenticated;
+grant execute on function app_private.delete_my_account_impl() to authenticated;
+grant execute on function app_private.export_my_data_impl() to authenticated;
 
 grant execute on function public.search_profiles(text, integer) to authenticated;
 grant execute on function public.batch_update_todo_positions(jsonb) to authenticated;
@@ -1410,6 +1656,9 @@ grant execute on function public.create_project_invitation(uuid, text) to authen
 grant execute on function public.accept_project_invitation(uuid) to authenticated;
 grant execute on function public.get_project_invitation_by_token(uuid) to anon, authenticated;
 grant execute on function public.touch_supabase_heartbeat() to anon, authenticated;
+grant execute on function public.account_deletion_preview() to authenticated;
+grant execute on function public.delete_my_account() to authenticated;
+grant execute on function public.export_my_data() to authenticated;
 
 -- Cleanup for databases created before internal helpers moved out of public.
 drop function if exists public.is_team_member(uuid, uuid);

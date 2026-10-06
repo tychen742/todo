@@ -1,7 +1,9 @@
-import { View, Text, TextInput, Pressable, Modal } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, TextInput, Pressable, Modal, ActivityIndicator } from 'react-native';
 import { AVATAR_ANIMALS, pickAvatarAnimal } from '../../../lib/avatar';
 import type { Density } from '../../../lib/types';
 import { emailDisplayName } from '../../../lib/display';
+import { deleteAccount, loadAccountDeletionImpact, type AccountDeletionImpact } from '../../../lib/account';
 import { appThemes, appThemeKeys } from '../constants';
 import { styles } from '../styles';
 import type { SignedInWorkspaceScreen } from '../useWorkspaceScreen';
@@ -9,6 +11,9 @@ import type { SignedInWorkspaceScreen } from '../useWorkspaceScreen';
 type AccountMenuModalProps = Pick<
   SignedInWorkspaceScreen,
   | 'session'
+  | 'exportingData'
+  | 'exportMyData'
+  | 'setDeleteAccountVisible'
   | 'navExpanded'
   | 'setNavExpanded'
   | 'profile'
@@ -34,6 +39,9 @@ type AccountMenuModalProps = Pick<
 
 export function AccountMenuModal({
   session,
+  exportingData,
+  exportMyData,
+  setDeleteAccountVisible,
   navExpanded,
   setNavExpanded,
   profile,
@@ -110,6 +118,22 @@ export function AccountMenuModal({
                     </Pressable>
                   );
                 })}
+                <Text style={styles.navDropdownSettingsHeader}>Your data</Text>
+                <Pressable
+                  style={[styles.navDropdownItem, { paddingLeft: 20 }]}
+                  onPress={exportMyData}
+                  disabled={exportingData}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.navDropdownItemText}>{exportingData ? 'Preparing export...' : 'Export my data'}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.navDropdownItem, { paddingLeft: 20 }]}
+                  onPress={() => { setNavExpanded(false); setDeleteAccountVisible(true); }}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.navDropdownSignOutText}>Delete account</Text>
+                </Pressable>
               </View>
             )}
             <Pressable onPress={() => { setAboutVisible(true); setNavExpanded(false); }} style={styles.navDropdownItem}>
@@ -362,5 +386,152 @@ export function DisplayNameModal({
         </Pressable>
       </Modal>
     </>
+  );
+}
+
+type DeleteAccountModalProps = Pick<
+  SignedInWorkspaceScreen,
+  | 'session'
+  | 'deleteAccountVisible'
+  | 'setDeleteAccountVisible'
+  | 'exportingData'
+  | 'exportMyData'
+  | 'signOut'
+  | 'setMessage'
+>;
+
+// Mounted only while open so the impact list is fetched fresh each time.
+export function DeleteAccountModal(props: DeleteAccountModalProps) {
+  if (!props.deleteAccountVisible) return null;
+  return <DeleteAccountDialog {...props} />;
+}
+
+const deleteConfirmWord = 'DELETE';
+const impactKindLabels: Record<AccountDeletionImpact['kind'], string> = {
+  organization: 'Organization',
+  team: 'Team',
+  project: 'Project',
+};
+
+function DeleteAccountDialog({
+  session,
+  setDeleteAccountVisible,
+  exportingData,
+  exportMyData,
+  signOut,
+  setMessage,
+}: DeleteAccountModalProps) {
+  const [impact, setImpact] = useState<AccountDeletionImpact[] | null>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAccountDeletionImpact()
+      .then((rows) => {
+        if (!cancelled) setImpact(rows);
+      })
+      .catch((loadError: Error) => {
+        if (!cancelled) setDeleteError(loadError.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const canDelete = !deleting && impact !== null && confirmText.trim() === deleteConfirmWord;
+
+  function close() {
+    if (!deleting) setDeleteAccountVisible(false);
+  }
+
+  async function confirmDelete() {
+    if (!canDelete) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await deleteAccount(session.user.id);
+      setDeleteAccountVisible(false);
+      await signOut();
+      setMessage('Your account has been deleted.');
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Could not delete your account.');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={close}>
+      <Pressable style={styles.modalBackdrop} onPress={close}>
+        <Pressable style={styles.calendarCard}>
+          <Text style={styles.editModalTitle}>Delete account</Text>
+          <Text style={styles.aboutText}>
+            This permanently deletes your account, your personal todos, maps, and comments, and
+            removes you from every organization, team, and project. It cannot be undone.
+          </Text>
+          <Text style={styles.aboutText}>
+            Shared spaces you created pass to another owner or admin when there is one. Todos you
+            created in spaces that stay, or assigned to someone else, are kept for those people.
+          </Text>
+          {impact === null && !deleteError ? (
+            <ActivityIndicator style={{ marginVertical: 8 }} />
+          ) : null}
+          {impact && impact.length > 0 ? (
+            <View style={{ marginBottom: 12 }}>
+              <Text style={[styles.aboutText, { marginBottom: 4, fontWeight: '700', color: '#b91c1c' }]}>
+                These shared spaces have no other owner or admin and will be deleted for everyone:
+              </Text>
+              {impact.map((space) => (
+                <Text key={`${space.kind}-${space.id}`} style={[styles.aboutText, { marginBottom: 2 }]}>
+                  {impactKindLabels[space.kind]}: {space.name} ({space.other_members}{' '}
+                  {space.other_members === 1 ? 'other member' : 'other members'})
+                </Text>
+              ))}
+              <Text style={[styles.aboutText, { marginTop: 4 }]}>
+                To keep one, make another member an owner or admin first.
+              </Text>
+            </View>
+          ) : null}
+          <Pressable onPress={exportMyData} disabled={exportingData || deleting} style={{ marginBottom: 12 }}>
+            <Text style={styles.calendarCancelText}>
+              {exportingData ? 'Preparing export...' : 'Export my data first'}
+            </Text>
+          </Pressable>
+          <Text style={[styles.aboutText, { marginBottom: 4 }]}>
+            Type {deleteConfirmWord} to confirm.
+          </Text>
+          <TextInput
+            style={styles.editModalInput}
+            value={confirmText}
+            onChangeText={setConfirmText}
+            placeholder={deleteConfirmWord}
+            placeholderTextColor="#9ca3af"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={!deleting}
+            accessibilityLabel="Type DELETE to confirm account deletion"
+          />
+          {!!deleteError && <Text style={[styles.error, { marginBottom: 8 }]}>{deleteError}</Text>}
+          <View style={styles.editModalActions}>
+            <Pressable onPress={close} disabled={deleting}>
+              <Text style={styles.calendarCancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={confirmDelete}
+              disabled={!canDelete}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.smallBtn,
+                { backgroundColor: '#dc2626', opacity: canDelete ? 1 : 0.4 },
+                pressed && styles.btnPressed,
+              ]}
+            >
+              <Text style={styles.smallBtnText}>{deleting ? 'Deleting...' : 'Delete account'}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
