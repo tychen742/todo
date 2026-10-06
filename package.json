@@ -44,7 +44,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
-    "test:smoke": "playwright test"
+    "test:smoke": "playwright test",
+    "legal:build": "node scripts/build-legal-content.mjs"
   },
   "private": true
 }

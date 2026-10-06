@@ -9,7 +9,7 @@ import {
   Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { Stack } from 'expo-router';
+import { Link, Stack } from 'expo-router';
 import { isSupabaseConfigured } from '../../../lib/supabase';
 import { appName } from '../constants';
 import { styles } from '../styles';
@@ -223,7 +223,9 @@ export function AuthScreen({
 
         <View style={styles.authFooter}>
           <Text style={styles.authFooterText}>
-            By continuing, you agree to our Terms of Service and Privacy Policy.
+            By continuing, you agree to our{' '}
+            <Link href="/terms" style={{ textDecorationLine: 'underline' }}>Terms of Service</Link> and{' '}
+            <Link href="/privacy" style={{ textDecorationLine: 'underline' }}>Privacy Policy</Link>.
           </Text>
         </View>
       </ScrollView>
