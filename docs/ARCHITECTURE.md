@@ -28,7 +28,36 @@ The project is intentionally on Expo SDK 54 because the App Store version of Exp
 
 ## App Structure
 
-- `app/index.tsx`: primary route composition and current product workflow UI.
+- `app/index.tsx`: primary route. `HomeScreen` calls `useWorkspaceScreen()`,
+  handles the auth gates, and composes the workspace sections and modals.
+- `features/workspace/useWorkspaceScreen.tsx`: composition hook. It calls the
+  domain hooks in dependency order, passes each one the values it needs from
+  earlier hooks, and holds the few cross-domain pieces (auth session bootstrap,
+  `signOut`, `deletePhase`, and the inbox/notes panel renderers). Its return
+  type is `WorkspaceScreen`; `SignedInWorkspaceScreen` narrows `session` to
+  non-null for sections rendered after sign-in.
+- `features/workspace/hooks/`: domain hooks, in call order: `usePreferences`
+  (layout, density, theme), `useFeedback` (error, message, toast),
+  `useWorkspaceViews` (which top-level view is open), `useAuth`, `usePresence`,
+  `useProfile`, `useOrganizations` (orgs, teams, org members), `useProjects`
+  (projects, phases, Kanban lanes, project access, team members),
+  `useWorkspaceTabs` (derived tab state), `useTodos` (todo lists, loading,
+  search, sort), `useTodoPickers` (picker and edit-draft state),
+  `useTodoActions` (todo mutations and drag/move), `useTodoEditing` (picker and
+  edit-modal handlers), `useMindmaps` (notes and maps), and `useCalendarView`.
+  A hook may only depend on hooks called before it; its dependencies are typed
+  as `Pick`s of those hooks' exported `*State` return types. Values that need a
+  later domain belong in the composition hook.
+- `features/workspace/*` section components (`TitleBar`, `TeamPanel`,
+  `TeamMembersPanel`, `ProjectHeader`, `WorkspaceBoard`), `views/*` (Organizations,
+  Projects, Calendar, Resources, Dashboard), `modals/*` (Todo, Project,
+  Organization, Account), and `auth/*` (sign-in and password recovery screens).
+  Each takes `Pick<SignedInWorkspaceScreen, ...>` (or `WorkspaceScreen` for auth
+  screens) as props, so its dependencies are explicit; `HomeScreen` passes the
+  whole screen object with a spread.
+- `features/workspace/WorkspaceMindmap.tsx`: mindmap preview and editable canvas.
+- `features/workspace/styles.ts` and `constants.ts`: shared workspace
+  stylesheet, layout constants, and app themes.
 - `components/TodoItem.tsx`: todo row rendering.
 - `components/KanbanCard.tsx`: project Kanban card rendering.
 - `api/keep-supabase-awake.js`: Vercel Cron endpoint for Supabase keep-alive

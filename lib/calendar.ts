@@ -118,3 +118,14 @@ export function isSameDate(left: Date, right: Date) {
     left.getDate() === right.getDate()
   );
 }
+
+export function formatPhaseDateRange(start: string | null, end: string | null): string {
+  function fmt(d: string) {
+    const [y, m, day] = d.split('-').map(Number);
+    return new Date(y, m - 1, day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  if (start && end) return `${fmt(start)} – ${fmt(end)}`;
+  if (start) return `From ${fmt(start)}`;
+  if (end) return `Until ${fmt(end)}`;
+  return '';
+}
