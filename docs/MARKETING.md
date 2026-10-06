@@ -46,6 +46,10 @@ This is a consultant-led growth model: the consultant does the work of introduci
 - Project closure with a lightweight summary — consultants need proof of delivery
 - Org-scoped branding so each client's workspace can feel distinct
 
+## Launch Offer
+
+The limited version is free for the first year. The offer lowers the cost of trying RodoFlow for SMEs and consultants while the product builds its first group of steady users. Details (what happens after year one, and which limits apply) are tracked in `ROADMAP.md` under Commercial Release > Billing.
+
 ## Target Message by Audience
 
 **Personal users:** "Your todos, without the clutter."

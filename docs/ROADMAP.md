@@ -18,7 +18,7 @@ Higher education is deferred as a primary segment. Research-group and research-d
 
 ## Commercial Release
 
-Launch is web-only. Native iOS/Android distribution (EAS Build, App Store review, in-app purchase rules) comes after the web product has paying users.
+Day-by-day execution and audits for this checklist live in `LAUNCH_AUDIT.md`. Launch is web-only. Native iOS/Android distribution (EAS Build, App Store review, in-app purchase rules) comes after the web product has paying users.
 
 ### Code health
 
@@ -32,6 +32,7 @@ Launch is web-only. Native iOS/Android distribution (EAS Build, App Store review
 
 - [ ] Payment provider: Liner is the planned choice; evaluate Stripe as the alternative before building checkout.
 - [ ] Define the first paid boundary (free personal and small-team use; paid for larger teams, more orgs, and advanced collaboration).
+- [ ] Launch offer: the limited version is free for the first year. Decide what happens after year one and how it is shown on the pricing page.
 - [ ] Plans and subscription status stored in Supabase; feature gates read from it.
 - [ ] Checkout, customer billing portal, and webhook handling for subscription changes.
 - [ ] Pricing page.
@@ -45,10 +46,11 @@ Launch is web-only. Native iOS/Android distribution (EAS Build, App Store review
 
 ### Legal and trust
 
-- [ ] Privacy Policy.
-- [ ] Terms of Service.
+- [ ] Privacy Policy (draft in `legal/privacy-policy.md`; needs placeholders filled and attorney review).
+- [ ] Terms of Service (draft in `legal/terms-of-service.md`; needs placeholders filled and attorney review).
+- [ ] Publish both at `/privacy` and `/terms` and link them from the sign-in footer.
 - [ ] Cookie/analytics disclosure if analytics are added.
-- [ ] In-app account deletion and data export.
+- [x] In-app account deletion and data export (Settings > Your data). Requires `npm run db:apply` for the new database functions.
 - [ ] Data processing and subprocessor list (Supabase, Vercel, payment provider) for business customers.
 
 ### Support and operations
